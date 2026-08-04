@@ -1,0 +1,22 @@
+.page-shell { max-width: 1180px; margin: 0 auto; padding: 24px; display: grid; gap: 18px; }
+.page-header, .section-heading, .card-head, .card-actions, .action-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-header { align-items: flex-start; }
+h1 { margin: 2px 0 6px; font-size: 28px; } h2, p { margin: 0; }
+.page-header p, .section-heading p { color: var(--raylea-color-muted); }
+.eyebrow { color: var(--raylea-color-primary) !important; font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.status { padding: 7px 12px; border: 1px solid var(--raylea-color-border); border-radius: 999px; background: var(--raylea-color-surface); color: var(--raylea-color-muted); font-size: 12px; white-space: nowrap; }
+.overview { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 12px; }
+.overview article, .global-switch, .panel { border: 1px solid var(--raylea-color-border); background: var(--raylea-color-surface); border-radius: var(--raylea-radius); box-shadow: var(--raylea-shadow); }
+.overview article { padding: 16px; display: grid; gap: 4px; } .overview span { color: var(--raylea-color-muted); font-size: 12px; } .overview strong { font-size: 22px; }
+.global-switch { padding: 16px; display: flex; align-items: center; gap: 12px; }
+.panel { padding: 20px; }
+.subscription-list { display: grid; gap: 12px; margin-top: 16px; }
+.subscription-card { padding: 16px; border: 1px solid var(--raylea-color-border); border-radius: 12px; display: grid; gap: 14px; }
+.identity { display: flex; gap: 10px; align-items: center; } .identity div { display: grid; } .identity small { color: var(--raylea-color-muted); }
+.platform-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--raylea-color-primary) 14%, transparent); color: var(--raylea-color-primary) !important; font-weight: 800; }
+.fields { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+label { display: grid; gap: 6px; font-weight: 650; } label > span { font-size: 12px; color: var(--raylea-color-muted); }
+.empty-state { padding: 48px; text-align: center; color: var(--raylea-color-muted); border: 1px dashed var(--raylea-color-border); border-radius: 12px; margin-top: 16px; }
+.action-bar { position: sticky; bottom: 12px; justify-content: flex-end; padding: 12px; border: 1px solid var(--raylea-color-border); border-radius: 14px; background: color-mix(in srgb, var(--raylea-color-surface) 92%, transparent); backdrop-filter: blur(12px); }
+@media (max-width: 900px) { .overview, .fields { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .overview, .fields { grid-template-columns: 1fr; } .page-header { flex-direction: column; } }

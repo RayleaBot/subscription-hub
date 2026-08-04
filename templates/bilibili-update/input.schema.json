@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["title", "platform", "service", "subscription"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "headline": {
+      "type": "string"
+    },
+    "content_text": {
+      "type": "string"
+    },
+    "subtitle": {
+      "type": "string"
+    },
+    "source_label": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "service": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "author": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "author_uid_text": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "topic": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "image_count": {
+      "type": "integer"
+    },
+    "media_grid_class": {
+      "type": "string"
+    },
+    "media_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "url": {
+      "type": "string"
+    },
+    "pub_ts": {
+      "type": "integer"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "live_event": {
+      "type": "string"
+    },
+    "live_status": {
+      "type": ["integer", "null"]
+    },
+    "status_label": {
+      "type": "string"
+    },
+    "live_started_at": {
+      "type": "string"
+    },
+    "live_detected_at": {
+      "type": "string"
+    },
+    "original": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "subscription": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "subscribers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "subscriber_cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "subscriber_text": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

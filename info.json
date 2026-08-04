@@ -1,0 +1,363 @@
+{
+  "id": "raylea.subscription-hub",
+  "name": "订阅中心",
+  "version": "0.2.0",
+  "manifest_version": "2",
+  "plugin_protocol_version": "1",
+  "runtime": "go",
+  "entry": "bin/subscription-hub",
+  "platforms": ["windows-x64", "linux-x64", "macos-arm64"],
+  "license": "MIT",
+  "description": "订阅平台内容并推送更新",
+  "author": "raylea",
+  "management_ui": {
+    "pages": [
+      {
+        "id": "subscriptions",
+        "label": "订阅设置",
+        "entry": "ui/index.html"
+      }
+    ]
+  },
+  "render_templates": [
+    {
+      "path": "templates/bilibili-update"
+    }
+  ],
+  "capabilities": [
+    "event.subscribe",
+    "message.send",
+    "render.image",
+    "storage.kv",
+    "config.read",
+    "config.write",
+    "logger.write",
+    "http.request",
+    "scheduler.create",
+    "thirdparty.account.read",
+    "friend.list",
+    "group.list",
+    "user.info.get",
+    "group.member.get"
+  ],
+  "capability_parameters": {
+    "http_hosts": [
+      "api.bilibili.com",
+      "api.live.bilibili.com"
+    ],
+    "third_party_account_platforms": [
+      "bilibili",
+      "weibo",
+      "douyin",
+      "netease_music"
+    ]
+  },
+  "commands": [
+    {
+      "name": "订阅状态",
+      "description": "查看订阅中心状态",
+      "usage": "/订阅状态",
+      "permission": "everyone"
+    },
+    {
+      "name": "订阅b站推送",
+      "description": "订阅当前群聊或私聊的指定 Bilibili 用户更新，类型可选，不填表示全部类型",
+      "usage": "/订阅b站推送 [直播|视频|图文|文章|转发] UID或昵称",
+      "permission": "super_admin"
+    },
+    {
+      "name": "取消b站推送",
+      "description": "取消当前群聊或私聊的指定 Bilibili 用户订阅，类型可选，不填表示全部类型",
+      "usage": "/取消b站推送 [直播|视频|图文|文章|转发] UID或昵称",
+      "permission": "super_admin"
+    },
+    {
+      "name": "订阅微博推送",
+      "description": "订阅当前群聊或私聊的指定微博账号更新，类型可选，不填表示全部类型",
+      "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或主页标识",
+      "permission": "super_admin"
+    },
+    {
+      "name": "取消微博推送",
+      "description": "取消当前群聊或私聊的指定微博账号订阅，类型可选，不填表示全部类型",
+      "usage": "/取消微博推送 [微博|图片|视频|转发] UID或主页标识",
+      "permission": "super_admin"
+    },
+    {
+      "name": "订阅抖音推送",
+      "description": "订阅当前群聊或私聊的指定抖音账号更新，类型可选，不填表示全部类型",
+      "usage": "/订阅抖音推送 [视频|图文|直播] 抖音号或主页标识",
+      "permission": "super_admin"
+    },
+    {
+      "name": "取消抖音推送",
+      "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型",
+      "usage": "/取消抖音推送 [视频|图文|直播] 抖音号或主页标识",
+      "permission": "super_admin"
+    },
+    {
+      "name": "订阅网易云音乐推送",
+      "description": "订阅当前群聊或私聊的指定网易云音乐对象更新，类型可选，不填表示全部类型",
+      "usage": "/订阅网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
+      "permission": "super_admin"
+    },
+    {
+      "name": "取消网易云音乐推送",
+      "description": "取消当前群聊或私聊的指定网易云音乐对象订阅，类型可选，不填表示全部类型",
+      "usage": "/取消网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
+      "permission": "super_admin"
+    },
+    {
+      "name": "b站搜索up",
+      "description": "按昵称关键词搜索 Bilibili UP 主并返回名称与 UID",
+      "usage": "/b站搜索up UP昵称关键词",
+      "permission": "everyone"
+    },
+    {
+      "name": "订阅列表",
+      "description": "查看当前群聊或私聊的订阅列表",
+      "usage": "/订阅列表",
+      "permission": "everyone"
+    },
+    {
+      "name": "b站订阅列表",
+      "description": "查看当前群聊或私聊的 Bilibili 订阅列表",
+      "usage": "/b站订阅列表",
+      "permission": "everyone"
+    },
+    {
+      "name": "微博订阅列表",
+      "description": "查看当前群聊或私聊的微博订阅列表",
+      "usage": "/微博订阅列表",
+      "permission": "everyone"
+    },
+    {
+      "name": "抖音订阅列表",
+      "description": "查看当前群聊或私聊的抖音订阅列表",
+      "usage": "/抖音订阅列表",
+      "permission": "everyone"
+    },
+    {
+      "name": "网易云音乐订阅列表",
+      "description": "查看当前群聊或私聊的网易云音乐订阅列表",
+      "usage": "/网易云音乐订阅列表",
+      "permission": "everyone"
+    },
+    {
+      "name": "全部订阅列表",
+      "description": "查看所有群聊和私聊的订阅列表",
+      "usage": "/全部订阅列表",
+      "permission": "super_admin"
+    },
+    {
+      "name": "全部b站订阅列表",
+      "description": "查看所有群聊和私聊的 Bilibili 订阅列表",
+      "usage": "/全部b站订阅列表",
+      "permission": "super_admin"
+    },
+    {
+      "name": "全部微博订阅列表",
+      "description": "查看所有群聊和私聊的微博订阅列表",
+      "usage": "/全部微博订阅列表",
+      "permission": "super_admin"
+    },
+    {
+      "name": "全部抖音订阅列表",
+      "description": "查看所有群聊和私聊的抖音订阅列表",
+      "usage": "/全部抖音订阅列表",
+      "permission": "super_admin"
+    },
+    {
+      "name": "全部网易云音乐订阅列表",
+      "description": "查看所有群聊和私聊的网易云音乐订阅列表",
+      "usage": "/全部网易云音乐订阅列表",
+      "permission": "super_admin"
+    },
+    {
+      "name": "立即检查订阅",
+      "description": "立即检查订阅更新",
+      "usage": "/立即检查订阅",
+      "permission": "super_admin"
+    },
+    {
+      "name": "预览订阅卡片",
+      "description": "使用示例类型或 Bilibili 链接预览订阅推送卡片",
+      "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|Bilibili链接]",
+      "permission": "super_admin"
+    }
+  ],
+  "help": {
+    "title": "订阅中心",
+    "summary": "订阅平台内容并推送更新",
+    "groups": [
+      {
+        "title": "订阅操作",
+        "items": [
+          {
+            "title": "订阅状态",
+            "description": "查看启用状态、订阅数量和最近检查结果。",
+            "usage": "/订阅状态",
+            "command": "订阅状态"
+          },
+          {
+            "title": "订阅 Bilibili",
+            "description": "为当前群聊或私聊订阅指定 Bilibili 用户的更新，类型可选，不填表示全部类型。",
+            "usage": "/订阅b站推送 [直播|视频|图文|文章|转发] UID或昵称",
+            "command": "订阅b站推送"
+          },
+          {
+            "title": "订阅微博",
+            "description": "为当前群聊或私聊订阅指定微博账号的更新，类型可选，不填表示全部类型。",
+            "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或主页标识",
+            "command": "订阅微博推送"
+          },
+          {
+            "title": "订阅抖音",
+            "description": "为当前群聊或私聊订阅指定抖音账号的更新，类型可选，不填表示全部类型。",
+            "usage": "/订阅抖音推送 [视频|图文|直播] 抖音号或主页标识",
+            "command": "订阅抖音推送"
+          },
+          {
+            "title": "订阅网易云音乐",
+            "description": "为当前群聊或私聊订阅指定网易云音乐对象的更新，类型可选，不填表示全部类型。",
+            "usage": "/订阅网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
+            "command": "订阅网易云音乐推送"
+          },
+          {
+            "title": "搜索 Bilibili UP",
+            "description": "按昵称关键词搜索 Bilibili UP 主，返回候选账号的名称与 UID。",
+            "usage": "/b站搜索up UP昵称关键词",
+            "command": "b站搜索up"
+          }
+        ]
+      },
+      {
+        "title": "取消订阅",
+        "items": [
+          {
+            "title": "取消 Bilibili",
+            "description": "取消当前群聊或私聊的指定 Bilibili 用户订阅，类型可选，不填表示全部类型。",
+            "usage": "/取消b站推送 [直播|视频|图文|文章|转发] UID或昵称",
+            "command": "取消b站推送"
+          },
+          {
+            "title": "取消微博",
+            "description": "取消当前群聊或私聊的指定微博账号订阅，类型可选，不填表示全部类型。",
+            "usage": "/取消微博推送 [微博|图片|视频|转发] UID或主页标识",
+            "command": "取消微博推送"
+          },
+          {
+            "title": "取消抖音",
+            "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型。",
+            "usage": "/取消抖音推送 [视频|图文|直播] 抖音号或主页标识",
+            "command": "取消抖音推送"
+          },
+          {
+            "title": "取消网易云音乐",
+            "description": "取消当前群聊或私聊的指定网易云音乐对象订阅，类型可选，不填表示全部类型。",
+            "usage": "/取消网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
+            "command": "取消网易云音乐推送"
+          }
+        ]
+      },
+      {
+        "title": "订阅列表",
+        "items": [
+          {
+            "title": "当前订阅",
+            "description": "查看当前群聊或私聊绑定的订阅。",
+            "usage": "/订阅列表",
+            "command": "订阅列表"
+          },
+          {
+            "title": "当前 Bilibili",
+            "description": "查看当前群聊或私聊绑定的 Bilibili 订阅。",
+            "usage": "/b站订阅列表",
+            "command": "b站订阅列表"
+          },
+          {
+            "title": "当前微博",
+            "description": "查看当前群聊或私聊绑定的微博订阅。",
+            "usage": "/微博订阅列表",
+            "command": "微博订阅列表"
+          },
+          {
+            "title": "当前抖音",
+            "description": "查看当前群聊或私聊绑定的抖音订阅。",
+            "usage": "/抖音订阅列表",
+            "command": "抖音订阅列表"
+          },
+          {
+            "title": "当前网易云音乐",
+            "description": "查看当前群聊或私聊绑定的网易云音乐订阅。",
+            "usage": "/网易云音乐订阅列表",
+            "command": "网易云音乐订阅列表"
+          },
+          {
+            "title": "全部订阅",
+            "description": "查看所有群聊和私聊的订阅。",
+            "usage": "/全部订阅列表",
+            "command": "全部订阅列表"
+          },
+          {
+            "title": "全部 Bilibili",
+            "description": "查看所有群聊和私聊的 Bilibili 订阅。",
+            "usage": "/全部b站订阅列表",
+            "command": "全部b站订阅列表"
+          },
+          {
+            "title": "全部微博",
+            "description": "查看所有群聊和私聊的微博订阅。",
+            "usage": "/全部微博订阅列表",
+            "command": "全部微博订阅列表"
+          },
+          {
+            "title": "全部抖音",
+            "description": "查看所有群聊和私聊的抖音订阅。",
+            "usage": "/全部抖音订阅列表",
+            "command": "全部抖音订阅列表"
+          },
+          {
+            "title": "全部网易云音乐",
+            "description": "查看所有群聊和私聊的网易云音乐订阅。",
+            "usage": "/全部网易云音乐订阅列表",
+            "command": "全部网易云音乐订阅列表"
+          }
+        ]
+      },
+      {
+        "title": "维护与预览",
+        "items": [
+          {
+            "title": "立即检查订阅",
+            "description": "立即检查已启用订阅并推送新内容。",
+            "usage": "/立即检查订阅",
+            "command": "立即检查订阅"
+          },
+          {
+            "title": "预览订阅卡片",
+            "description": "使用内置示例类型，或使用视频、图文动态和直播间链接生成订阅推送图片。",
+            "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|Bilibili链接]",
+            "command": "预览订阅卡片"
+          }
+        ]
+      },
+      {
+        "title": "配置说明",
+        "items": [
+          {
+            "title": "Bilibili 账号",
+            "description": "平台 Cookie 在 Web 三方账号页面配置。",
+            "permission": "super_admin"
+          },
+          {
+            "title": "订阅检查",
+            "description": "订阅状态和立即检查入口在订阅中心插件管理页查看。",
+            "permission": "super_admin"
+          }
+        ]
+      }
+    ]
+  },
+  "default_config_file": "default_config.json"
+}

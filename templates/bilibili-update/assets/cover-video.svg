@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="video cover">
+  <defs>
+    <linearGradient id="bg" x1="90" x2="1170" y1="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff1f6"/>
+      <stop offset=".55" stop-color="#e8f7ff"/>
+      <stop offset="1" stop-color="#f7f8fb"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" x2="1">
+      <stop stop-color="#fb7299"/>
+      <stop offset="1" stop-color="#00aeec"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <rect x="92" y="88" width="1096" height="544" rx="34" fill="#fff" opacity=".82"/>
+  <rect x="140" y="134" width="410" height="34" rx="17" fill="#fb7299" opacity=".72"/>
+  <rect x="140" y="194" width="785" height="28" rx="14" fill="#ccd7e6"/>
+  <rect x="140" y="244" width="700" height="28" rx="14" fill="#dbe3ef"/>
+  <rect x="140" y="376" width="1000" height="8" rx="4" fill="#e5eaf2"/>
+  <rect x="140" y="420" width="870" height="8" rx="4" fill="#e5eaf2"/>
+  <rect x="140" y="464" width="960" height="8" rx="4" fill="#e5eaf2"/>
+  <circle cx="1042" cy="214" r="86" fill="url(#bar)" opacity=".9"/>
+  <path d="M1024 174l72 40-72 40z" fill="#fff"/>
+  <rect x="140" y="536" width="260" height="42" rx="21" fill="#00aeec" opacity=".8"/>
+</svg>

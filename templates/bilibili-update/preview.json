@@ -1,0 +1,147 @@
+{
+  "title": "【开发日志】Bilibili 订阅推送卡片：动态流版式、长标题、长正文和多图场景",
+  "headline": "【开发日志】Bilibili 订阅推送卡片：动态流版式、长标题、长正文和多图场景",
+  "content_text": "这是一条用于检查真实视觉问题的长正文样例。正文区域承载主要阅读内容，顶部标题区域保持清晰短促。\n\n图文动态里经常会出现多段说明、活动信息、链接说明和图片补充；卡片需要让 UP 主、动态类型、正文、媒体和订阅人身份都各有位置。正文可以多行展示，图片网格保持稳定比例，底部订阅人信息保持轻量。",
+  "content_html": "这是一条用于检查真实视觉问题的长正文样例。 <span class=\"rich-text-topic bili-rich-text-module topic\">#崩坏星穹铁道#</span> <span class=\"rich-text-at bili-rich-text-module at\">@银狼</span> <span class=\"rich-text-lottery bili-rich-text-module lottery\">互动抽奖</span> <span class=\"rich-text-link bili-rich-text-link video\">BV1RayleaBot</span> <span class=\"rich-text-link bili-rich-text-module goods taobao\">周边</span> <span class=\"rich-text-link bili-rich-text-module vote\">投票</span><br><br>图文动态里经常会出现多段说明、活动信息、链接说明和图片补充；卡片需要让 UP 主、动态类型、正文、媒体和订阅人身份都各有位置。正文可以多行展示，图片网格保持稳定比例，底部订阅人信息保持轻量。",
+  "summary_html": "这是一条用于检查真实视觉问题的长正文样例。 <span class=\"rich-text-topic bili-rich-text-module topic\">#崩坏星穹铁道#</span> <span class=\"rich-text-at bili-rich-text-module at\">@银狼</span> <span class=\"rich-text-lottery bili-rich-text-module lottery\">互动抽奖</span> <span class=\"rich-text-link bili-rich-text-link video\">BV1RayleaBot</span> <span class=\"rich-text-link bili-rich-text-module goods taobao\">周边</span> <span class=\"rich-text-link bili-rich-text-module vote\">投票</span><br><br>图文动态里经常会出现多段说明、活动信息、链接说明和图片补充；卡片需要让 UP 主、动态类型、正文、媒体和订阅人身份都各有位置。正文可以多行展示，图片网格保持稳定比例，底部订阅人信息保持轻量。",
+  "subtitle": "Bilibili · 视频动态",
+  "source_label": "Bilibili · 视频动态",
+  "platform": "Bilibili",
+  "service": "视频",
+  "category": "视频动态",
+  "author": {
+    "name": "RayleaBot 示例账号",
+    "avatar": "assets/avatar.svg",
+    "uid": "100000000000000009"
+  },
+  "author_uid_text": "UID 100000000000000009",
+  "summary": "这是一条用于检查真实视觉问题的长正文样例。正文区域承载主要阅读内容，顶部标题区域保持清晰短促。\n\n图文动态里经常会出现多段说明、活动信息、链接说明和图片补充；卡片需要让 UP 主、动态类型、正文、媒体和订阅人身份都各有位置。正文可以多行展示，图片网格保持稳定比例，底部订阅人信息保持轻量。",
+  "images": [
+    {
+      "url": "assets/cover-video.svg",
+      "width": 1280,
+      "height": 720
+    }
+  ],
+  "image_count": 1,
+  "media_grid_class": "media-grid--single",
+  "media_items": [
+    {
+      "url": "assets/cover-video.svg",
+      "class": "media-item media-item--wide media-item--video",
+      "label": "",
+      "duration_text": "12:48",
+      "width": 1280,
+      "height": 720
+    }
+  ],
+  "url": "https://www.bilibili.com/video/BV1RayleaBot",
+  "pub_ts": 1778342400,
+  "created_at": "2026年05月09日 20:00",
+  "live_event": "",
+  "live_status": null,
+  "status_label": "",
+  "live_started_at": "2026年05月09日 20:00",
+  "live_detected_at": "",
+  "original": {
+    "title": "测试 UP 发布图文动态",
+    "service": "图文",
+    "category": "图文动态",
+    "author": {
+      "name": "原动态作者",
+      "avatar": "assets/original-avatar.svg",
+      "uid": "10000001"
+    },
+    "author_uid_text": "UID 10000001",
+    "summary": "原动态是一段没有独立标题的长正文图文内容，转发块需要弱于主动态，但仍能看清原作者、正文、图片和链接。",
+    "summary_html": "原动态是一段没有独立标题的长正文图文内容，转发块需要弱于主动态，但仍能看清原作者、正文、图片和链接。 <span class=\"rich-text-lottery bili-rich-text-module lottery\">互动抽奖</span> <span class=\"rich-text-link bili-rich-text-module goods taobao\">周边</span>",
+    "images": [
+      {
+        "url": "assets/grid-1.svg",
+        "width": 900,
+        "height": 900
+      },
+      {
+        "url": "assets/grid-2.svg",
+        "width": 900,
+        "height": 2200
+      },
+      {
+        "url": "assets/grid-3.svg",
+        "width": 900,
+        "height": 900
+      }
+    ],
+    "image_count": 3,
+    "media_grid_class": "media-grid--triple",
+    "media_items": [
+      {
+        "url": "assets/grid-1.svg",
+        "class": "media-item",
+        "label": "",
+        "width": 900,
+        "height": 900
+      },
+      {
+        "url": "assets/grid-2.svg",
+        "class": "media-item media-item--long",
+        "label": "长图",
+        "width": 900,
+        "height": 2200
+      },
+      {
+        "url": "assets/grid-3.svg",
+        "class": "media-item media-item--gif",
+        "label": "动图",
+        "width": 900,
+        "height": 900
+      }
+    ],
+    "url": "https://www.bilibili.com/opus/100000000000000003",
+    "created_at": "2026年05月09日 19:55"
+  },
+  "subscription": {
+    "uid": "100000000000000009",
+    "name": "RayleaBot 示例账号"
+  },
+  "subscribers": [
+    {
+      "id": "10001",
+      "nickname": "普通昵称",
+      "group_nickname": "群昵称",
+      "title": "专属头衔",
+      "role": "admin",
+      "role_label": "管理员",
+      "avatar_url": "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100"
+    },
+    {
+      "id": "10002",
+      "nickname": "旧订阅人"
+    }
+  ],
+  "subscriber_cards": [
+    {
+      "id": "10001",
+      "nickname": "普通昵称",
+      "group_nickname": "群昵称",
+      "display_name": "群昵称",
+      "title": "专属头衔",
+      "role": "admin",
+      "role_label": "管理员",
+      "avatar_url": "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100",
+      "uid_text": "10001"
+    },
+    {
+      "id": "10002",
+      "nickname": "旧订阅人",
+      "group_nickname": "",
+      "display_name": "旧订阅人",
+      "title": "",
+      "role": "",
+      "role_label": "",
+      "avatar_url": "https://q1.qlogo.cn/g?b=qq&nk=10002&s=100",
+      "uid_text": "10002"
+    }
+  ],
+  "subscriber_text": "群昵称、旧订阅人"
+}
