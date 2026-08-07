@@ -1,27 +1,23 @@
-package main
+package plugin
 
 import (
 	"context"
 	"crypto/sha256"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/assets"
 )
 
 const (
 	schedulerTaskID = "subscription-hub-check"
 	schedulerCron   = "*/1 * * * *"
 )
-
-//go:embed default_config.json
-var defaultConfigJSON []byte
 
 type settings struct {
 	Enabled       bool           `json:"enabled"`
@@ -80,18 +76,14 @@ type bilibiliLiveStatus struct {
 	} `json:"data"`
 }
 
-func main() {
-	err := rayleabot.Run(context.Background(), rayleabot.Options{
+func Run(ctx context.Context) error {
+	return rayleabot.Run(ctx, rayleabot.Options{
 		PluginID: "raylea.subscription-hub",
 		Subscriptions: []string{
 			"message.group", "message.private", "plugin.started", "config.changed", "scheduler.trigger", "management.action",
 		},
 		MaxConcurrentHandlers: 1,
 	}, rayleabot.HandlerFunc(handleEvent))
-	if err != nil {
-		_, _ = os.Stderr.WriteString(err.Error() + "\n")
-		os.Exit(1)
-	}
 }
 
 func handleEvent(ctx context.Context, event *rayleabot.EventContext) error {
@@ -250,7 +242,7 @@ func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) 
 
 func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings, error) {
 	current := settings{Enabled: true, Subscriptions: []subscription{}}
-	_ = json.Unmarshal(defaultConfigJSON, &current)
+	_ = json.Unmarshal(assets.DefaultConfigJSON, &current)
 	result, err := event.Actions().ConfigRead(ctx, "enabled", "subscriptions")
 	if err != nil {
 		return settings{}, err
