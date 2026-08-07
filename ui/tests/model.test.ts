@@ -5,8 +5,11 @@ import {
   buildRowsFromSettings,
   buildSettingsPayload,
   cloneRow,
+  collectSubscriberIdentities,
   createRowContext,
+  displayAvatarURL,
   emptyTargets,
+  identityKey,
   normalizeSettings,
   normalizeTargets,
   targetMap,
@@ -81,5 +84,49 @@ describe('subscription settings model', () => {
     expect(buildIdentityRequests(buildRowsFromSettings(settings))).toEqual([
       { target_type: 'group', target_id: '200', user_id: '300' },
     ])
+  })
+
+  it('preserves resolved subscriber identity metadata when settings are saved', () => {
+    const settings = normalizeSettings({
+      enabled: true,
+      subscriptions: [{
+        platform: 'bilibili',
+        uid: '100',
+        name: 'UP',
+        target_type: 'group',
+        target_id: '200',
+        subscribers: [{
+          id: '300',
+          nickname: 'subscriber',
+          group_nickname: 'group subscriber',
+          role: 'member',
+          role_label: 'Member',
+          avatar_url: 'https://q1.qlogo.cn/g?b=qq&nk=300&s=640',
+        }],
+      }],
+    })
+    const identities = collectSubscriberIdentities(settings)
+
+    expect(identities.get(identityKey('group', '200', '300'))).toMatchObject({
+      id: '300',
+      nickname: 'subscriber',
+      group_nickname: 'group subscriber',
+      role: 'member',
+      role_label: 'Member',
+    })
+    expect(buildSettingsPayload(settings, buildRowsFromSettings(settings), new Map(), identities).subscriptions[0]?.subscribers[0]).toMatchObject({
+      id: '300',
+      nickname: 'subscriber',
+      group_nickname: 'group subscriber',
+      role: 'member',
+      role_label: 'Member',
+    })
+  })
+
+  it('only exposes CSP-safe avatar URLs to image elements', () => {
+    const source = 'https://i2.hdslb.com/bfs/face/example.jpg'
+    expect(displayAvatarURL(source, new Map())).toBe('')
+    expect(displayAvatarURL(source, new Map([[source, 'data:image/jpeg;base64,AA==']]))).toBe('data:image/jpeg;base64,AA==')
+    expect(displayAvatarURL('data:image/png;base64,AA==', new Map())).toBe('data:image/png;base64,AA==')
   })
 })

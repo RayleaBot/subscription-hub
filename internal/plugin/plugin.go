@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/assets"
@@ -18,6 +18,8 @@ const (
 	schedulerTaskID = "subscription-hub-check"
 	schedulerCron   = "*/1 * * * *"
 )
+
+var schedulerRegistered atomic.Bool
 
 type settings struct {
 	Enabled       bool           `json:"enabled"`
@@ -39,48 +41,20 @@ type subscription struct {
 }
 
 type subscriber struct {
-	ID       string `json:"id"`
-	Nickname string `json:"nickname"`
-	Role     string `json:"role,omitempty"`
-}
-
-type bilibiliFeed struct {
-	Code int `json:"code"`
-	Data struct {
-		Items []struct {
-			ID      string `json:"id_str"`
-			Type    string `json:"type"`
-			Modules struct {
-				Author struct {
-					Name string `json:"name"`
-				} `json:"module_author"`
-				Dynamic struct {
-					Description struct {
-						Text string `json:"text"`
-					} `json:"desc"`
-				} `json:"module_dynamic"`
-			} `json:"modules"`
-		} `json:"items"`
-	} `json:"data"`
-}
-
-type bilibiliLiveStatus struct {
-	Code int `json:"code"`
-	Data map[string]struct {
-		UID        int64  `json:"uid"`
-		UName      string `json:"uname"`
-		Title      string `json:"title"`
-		RoomID     int64  `json:"room_id"`
-		LiveStatus int    `json:"live_status"`
-		LiveTime   int64  `json:"live_time"`
-	} `json:"data"`
+	ID            string `json:"id"`
+	Nickname      string `json:"nickname"`
+	GroupNickname string `json:"group_nickname,omitempty"`
+	Title         string `json:"title,omitempty"`
+	Role          string `json:"role,omitempty"`
+	RoleLabel     string `json:"role_label,omitempty"`
+	AvatarURL     string `json:"avatar_url,omitempty"`
 }
 
 func Run(ctx context.Context) error {
 	return rayleabot.Run(ctx, rayleabot.Options{
 		PluginID: "raylea.subscription-hub",
 		Subscriptions: []string{
-			"message.group", "message.private", "plugin.started", "config.changed", "scheduler.trigger", "management.action",
+			"plugin.started", "config.changed", "scheduler.trigger", "management.action",
 		},
 		MaxConcurrentHandlers: 1,
 	}, rayleabot.HandlerFunc(handleEvent))
@@ -89,22 +63,25 @@ func Run(ctx context.Context) error {
 func handleEvent(ctx context.Context, event *rayleabot.EventContext) error {
 	switch event.Event.EventType {
 	case "plugin.started":
-		_, err := event.Actions().SchedulerCreate(ctx, rayleabot.SchedulerCreateRequest{
-			TaskID: schedulerTaskID, Cron: schedulerCron, EventType: "scheduler.trigger",
-			LogLabel: "订阅检查", Payload: map[string]any{"action": "check_subscriptions"},
-		})
-		if err != nil {
-			return err
-		}
-		return event.Result(map[string]any{"handled": true, "scheduler_registered": true})
+		registered := ensureScheduler(ctx, event)
+		return event.Result(map[string]any{"handled": true, "scheduler_registered": registered})
 	case "config.changed":
+		_, _ = loadSettings(ctx, event)
 		return event.Result(map[string]any{"handled": true, "reloaded": true})
 	case "scheduler.trigger":
+		action := stringScalar(event.Event.Payload["action"])
+		if action == "" {
+			action = stringScalar(nestedValue(event.Event.Payload, "payload", "action"))
+		}
+		if action != "" && action != "check_subscriptions" {
+			return event.Result(map[string]any{"handled": false})
+		}
 		current, err := loadSettings(ctx, event)
 		if err != nil {
 			return err
 		}
 		result := checkSubscriptions(ctx, event, current)
+		logSubscriptionCheck(ctx, event.Actions(), result)
 		return event.Result(result)
 	case "management.action":
 		return handleManagementAction(ctx, event)
@@ -145,7 +122,7 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 		return event.SendText(formatSubscriptions(current, event, platform, operation == "list_all"))
 	case "check":
 		result := checkSubscriptions(ctx, event, current)
-		return event.SendText(fmt.Sprintf("订阅检查完成：检查 %v 项，推送 %v 项，失败 %v 项。", result["checked"], result["pushed"], result["failed"]))
+		return event.SendText(subscriptionCheckSummary(result))
 	case "search":
 		return event.SendText(searchBilibiliUsers(ctx, event, strings.Join(event.Event.Args(), " ")))
 	case "preview":
@@ -175,7 +152,7 @@ func commandOperation(command string) (string, string) {
 		return "netease_music", "add"
 	case "取消网易云音乐推送":
 		return "netease_music", "remove"
-	case "b站搜索up":
+	case "b站搜索up", "b站搜索UP", "B站搜索up", "B站搜索UP":
 		return "bilibili", "search"
 	case "订阅列表":
 		return "", "list"
@@ -216,6 +193,8 @@ func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) 
 	switch strings.TrimSpace(action) {
 	case "subscription.check_now":
 		return event.Result(checkSubscriptions(ctx, event, current))
+	case "subscription.resolve_avatars":
+		return event.Result(resolveAvatarDataURLs(ctx, event.Actions(), payload))
 	case "subscription.resolve_user":
 		platform := stringValue(payload, "platform", "bilibili")
 		query := stringValue(payload, "query", "")
@@ -233,7 +212,11 @@ func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) 
 		if uid == "" {
 			uid = safeSubjectID(query)
 		}
-		user := map[string]any{"uid": uid, "name": uid, "avatar_url": ""}
+		name := strings.TrimSpace(query)
+		if name == "" {
+			name = uid
+		}
+		user := map[string]any{"uid": uid, "name": name, "avatar_url": ""}
 		return event.Result(map[string]any{"platform": platform, "query": query, "exact": uid != "", "user": user, "candidates": []any{user}})
 	default:
 		return event.Result(map[string]any{"handled": false, "message": "未知订阅中心管理动作。"})
@@ -245,7 +228,11 @@ func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings,
 	_ = json.Unmarshal(assets.DefaultConfigJSON, &current)
 	result, err := event.Actions().ConfigRead(ctx, "enabled", "subscriptions")
 	if err != nil {
-		return settings{}, err
+		_, _ = event.Actions().LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+			Level: "warn", Message: "订阅设置读取失败，使用默认设置", Fields: map[string]any{"error": err.Error()},
+		})
+		ensureScheduler(ctx, event)
+		return current, nil
 	}
 	values, _ := result["values"].(map[string]any)
 	if enabled, ok := values["enabled"].(bool); ok {
@@ -256,7 +243,30 @@ func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings,
 		_ = json.Unmarshal(encoded, &current.Subscriptions)
 	}
 	current.Subscriptions = normalizeSubscriptions(current.Subscriptions)
+	ensureScheduler(ctx, event)
 	return current, nil
+}
+
+func ensureScheduler(ctx context.Context, event *rayleabot.EventContext) bool {
+	if schedulerRegistered.Load() {
+		return true
+	}
+	_, err := event.Actions().SchedulerCreate(ctx, rayleabot.SchedulerCreateRequest{
+		TaskID: schedulerTaskID, Cron: schedulerCron, EventType: "scheduler.trigger",
+		LogLabel: "订阅检查", Payload: map[string]any{"action": "check_subscriptions"},
+	})
+	if err != nil {
+		_, _ = event.Actions().LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+			Level: "warn", Message: "订阅检查任务注册失败", Fields: map[string]any{"error": err.Error()},
+		})
+		return false
+	}
+	schedulerRegistered.Store(true)
+	_, _ = event.Actions().LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+		Level: "info", Message: fmt.Sprintf("订阅中心插件创建定时任务订阅检查（%s）", schedulerCron),
+		Fields: map[string]any{"task_id": schedulerTaskID, "cron": schedulerCron, "log_label": "订阅检查"},
+	})
+	return true
 }
 
 func saveSettings(ctx context.Context, event *rayleabot.EventContext, current settings) error {
@@ -270,7 +280,7 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 		return "请填写要订阅的账号 ID 或主页标识。", false
 	}
 	uid := subjectIDFromInput(platform, query)
-	name := uid
+	name := strings.TrimSpace(query)
 	avatarURL := ""
 	if platform == "bilibili" {
 		users, err := resolveBilibiliUsers(ctx, event, query)
@@ -278,9 +288,13 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 			return friendlyBilibiliError(err), false
 		}
 		uid, name, avatarURL = users[0].UID, users[0].Name, users[0].AvatarURL
-	} else if uid == "" {
-		uid = safeSubjectID(query)
-		name = uid
+	} else {
+		if uid == "" {
+			uid = safeSubjectID(query)
+		}
+		if name == "" {
+			name = uid
+		}
 	}
 	if uid == "" || event.Event.Target.ID == "" {
 		return "当前会话无法绑定订阅目标。", false
@@ -296,13 +310,20 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 			continue
 		}
 		item.Enabled = true
+		item.Name = name
+		if avatarURL != "" {
+			item.AvatarURL = avatarURL
+		}
+		if targetName := currentTargetName(event); targetName != "" {
+			item.TargetName = targetName
+		}
 		item.Services = mergeServices(item.Services, services, platform)
 		item.Subscribers = mergeSubscriber(item.Subscribers, event)
 		return "已更新订阅：" + platformName(platform) + " " + item.Name + "（" + servicesText(item.Services, platform) + "）", true
 	}
 	current.Subscriptions = append(current.Subscriptions, subscription{
 		ID: id, Platform: platform, UID: uid, Name: name, AvatarURL: avatarURL, TargetType: targetType, TargetID: event.Event.Target.ID,
-		TargetName: event.Event.Target.Name, Services: services, Subscribers: mergeSubscriber(nil, event), Enabled: true,
+		TargetName: currentTargetName(event), Services: services, Subscribers: mergeSubscriber(nil, event), Enabled: true,
 	})
 	return "已订阅：" + platformName(platform) + " " + name + "（" + servicesText(services, platform) + "）", true
 }
@@ -375,7 +396,7 @@ func formatStatus(current settings) string {
 	if current.Enabled {
 		state = "启用"
 	}
-	return fmt.Sprintf("订阅中心\n状态：%s\n订阅：%d/%d\n平台：Bilibili、微博、抖音、网易云音乐", state, enabled, len(current.Subscriptions))
+	return fmt.Sprintf("订阅中心\n状态：%s\n订阅：%d/%d\n平台：Bilibili、微博、抖音、网易云音乐\n检查：订阅中心插件定时检查，支持手动立即检查\n账号：Web 三方账号页面管理平台 Cookie", state, enabled, len(current.Subscriptions))
 }
 
 func formatSubscriptions(current settings, event *rayleabot.EventContext, platform string, all bool) string {
@@ -390,134 +411,78 @@ func formatSubscriptions(current settings, event *rayleabot.EventContext, platfo
 		items = append(items, item)
 	}
 	if len(items) == 0 {
-		return "订阅列表\n当前没有订阅。"
+		return subscriptionListTitle(platform, all) + "\n当前没有订阅。"
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
-	lines := []string{"订阅列表"}
+	lines := []string{subscriptionListTitle(platform, all)}
 	for _, item := range items {
-		lines = append(lines, fmt.Sprintf("%s %s（%s）→ %s %s", platformName(item.Platform), item.Name, servicesText(item.Services, item.Platform), item.TargetType, item.TargetID))
+		targetLabel := "群聊"
+		if item.TargetType == "private" {
+			targetLabel = "私聊"
+		}
+		lines = append(lines, fmt.Sprintf("%s %s · %s %s · %s · 订阅人：%s", targetLabel, item.TargetID,
+			platformName(item.Platform), subscriptionSubjectText(item), servicesText(item.Services, item.Platform), subscribersText(item)))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func checkSubscriptions(ctx context.Context, event *rayleabot.EventContext, current settings) map[string]any {
-	checked, pushed, failed := 0, 0, 0
-	if !current.Enabled {
-		return map[string]any{"handled": true, "checked": 0, "pushed": 0, "failed": 0, "disabled": true}
+func subscriptionListTitle(platform string, all bool) string {
+	if platform == "" {
+		if all {
+			return "全部订阅列表"
+		}
+		return "订阅列表"
 	}
-	for _, item := range current.Subscriptions {
-		if !item.Enabled || item.Platform != "bilibili" {
-			continue
+	name := platformName(platform)
+	if platform == "bilibili" {
+		name = "Bilibili"
+		if all {
+			return "全部 Bilibili 订阅列表"
 		}
-		checked++
-		changed, message, err := checkBilibili(ctx, event, item)
-		if err != nil {
-			failed++
-			continue
-		}
-		if !changed {
-			continue
-		}
-		_, err = event.Actions().MessageSend(ctx, rayleabot.MessageSendRequest{
-			TargetType: item.TargetType, TargetID: item.TargetID,
-			Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text(message)}},
-		})
-		if err != nil {
-			failed++
-			continue
-		}
-		pushed++
+		return "Bilibili 订阅列表"
 	}
-	return map[string]any{"handled": true, "checked": checked, "pushed": pushed, "failed": failed}
+	if all {
+		return "全部" + name + "订阅列表"
+	}
+	return name + "订阅列表"
 }
 
-func checkBilibili(ctx context.Context, event *rayleabot.EventContext, item subscription) (bool, string, error) {
-	dynamicEnabled := serviceEnabled(item, "video") || serviceEnabled(item, "image_text") || serviceEnabled(item, "article") || serviceEnabled(item, "repost")
-	if dynamicEnabled {
-		changed, message, err := checkBilibiliDynamic(ctx, event, item)
-		if err != nil || changed {
-			return changed, message, err
+func subscriptionSubjectText(item subscription) string {
+	name, uid := strings.TrimSpace(item.Name), strings.TrimSpace(item.UID)
+	if name == "" || name == uid {
+		return firstText(uid, name)
+	}
+	label := map[string]string{"bilibili": "UID", "weibo": "UID", "douyin": "抖音号", "netease_music": "ID"}[item.Platform]
+	return fmt.Sprintf("%s（%s %s）", name, label, uid)
+}
+
+func subscribersText(item subscription) string {
+	names := make([]string, 0, len(item.Subscribers))
+	for _, subscriber := range item.Subscribers {
+		if name := firstText(subscriber.Nickname, subscriber.ID); name != "" {
+			names = append(names, name)
 		}
 	}
-	if serviceEnabled(item, "live") {
-		return checkBilibiliLive(ctx, event, item)
+	if len(names) == 0 {
+		return "未记录"
 	}
-	return false, "", nil
+	return strings.Join(names, "、")
 }
 
-func checkBilibiliDynamic(ctx context.Context, event *rayleabot.EventContext, item subscription) (bool, string, error) {
-	endpoint := "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=" + url.QueryEscape(item.UID)
-	result, err := event.Actions().HTTPRequest(ctx, rayleabot.HTTPRequest{Method: "GET", URL: endpoint, TimeoutSeconds: 15, Headers: bilibiliHeaders(readBilibiliCookie(ctx, event), item.UID)})
-	if err != nil {
-		return false, "", err
+func currentTargetName(event *rayleabot.EventContext) string {
+	name := strings.TrimSpace(event.Event.Target.Name)
+	onebot := mapValue(event.Event.Payload["onebot"])
+	sender := mapValue(onebot["sender"])
+	if name == "" && normalizedTargetType(event.Event.Target.Type) == "group" {
+		name = stringScalar(onebot["group_name"])
 	}
-	body, _ := result["body_text"].(string)
-	var feed bilibiliFeed
-	if json.Unmarshal([]byte(body), &feed) != nil || feed.Code != 0 || len(feed.Data.Items) == 0 {
-		return false, "", fmt.Errorf("invalid Bilibili feed response")
+	if name == "" && normalizedTargetType(event.Event.Target.Type) == "private" {
+		name = firstText(event.Event.Actor.Nickname, sender["nickname"])
 	}
-	latest := feed.Data.Items[0]
-	if latest.ID == "" {
-		return false, "", fmt.Errorf("Bilibili feed has no item id")
+	if name == event.Event.Target.ID {
+		return ""
 	}
-	cursorKey := "cursor:" + item.ID
-	cursor, _ := event.Actions().KVGet(ctx, cursorKey)
-	previous, _ := cursor["value"].(string)
-	if _, err := event.Actions().KVSet(ctx, cursorKey, latest.ID); err != nil {
-		return false, "", err
-	}
-	if previous == "" || previous == latest.ID {
-		return false, "", nil
-	}
-	service := bilibiliDynamicService(latest.Type)
-	if !serviceEnabled(item, service) {
-		return false, "", nil
-	}
-	author := latest.Modules.Author.Name
-	if author == "" {
-		author = item.Name
-	}
-	description := strings.TrimSpace(latest.Modules.Dynamic.Description.Text)
-	if description == "" {
-		description = "发布了新动态"
-	}
-	return true, fmt.Sprintf("%s 更新\n%s\nhttps://t.bilibili.com/%s", author, description, latest.ID), nil
-}
-
-func checkBilibiliLive(ctx context.Context, event *rayleabot.EventContext, item subscription) (bool, string, error) {
-	endpoint := "https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids?uids[]=" + url.QueryEscape(item.UID)
-	result, err := event.Actions().HTTPRequest(ctx, rayleabot.HTTPRequest{Method: "GET", URL: endpoint, TimeoutSeconds: 15, Headers: bilibiliHeaders(readBilibiliCookie(ctx, event), item.UID)})
-	if err != nil {
-		return false, "", err
-	}
-	body, _ := result["body_text"].(string)
-	var response bilibiliLiveStatus
-	if json.Unmarshal([]byte(body), &response) != nil || response.Code != 0 {
-		return false, "", fmt.Errorf("invalid Bilibili live response")
-	}
-	entry, exists := response.Data[item.UID]
-	if !exists {
-		return false, "", nil
-	}
-	cursorValue := fmt.Sprintf("%d:%d:%d", entry.LiveStatus, entry.RoomID, entry.LiveTime)
-	cursorKey := "live_cursor:" + item.ID
-	cursor, _ := event.Actions().KVGet(ctx, cursorKey)
-	previous, _ := cursor["value"].(string)
-	if _, err := event.Actions().KVSet(ctx, cursorKey, cursorValue); err != nil {
-		return false, "", err
-	}
-	if previous == "" || previous == cursorValue {
-		return false, "", nil
-	}
-	author := strings.TrimSpace(entry.UName)
-	if author == "" {
-		author = item.Name
-	}
-	state := "已下播"
-	if entry.LiveStatus == 1 {
-		state = "开始直播"
-	}
-	return true, fmt.Sprintf("%s %s\n%s\nhttps://live.bilibili.com/%d", author, state, entry.Title, entry.RoomID), nil
+	return name
 }
 
 func bilibiliDynamicService(value string) string {
@@ -534,13 +499,23 @@ func bilibiliDynamicService(value string) string {
 }
 
 func mergeSubscriber(items []subscriber, event *rayleabot.EventContext) []subscriber {
-	id := strings.TrimSpace(event.Event.Actor.ID)
+	onebot := mapValue(event.Event.Payload["onebot"])
+	sender := mapValue(onebot["sender"])
+	id := firstText(event.Event.Actor.ID, sender["user_id"], onebot["user_id"])
 	if id == "" {
 		return items
 	}
-	next := subscriber{ID: id, Nickname: strings.TrimSpace(event.Event.Actor.Nickname), Role: strings.TrimSpace(event.Event.Actor.Role)}
-	if next.Nickname == "" {
-		next.Nickname = id
+	role := firstText(event.Event.Actor.Role, sender["role"])
+	for _, superAdmin := range event.SuperAdmins {
+		if strings.TrimSpace(superAdmin) == id {
+			role = "super_admin"
+			break
+		}
+	}
+	next := subscriber{
+		ID: id, Nickname: firstText(event.Event.Actor.Nickname, sender["nickname"], id),
+		GroupNickname: stringScalar(sender["card"]), Title: stringScalar(sender["title"]),
+		Role: role, RoleLabel: subscriberRoleLabel(role), AvatarURL: qqAvatarURL(id),
 	}
 	for index := range items {
 		if items[index].ID == id {

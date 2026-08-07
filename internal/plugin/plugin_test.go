@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
@@ -25,8 +26,76 @@ func TestCommandOperationCoversPlatformMutations(t *testing.T) {
 	if platform, operation := commandOperation("b站搜索up"); platform != "bilibili" || operation != "search" {
 		t.Fatalf("search command is not wired: %q %q", platform, operation)
 	}
+	if platform, operation := commandOperation("B站搜索UP"); platform != "bilibili" || operation != "search" {
+		t.Fatalf("search alias is not wired: %q %q", platform, operation)
+	}
 	if platform, operation := commandOperation("预览订阅卡片"); platform != "bilibili" || operation != "preview" {
 		t.Fatalf("preview command is not wired: %q %q", platform, operation)
+	}
+}
+
+func TestStatusAndSubscriptionListPreserveOperationalDetails(t *testing.T) {
+	current := settings{Enabled: true, Subscriptions: []subscription{{
+		ID: "one", Platform: "bilibili", UID: "42", Name: "测试UP", TargetType: "group", TargetID: "100",
+		Services: []string{"video"}, Subscribers: []subscriber{{ID: "7", Nickname: "柒柒"}}, Enabled: true,
+	}}}
+	if status := formatStatus(current); !strings.Contains(status, "检查：") || !strings.Contains(status, "账号：") {
+		t.Fatalf("status omitted operational guidance: %q", status)
+	}
+	event := &rayleabot.EventContext{Event: rayleabot.Event{Target: rayleabot.Target{Type: "group", ID: "100"}}}
+	list := formatSubscriptions(current, event, "bilibili", false)
+	for _, expected := range []string{"Bilibili 订阅列表", "群聊 100", "测试UP（UID 42）", "订阅人：柒柒"} {
+		if !strings.Contains(list, expected) {
+			t.Fatalf("subscription list %q omitted %q", list, expected)
+		}
+	}
+}
+
+func TestSubscriptionListTitlesPreserveLegacySpacing(t *testing.T) {
+	for _, test := range []struct {
+		platform string
+		all      bool
+		want     string
+	}{
+		{platform: "bilibili", all: true, want: "全部 Bilibili 订阅列表"},
+		{platform: "weibo", all: true, want: "全部微博订阅列表"},
+		{platform: "douyin", want: "抖音订阅列表"},
+		{all: true, want: "全部订阅列表"},
+	} {
+		if got := subscriptionListTitle(test.platform, test.all); got != test.want {
+			t.Fatalf("subscriptionListTitle(%q, %v) = %q, want %q", test.platform, test.all, got, test.want)
+		}
+	}
+}
+
+func TestNonBilibiliSubscriptionKeepsOriginalSubjectName(t *testing.T) {
+	current := settings{}
+	event := &rayleabot.EventContext{Event: rayleabot.Event{
+		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
+		Target:  rayleabot.Target{Type: "group", ID: "100"},
+		Payload: map[string]any{"args": []string{"洛天依"}},
+	}}
+	if _, changed := addSubscription(t.Context(), &current, event, "netease_music"); !changed {
+		t.Fatal("subscription was not added")
+	}
+	if len(current.Subscriptions) != 1 || current.Subscriptions[0].Name != "洛天依" {
+		t.Fatalf("subscription subject name = %#v", current.Subscriptions)
+	}
+}
+
+func TestCurrentTargetNameFallsBackToOneBotAndPrivateActor(t *testing.T) {
+	group := &rayleabot.EventContext{Event: rayleabot.Event{
+		Target:  rayleabot.Target{Type: "group", ID: "100"},
+		Payload: map[string]any{"onebot": map[string]any{"group_name": "测试群"}},
+	}}
+	if got := currentTargetName(group); got != "测试群" {
+		t.Fatalf("group target name = %q", got)
+	}
+	private := &rayleabot.EventContext{Event: rayleabot.Event{
+		Actor: rayleabot.Actor{Nickname: "柒柒"}, Target: rayleabot.Target{Type: "private", ID: "7"},
+	}}
+	if got := currentTargetName(private); got != "柒柒" {
+		t.Fatalf("private target name = %q", got)
 	}
 }
 

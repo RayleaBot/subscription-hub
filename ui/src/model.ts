@@ -122,6 +122,7 @@ export interface RowContext {
   targetMap: Map<string, LiveTarget>
   targetsLoaded: boolean
   subscriberAvatars: Map<string, string>
+  avatarDataURLs: Map<string, string>
 }
 
 export interface IdentityResolveItem {
@@ -279,6 +280,7 @@ export function buildSettingsPayload(
   settings: Pick<SubscriptionSettings, 'enabled'>,
   rows: SubscriptionRow[],
   targetsByKey: Map<string, LiveTarget>,
+  subscriberIdentities: Map<string, Subscriber> = new Map(),
 ): SubscriptionSettings {
   const subscriptions: Subscription[] = []
   for (const row of rows) {
@@ -294,7 +296,10 @@ export function buildSettingsPayload(
         target_id: target.target_id,
         target_name: live?.label || target.target_name || undefined,
         services: normalizeServices(row.service_mode === 'mixed' ? target.services : row.services, row.platform),
-        subscribers: row.subscriber_ids.map((id) => ({ id })),
+        subscribers: row.subscriber_ids.map((id) => {
+          const identity = subscriberIdentities.get(identityKey(target.target_type, target.target_id, id))
+          return identity ? { ...identity, id } : { id }
+        }),
         enabled: row.enabled,
       })
     }
@@ -374,9 +379,10 @@ export function createRowContext(
   targets: TargetsState,
   rows: SubscriptionRow[],
   subscriberAvatars: Map<string, string>,
+  avatarDataURLs: Map<string, string> = new Map(),
 ): RowContext {
   const known = knownTargetsState(targets, rows)
-  return { targets: known, targetMap: targetMap(known), targetsLoaded: known.loaded, subscriberAvatars }
+  return { targets: known, targetMap: targetMap(known), targetsLoaded: known.loaded, subscriberAvatars, avatarDataURLs }
 }
 
 export function validateRow(row: SubscriptionRow, context: RowContext): string[] {
@@ -507,6 +513,13 @@ export function subscriberAvatarURL(avatars: Map<string, string>, userID: string
   return avatars.get(id) || `https://q1.qlogo.cn/g?b=qq&nk=${encodeURIComponent(id)}&s=640`
 }
 
+export function displayAvatarURL(source: string, dataURLs: Map<string, string>): string {
+  const value = trim(source)
+  if (!value) return ''
+  if (value.startsWith('data:image/') || value.startsWith('./') || value.startsWith('/')) return value
+  return dataURLs.get(value) || ''
+}
+
 export function collectSubscriberAvatars(settings: SubscriptionSettings): Map<string, string> {
   const avatars = new Map<string, string>()
   for (const subscription of settings.subscriptions) {
@@ -515,6 +528,19 @@ export function collectSubscriberAvatars(settings: SubscriptionSettings): Map<st
     }
   }
   return avatars
+}
+
+export function collectSubscriberIdentities(settings: SubscriptionSettings): Map<string, Subscriber> {
+  const identities = new Map<string, Subscriber>()
+  for (const subscription of settings.subscriptions) {
+    for (const subscriber of subscription.subscribers) {
+      identities.set(
+        identityKey(subscription.target_type, subscription.target_id, subscriber.id),
+        { ...subscriber },
+      )
+    }
+  }
+  return identities
 }
 
 export function buildIdentityRequests(rows: SubscriptionRow[]): IdentityResolveItem[] {

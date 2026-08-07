@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -10,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
@@ -266,144 +264,74 @@ func resolveBilibiliUsers(ctx context.Context, event *rayleabot.EventContext, qu
 }
 
 func readBilibiliUser(ctx context.Context, event *rayleabot.EventContext, uid string) (bilibiliUser, error) {
-	headers := bilibiliHeaders(readBilibiliCookie(ctx, event), uid)
-	endpoint := "https://api.bilibili.com/x/space/acc/info?mid=" + url.QueryEscape(uid) + "&jsonp=jsonp"
-	result, err := event.Actions().HTTPRequest(ctx, rayleabot.HTTPRequest{Method: "GET", URL: endpoint, Headers: headers, TimeoutSeconds: 12})
+	return readBilibiliUserWithActions(ctx, event.Actions(), uid)
+}
+
+func readBilibiliUserWithActions(ctx context.Context, actions pluginActions, uid string) (bilibiliUser, error) {
+	accounts, err := readBilibiliAccounts(ctx, actions)
 	if err != nil {
 		return bilibiliUser{}, err
 	}
-	var response struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Data    struct {
-			MID  any    `json:"mid"`
-			Name string `json:"name"`
-			Face string `json:"face"`
-		} `json:"data"`
+	values := bilibiliDeviceQuery()
+	values.Set("mid", uid)
+	values.Set("platform", "web")
+	values.Set("web_location", "1550101")
+	endpoint := bilibiliUserInfoURL + "?" + values.Encode()
+	document, err := requestBilibiliAcrossAccounts(ctx, actions, accounts, "GET", endpoint, true, false)
+	if err != nil {
+		return bilibiliUser{}, errors.New(friendlyBilibiliSourceError("Bilibili 用户信息读取失败", err))
 	}
-	if err := decodeHTTPJSON(result, &response); err != nil {
-		return bilibiliUser{}, err
+	data := mapValue(document["data"])
+	name := cleanText(firstNonNil(data["name"], data["uname"]))
+	resolvedUID := firstText(data["mid"], uid)
+	if digits(resolvedUID) == "" || name == "" {
+		return bilibiliUser{}, errors.New("没有找到这个 Bilibili 用户")
 	}
-	if response.Code != 0 || strings.TrimSpace(response.Data.Name) == "" {
-		return bilibiliUser{}, fmt.Errorf("Bilibili 用户信息读取失败：%s", response.Message)
-	}
-	return bilibiliUser{UID: scalarString(response.Data.MID, uid), Name: response.Data.Name, AvatarURL: response.Data.Face}, nil
+	return bilibiliUser{UID: resolvedUID, Name: name, AvatarURL: normalizeBilibiliURL(firstNonNil(data["face"], data["avatar"], data["upic"]))}, nil
 }
 
 func searchBilibili(ctx context.Context, event *rayleabot.EventContext, query string) ([]bilibiliUser, error) {
+	return searchBilibiliWithActions(ctx, event.Actions(), query)
+}
+
+func searchBilibiliWithActions(ctx context.Context, actions pluginActions, query string) ([]bilibiliUser, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, errors.New("用法：/b站搜索up UP昵称关键词")
 	}
-	cookie := readBilibiliCookie(ctx, event)
-	if cookie == "" {
-		return nil, errors.New("没有可用的 Bilibili 账号 CK，请在 Web 三方账号页面保存账号")
-	}
-	endpoint := "https://api.bilibili.com/x/web-interface/search/type?search_type=bili_user&order=totalrank&page=1&pagesize=5&keyword=" + url.QueryEscape(query)
-	result, err := event.Actions().HTTPRequest(ctx, rayleabot.HTTPRequest{Method: "GET", URL: endpoint, Headers: bilibiliHeaders(cookie, ""), TimeoutSeconds: 12})
+	accounts, err := readBilibiliAccounts(ctx, actions)
 	if err != nil {
 		return nil, err
 	}
-	var response struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Data    struct {
-			Results []struct {
-				MID   any    `json:"mid"`
-				UName string `json:"uname"`
-				UPic  string `json:"upic"`
-				Fans  int    `json:"fans"`
-			} `json:"result"`
-		} `json:"data"`
+	values := bilibiliDeviceQuery()
+	values.Set("search_type", "bili_user")
+	values.Set("order", "totalrank")
+	values.Set("page", "1")
+	values.Set("pagesize", "5")
+	values.Set("keyword", query)
+	values.Set("web_location", "1430654")
+	endpoint := bilibiliUserSearchURL + "?" + values.Encode()
+	document, err := requestBilibiliAcrossAccounts(ctx, actions, accounts, "GET", endpoint, true, false)
+	if err != nil {
+		return nil, errors.New(friendlyBilibiliSourceError("Bilibili UP 搜索失败", err))
 	}
-	if err := decodeHTTPJSON(result, &response); err != nil {
-		return nil, err
-	}
-	if response.Code != 0 {
-		return nil, fmt.Errorf("Bilibili UP 搜索失败：%s", response.Message)
-	}
-	users := make([]bilibiliUser, 0, len(response.Data.Results))
-	for _, item := range response.Data.Results {
-		uid := scalarString(item.MID, "")
-		name := strings.TrimSpace(htmlTag.ReplaceAllString(item.UName, ""))
+	results := sliceValue(nestedValue(document, "data", "result"))
+	users := make([]bilibiliUser, 0, len(results))
+	for _, raw := range results {
+		item := mapValue(raw)
+		uid := stringScalar(item["mid"])
+		name := cleanText(htmlTag.ReplaceAllString(firstText(item["uname"], item["name"]), ""))
 		if uid != "" && name != "" {
-			users = append(users, bilibiliUser{UID: uid, Name: name, AvatarURL: normalizeURL(item.UPic), Fans: item.Fans})
+			users = append(users, bilibiliUser{UID: uid, Name: name, AvatarURL: normalizeBilibiliURL(firstNonNil(item["upic"], item["face"], item["avatar"])), Fans: int(intScalar(item["fans"]))})
+			if len(users) == 5 {
+				break
+			}
 		}
 	}
 	if len(users) == 0 {
-		return nil, errors.New("没有找到匹配的 Bilibili UP 主")
+		return nil, fmt.Errorf("没有搜索到 Bilibili 用户：%s", query)
 	}
 	return users, nil
-}
-
-func readBilibiliCookie(ctx context.Context, event *rayleabot.EventContext) string {
-	result, err := event.Actions().ThirdPartyAccountRead(ctx, rayleabot.ThirdPartyAccountReadRequest{Platform: "bilibili"})
-	if err != nil {
-		return ""
-	}
-	var response struct {
-		Accounts []struct {
-			Cookie struct {
-				Value string `json:"value"`
-			} `json:"cookie"`
-		} `json:"accounts"`
-	}
-	raw, _ := json.Marshal(result)
-	_ = json.Unmarshal(raw, &response)
-	for _, account := range response.Accounts {
-		if cookie := strings.TrimSpace(account.Cookie.Value); cookie != "" {
-			return cookie
-		}
-	}
-	return ""
-}
-
-func bilibiliHeaders(cookie, uid string) map[string]string {
-	headers := map[string]string{
-		"Accept":     "application/json, text/plain, */*",
-		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-		"Referer":    "https://www.bilibili.com/",
-	}
-	if uid != "" {
-		headers["Referer"] = "https://space.bilibili.com/" + uid + "/dynamic"
-	}
-	if cookie != "" {
-		headers["Cookie"] = cookie
-	}
-	return headers
-}
-
-func decodeHTTPJSON(result map[string]any, target any) error {
-	body, _ := result["body_text"].(string)
-	if strings.TrimSpace(body) == "" {
-		return errors.New("Bilibili 返回了空响应")
-	}
-	if err := json.Unmarshal([]byte(body), target); err != nil {
-		return errors.New("Bilibili 响应格式不正确")
-	}
-	return nil
-}
-
-func scalarString(value any, fallback string) string {
-	switch typed := value.(type) {
-	case string:
-		if strings.TrimSpace(typed) != "" {
-			return strings.TrimSpace(typed)
-		}
-	case float64:
-		return strconv.FormatInt(int64(typed), 10)
-	case json.Number:
-		return typed.String()
-	}
-	return fallback
-}
-
-func normalizeURL(value string) string {
-	value = strings.TrimSpace(value)
-	if strings.HasPrefix(value, "//") {
-		return "https:" + value
-	}
-	return value
 }
 
 func friendlyBilibiliError(err error) string {
@@ -441,65 +369,6 @@ func formatCount(value int) string {
 		return strconv.Itoa(value)
 	}
 	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", float64(value)/10000), "0"), ".") + "万"
-}
-
-func previewSubscriptionCard(ctx context.Context, event *rayleabot.EventContext, input string) error {
-	input = strings.TrimSpace(input)
-	service := normalizeService(input, "bilibili")
-	previewURL := ""
-	if matches := urlPattern.FindAllString(input, -1); len(matches) > 0 {
-		previewURL = strings.TrimRight(matches[0], "。），,)")
-		service = previewService(previewURL)
-	}
-	if service == "" || service == "all" {
-		service = "video"
-	}
-	catalog := services["bilibili"]
-	category := catalog.names[service]
-	if category == "" {
-		category = "动态"
-	}
-	if previewURL == "" {
-		previewURL = "https://www.bilibili.com/"
-	}
-	data := map[string]any{
-		"title": "订阅卡片预览", "headline": "Bilibili " + category + "预览", "platform": "bilibili",
-		"service": service, "category": category, "summary": "这是订阅中心生成的预览内容，用于确认卡片排版与主题。",
-		"content_text": "这是订阅中心生成的预览内容，用于确认卡片排版与主题。", "url": previewURL,
-		"created_at": time.Now().Format("2006年01月02日 15:04"),
-		"author":     map[string]any{"name": "RayleaBot", "uid": "preview"}, "author_uid_text": "UID preview",
-		"images": []any{}, "image_count": 0, "media_items": []any{},
-		"subscription": map[string]any{"platform": "bilibili", "uid": "preview", "name": "RayleaBot", "services": []string{service}},
-		"subscribers":  []any{}, "subscriber_cards": []any{}, "subscriber_text": "",
-	}
-	fallback := fmt.Sprintf("订阅卡片预览\nBilibili %s\n%s", category, previewURL)
-	result, err := event.Actions().RenderImage(ctx, rayleabot.RenderImageRequest{
-		Template: "bilibili-update", Data: data, Output: "png", FallbackText: fallback,
-	})
-	if err == nil {
-		if imagePath, _ := result["image_path"].(string); imagePath != "" {
-			return event.Send(event.Event.Target.Type, event.Event.Target.ID, rayleabot.Image(imagePath))
-		}
-	}
-	return event.SendText(fallback)
-}
-
-func previewService(value string) string {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return ""
-	}
-	parts := pathParts(parsed.Path)
-	if parsed.Hostname() == "live.bilibili.com" {
-		return "live"
-	}
-	if len(parts) >= 2 && parts[0] == "video" {
-		return "video"
-	}
-	if parsed.Hostname() == "t.bilibili.com" || (len(parts) >= 2 && parts[0] == "opus") {
-		return "image_text"
-	}
-	return ""
 }
 
 func sortedServices(values []string) []string {

@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import AvatarBadge from './AvatarBadge.vue'
 import {
   currentTargetsForMode,
+  displayAvatarURL,
   inputPlaceholder,
   isNumericID,
   PLATFORM_OPTIONS,
@@ -87,12 +88,16 @@ function addSubscriber() {
   emit('addSubscriber', id)
   subscriberInput.value = ''
 }
+
+function avatarURL(source: string): string {
+  return displayAvatarURL(source, props.context.avatarDataURLs)
+}
 </script>
 
 <template>
   <article class="sub-card" :data-row-id="row.row_id" :class="{ 'sub-card--editing': row.edit_mode, 'sub-card--disabled': !row.enabled }">
     <div class="sub-card__head">
-      <AvatarBadge :url="row.avatar_url" :label="title" size="up" />
+      <AvatarBadge :url="avatarURL(row.avatar_url)" :label="title" size="up" />
       <div class="sub-card__meta">
         <strong>{{ title }}</strong>
         <small>{{ subtitle }}</small>
@@ -141,7 +146,7 @@ function addSubscriber() {
             class="button candidate-button"
             @click="emit('chooseCandidate', candidate)"
           >
-            <AvatarBadge :url="candidate.avatar_url" :label="candidate.name" size="candidate" />
+            <AvatarBadge :url="avatarURL(candidate.avatar_url || '')" :label="candidate.name" size="candidate" />
             <span>{{ candidate.name }} · {{ subjectLabel(row.platform) }} {{ candidate.uid }}</span>
           </button>
         </div>
@@ -201,7 +206,7 @@ function addSubscriber() {
         </div>
         <div class="chip-list target-chip-list">
           <span v-for="target in row.targets" :key="target.key" class="chip" :class="{ 'badge--warning': !context.targetMap.has(target.key) }">
-            <AvatarBadge :url="targetAvatar(target, context.targetMap)" :label="targetDisplay(target, context.targetMap)" size="candidate" />
+            <AvatarBadge :url="avatarURL(targetAvatar(target, context.targetMap))" :label="targetDisplay(target, context.targetMap)" size="candidate" />
             <span>{{ targetDisplay(target, context.targetMap) }}</span>
             <button type="button" aria-label="移除推送对象" @click="emit('removeTarget', target.key)">×</button>
           </span>
@@ -218,7 +223,7 @@ function addSubscriber() {
         </div>
         <div class="chip-list subscriber-chip-list">
           <span v-for="id in row.subscriber_ids" :key="id" class="chip">
-            <AvatarBadge :url="subscriberAvatarURL(context.subscriberAvatars, id)" :label="`QQ ${id}`" size="candidate" />
+            <AvatarBadge :url="avatarURL(subscriberAvatarURL(context.subscriberAvatars, id))" :label="`QQ ${id}`" size="candidate" />
             <span>QQ {{ id }}</span>
             <button type="button" aria-label="移除订阅人" @click="emit('removeSubscriber', id)">×</button>
           </span>
@@ -245,7 +250,7 @@ function addSubscriber() {
         <div class="sub-card__section-title">推送对象</div>
         <div class="sub-card__targets-summary">
           <span v-if="visibleTargets.length" class="avatar-stack">
-            <AvatarBadge v-for="target in visibleTargets" :key="target.key" :url="targetAvatar(target, context.targetMap)" :label="targetDisplay(target, context.targetMap)" size="target" />
+            <AvatarBadge v-for="target in visibleTargets" :key="target.key" :url="avatarURL(targetAvatar(target, context.targetMap))" :label="targetDisplay(target, context.targetMap)" size="target" />
             <span v-if="row.targets.length > visibleTargets.length" class="avatar-stack__overflow">+{{ row.targets.length - visibleTargets.length }}</span>
           </span>
           <span v-else class="sub-card__summary-label">无</span>
@@ -257,7 +262,7 @@ function addSubscriber() {
         <div class="sub-card__section-title">订阅人</div>
         <div class="sub-card__subscribers-summary">
           <span v-if="visibleSubscribers.length" class="avatar-stack">
-            <AvatarBadge v-for="id in visibleSubscribers" :key="id" :url="subscriberAvatarURL(context.subscriberAvatars, id)" :label="`QQ ${id}`" size="subscriber" />
+            <AvatarBadge v-for="id in visibleSubscribers" :key="id" :url="avatarURL(subscriberAvatarURL(context.subscriberAvatars, id))" :label="`QQ ${id}`" size="subscriber" />
             <span v-if="row.subscriber_ids.length > visibleSubscribers.length" class="avatar-stack__overflow">+{{ row.subscriber_ids.length - visibleSubscribers.length }}</span>
           </span>
           <span v-else class="chip chip--success">系统订阅</span>

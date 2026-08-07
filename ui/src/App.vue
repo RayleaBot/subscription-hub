@@ -10,6 +10,7 @@ import {
   buildSettingsPayload,
   cloneRow,
   collectSubscriberAvatars,
+  collectSubscriberIdentities,
   createBlankRow,
   createRowContext,
   emptyTargets,
@@ -24,6 +25,8 @@ import {
   serviceCheckboxValues,
   serviceTypes,
   servicesKey,
+  subscriberAvatarURL,
+  targetAvatar,
   targetDisplay,
   unique,
   validateRow,
@@ -32,6 +35,7 @@ import {
   type LiveTarget,
   type Platform,
   type ResolveCandidate,
+  type Subscriber,
   type SubscriptionRow,
   type SubscriptionSettings,
   type TargetType,
@@ -44,6 +48,8 @@ const settings = ref<SubscriptionSettings>(structuredClone(defaultSettings))
 const rows = ref<SubscriptionRow[]>([])
 const targets = ref<TargetsState>(emptyTargets())
 const subscriberAvatars = ref(new Map<string, string>())
+const subscriberIdentities = ref(new Map<string, Subscriber>())
+const avatarDataURLs = ref(new Map<string, string>())
 const savedSnapshot = ref('')
 const loaded = ref(false)
 const status = ref('正在等待宿主初始化…')
@@ -58,10 +64,12 @@ const serviceFilter = ref('all')
 const listRef = ref<HTMLElement | null>(null)
 const resolveTimers = new Map<string, number>()
 const resolveVersions = new Map<string, number>()
+const resolvingAvatarURLs = new Map<string, number>()
+let avatarGeneration = 0
 let rowCounter = 0
 
 const hostErrorMessage = computed(() => host.error.value?.message ?? '')
-const context = computed(() => createRowContext(targets.value, rows.value, subscriberAvatars.value))
+const context = computed(() => createRowContext(targets.value, rows.value, subscriberAvatars.value, avatarDataURLs.value))
 const errors = computed(() => validateRows(rows.value, context.value))
 const contentSnapshot = computed(() => JSON.stringify(buildSettingsPayload(settings.value, rows.value, new Map())))
 const isDirty = computed(() => loaded.value && contentSnapshot.value !== savedSnapshot.value)
@@ -81,7 +89,7 @@ void host.ready
   .then((init) => {
     applySettings(init.config, true)
     setStatus('设置已载入')
-    void reloadTargets()
+    void reloadTargets(false)
   })
   .catch((error: unknown) => {
     setStatus(errorMessage(error, '插件页面连接失败'), true)
@@ -92,8 +100,10 @@ function applySettings(value: Record<string, unknown>, markSaved: boolean) {
   settings.value = normalized
   rows.value = buildRowsFromSettings(normalized)
   subscriberAvatars.value = collectSubscriberAvatars(normalized)
+  subscriberIdentities.value = collectSubscriberIdentities(normalized)
   loaded.value = true
   if (markSaved) savedSnapshot.value = signature(normalized, rows.value)
+  void hydrateAvatarURLs()
 }
 
 function signature(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): string {
@@ -130,7 +140,7 @@ function rowVisible(row: SubscriptionRow): boolean {
   return true
 }
 
-async function reloadTargets() {
+async function reloadTargets(refreshAvatars = true) {
   if (targetsLoading.value) return
   targetsLoading.value = true
   setStatus('正在刷新推送对象…')
@@ -155,6 +165,8 @@ async function reloadTargets() {
     setStatus(knownCount > 0 ? `未拉到新对象，已保留 ${knownCount} 个已保存对象` : errorMessage(error, '推送对象不可用'), knownCount === 0)
   } finally {
     targetsLoading.value = false
+    if (refreshAvatars) revalidateAvatarURLs()
+    else void hydrateAvatarURLs()
   }
 }
 
@@ -267,6 +279,7 @@ async function resolveUser(row: SubscriptionRow) {
       row.resolve_state = 'error'
       row.resolve_message = String(result.message || `请选择一个候选${platformLabel(row.platform)}对象后保存。`)
       row.candidates = Array.isArray(result.candidates) ? result.candidates.filter(isCandidate) : []
+      void resolveAvatarURLs(row.candidates.map((item) => item.avatar_url || ''))
     }
   } catch (error) {
     if (resolveVersions.get(row.row_id) !== version) return
@@ -287,6 +300,7 @@ function applyCandidate(row: SubscriptionRow, candidate: ResolveCandidate) {
   row.resolved = Boolean(row.uid && row.name)
   row.resolve_state = row.resolved ? 'resolved' : 'error'
   row.candidates = []
+  void resolveAvatarURLs([row.avatar_url])
 }
 
 function chooseCandidate(row: SubscriptionRow, candidate: ResolveCandidate) {
@@ -320,6 +334,7 @@ function toggleTarget(row: SubscriptionRow, liveTarget: LiveTarget) {
     target_name: liveTarget.label,
     services: normalizeServices(row.service_mode === 'mixed' ? ['all'] : row.services, row.platform),
   })
+  void resolveAvatarURLs([liveTarget.avatar_url])
 }
 
 function removeTarget(row: SubscriptionRow, key: string) {
@@ -358,10 +373,78 @@ function changedServices(current: string[], platform: Platform, service: string,
 
 function addSubscriber(row: SubscriptionRow, id: string) {
   row.subscriber_ids = unique([...row.subscriber_ids, id])
+  void resolveAvatarURLs([subscriberAvatarURL(subscriberAvatars.value, id)])
 }
 
 function removeSubscriber(row: SubscriptionRow, id: string) {
   row.subscriber_ids = row.subscriber_ids.filter((item) => item !== id)
+}
+
+interface AvatarResolveItem {
+  source_url?: string
+  data_url?: string
+}
+
+interface AvatarResolveResponse {
+  items?: AvatarResolveItem[]
+}
+
+function currentAvatarURLs(): string[] {
+  const sources: string[] = []
+  for (const row of rows.value) {
+    sources.push(row.avatar_url)
+    for (const target of row.targets) sources.push(targetAvatar(target, context.value.targetMap))
+    for (const id of row.subscriber_ids) sources.push(subscriberAvatarURL(subscriberAvatars.value, id))
+  }
+  return unique(sources).filter((source) => /^https:\/\//i.test(source))
+}
+
+function hydrateAvatarURLs(force = false) {
+  void resolveAvatarURLs(currentAvatarURLs(), force)
+}
+
+function revalidateAvatarURLs() {
+  avatarGeneration += 1
+  const sources = currentAvatarURLs()
+  const activeSources = new Set(sources)
+  avatarDataURLs.value = new Map([...avatarDataURLs.value].filter(([source]) => activeSources.has(source)))
+  void resolveAvatarURLs(sources, true)
+}
+
+function clearAvatarURLs() {
+  avatarGeneration += 1
+  avatarDataURLs.value = new Map()
+}
+
+async function resolveAvatarURLs(sources: string[], force = false) {
+  const generation = avatarGeneration
+  const pending = unique(sources)
+    .filter((source) => /^https:\/\//i.test(source))
+    .filter((source) => force || !avatarDataURLs.value.has(source))
+    .filter((source) => resolvingAvatarURLs.get(source) !== generation)
+  if (pending.length === 0) return
+
+  pending.forEach((source) => resolvingAvatarURLs.set(source, generation))
+  try {
+    for (let offset = 0; offset < pending.length; offset += 4) {
+      const batch = pending.slice(offset, offset + 4)
+      const result = await host.client.invokeAction('subscription.resolve_avatars', { urls: batch }) as AvatarResolveResponse
+      if (generation !== avatarGeneration) return
+      const next = new Map(avatarDataURLs.value)
+      for (const item of Array.isArray(result.items) ? result.items : []) {
+        const source = String(item.source_url || '').trim()
+        const dataURL = String(item.data_url || '').trim()
+        if (source && dataURL.startsWith('data:image/')) next.set(source, dataURL)
+      }
+      avatarDataURLs.value = next
+    }
+  } catch {
+    // Initials remain available when an upstream avatar host is unavailable.
+  } finally {
+    pending.forEach((source) => {
+      if (resolvingAvatarURLs.get(source) === generation) resolvingAvatarURLs.delete(source)
+    })
+  }
 }
 
 async function reloadSettings() {
@@ -369,6 +452,7 @@ async function reloadSettings() {
   try {
     const response = await host.client.reloadSettings()
     applySettings(response.config, true)
+    revalidateAvatarURLs()
     setStatus('设置已同步')
   } catch (error) {
     setStatus(errorMessage(error, '重新载入设置失败'), true)
@@ -379,6 +463,8 @@ function resetSettings() {
   settings.value = structuredClone(defaultSettings)
   rows.value = []
   subscriberAvatars.value = new Map()
+  subscriberIdentities.value = new Map()
+  clearAvatarURLs()
   setStatus('已恢复默认设置，保存后生效')
 }
 
@@ -399,14 +485,30 @@ async function saveSettings() {
         throw new Error(resolved.issues[0]?.message || '订阅人身份刷新失败')
       }
       const avatars = new Map(subscriberAvatars.value)
-      resolved.items.forEach((item) => { if (item.avatar_url) avatars.set(item.user_id, item.avatar_url) })
+      const identities = new Map(subscriberIdentities.value)
+      resolved.items.forEach((item) => {
+        const subscriber: Subscriber = {
+          id: item.user_id,
+          nickname: item.nickname,
+          group_nickname: item.group_nickname,
+          title: item.title,
+          role: item.role,
+          role_label: item.role_label,
+          avatar_url: item.avatar_url,
+        }
+        identities.set(identityKey(item.target_type, item.target_id, item.user_id), subscriber)
+        if (item.avatar_url) avatars.set(item.user_id, item.avatar_url)
+      })
       subscriberAvatars.value = avatars
+      subscriberIdentities.value = identities
+      void resolveAvatarURLs(resolved.items.map((item) => item.avatar_url || ''))
     }
 
     setStatus('正在保存设置…')
-    const payload = buildSettingsPayload(settings.value, rows.value, context.value.targetMap)
+    const payload = buildSettingsPayload(settings.value, rows.value, context.value.targetMap, subscriberIdentities.value)
     const response = await host.client.saveSettings(payload as unknown as Record<string, unknown>)
     applySettings(response.config, true)
+    revalidateAvatarURLs()
     setStatus('设置已同步')
   } catch (error) {
     setStatus(errorMessage(error, '保存设置失败'), true)
@@ -476,7 +578,7 @@ function errorMessage(error: unknown, fallback: string): string {
       <div class="strip-metric"><span>订阅</span><strong>{{ rows.length }} / {{ settings.subscriptions.length }}</strong></div>
       <div class="strip-metric"><span>推送对象</span><strong>{{ targetMetric }}</strong></div>
       <div class="strip-metric"><span>保存</span><strong>{{ errors.length === 0 ? '可保存' : '需处理' }}</strong></div>
-      <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets">{{ targetsLoading ? '刷新中…' : '刷新对象' }}</button>
+      <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新对象' }}</button>
     </section>
 
     <section class="panel">

@@ -1,7 +1,7 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅中心",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "manifest_version": "2",
   "plugin_protocol_version": "1",
   "runtime": "go",
@@ -43,7 +43,12 @@
   "capability_parameters": {
     "http_hosts": [
       "api.bilibili.com",
-      "api.live.bilibili.com"
+      "api.live.bilibili.com",
+      "i0.hdslb.com",
+      "i1.hdslb.com",
+      "i2.hdslb.com",
+      "p.qlogo.cn",
+      "q1.qlogo.cn"
     ],
     "third_party_account_platforms": [
       "bilibili",
@@ -109,6 +114,7 @@
     },
     {
       "name": "b站搜索up",
+      "aliases": ["b站搜索UP", "B站搜索up", "B站搜索UP"],
       "description": "按昵称关键词搜索 Bilibili UP 主并返回名称与 UID",
       "usage": "/b站搜索up UP昵称关键词",
       "permission": "everyone"
