@@ -14,6 +14,11 @@ func checkSubscriptions(ctx context.Context, event *rayleabot.EventContext, curr
 }
 
 func checkSubscriptionsWithActions(ctx context.Context, actions pluginActions, current settings) map[string]any {
+	return checkSubscriptionsWithActionsAt(ctx, actions, current, time.Now())
+}
+
+func checkSubscriptionsWithActionsAt(ctx context.Context, actions pluginActions, current settings, now time.Time) map[string]any {
+	deliveryMaxAge := time.Duration(normalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)) * time.Minute
 	result := map[string]any{
 		"handled": true, "checked": 0, "sent": 0, "errors": []string{}, "degraded": false,
 	}
@@ -52,6 +57,11 @@ func checkSubscriptionsWithActions(ctx context.Context, actions pluginActions, c
 			if updateSeen(ctx, actions, item, update) {
 				continue
 			}
+			if staleBilibiliDynamic(update, now, deliveryMaxAge) {
+				markUpdateSeen(ctx, actions, item, update)
+				logStaleBilibiliDynamic(ctx, actions, item, update, now)
+				continue
+			}
 			prepared := prepareBilibiliUpdate(ctx, actions, update, preparedCache)
 			if sendBilibiliUpdate(ctx, actions, item, update, prepared, &failures) {
 				sent++
@@ -67,6 +77,36 @@ func checkSubscriptionsWithActions(ctx context.Context, actions pluginActions, c
 	result["degraded"] = len(failures) > 0
 	rememberSubscriptionCheck(ctx, actions, result)
 	return result
+}
+
+func staleBilibiliDynamic(update map[string]any, now time.Time, deliveryMaxAge time.Duration) bool {
+	if stringScalar(update["service"]) == "live" {
+		return false
+	}
+	pubTS := intScalar(update["pub_ts"])
+	if pubTS <= 0 {
+		return false
+	}
+	publishedAt := time.Unix(int64(pubTS), 0)
+	if publishedAt.After(now) {
+		return false
+	}
+	return now.Sub(publishedAt) > deliveryMaxAge
+}
+
+func logStaleBilibiliDynamic(ctx context.Context, actions pluginActions, item subscription, update map[string]any, now time.Time) {
+	publishedAt := time.Unix(int64(intScalar(update["pub_ts"])), 0)
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+		Level:   "info",
+		Message: "Bilibili 过期动态已跳过",
+		Fields: map[string]any{
+			"subscription_id": item.ID,
+			"update_id":       stringScalar(update["id"]),
+			"service":         stringScalar(update["service"]),
+			"published_at":    publishedAt.UTC().Format(time.RFC3339),
+			"age_seconds":     int(now.Sub(publishedAt).Seconds()),
+		},
+	})
 }
 
 func subscriptionMatchesUpdate(item subscription, update map[string]any) bool {

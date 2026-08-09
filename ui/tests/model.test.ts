@@ -14,9 +14,20 @@ import {
   normalizeTargets,
   targetMap,
   validateRows,
+  validateSettings,
 } from '../src/model'
 
 describe('subscription settings model', () => {
+  it('defaults delivery freshness to 30 minutes and preserves valid changes', () => {
+    expect(normalizeSettings({}).delivery_max_age_minutes).toBe(30)
+    const settings = normalizeSettings({ delivery_max_age_minutes: 90 })
+    expect(settings.delivery_max_age_minutes).toBe(90)
+    expect(validateSettings(settings)).toEqual([])
+    expect(buildSettingsPayload(settings, [], new Map()).delivery_max_age_minutes).toBe(90)
+    expect(validateSettings({ delivery_max_age_minutes: 0 })).not.toEqual([])
+    expect(validateSettings({ delivery_max_age_minutes: 1441 })).not.toEqual([])
+  })
+
   it('clones reactive-style row proxies without structured clone failures', () => {
     const settings = normalizeSettings({
       subscriptions: [{ platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' }],

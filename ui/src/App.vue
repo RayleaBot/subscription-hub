@@ -14,11 +14,14 @@ import {
   createBlankRow,
   createRowContext,
   emptyTargets,
+  DEFAULT_DELIVERY_MAX_AGE_MINUTES,
   identityKey,
   normalizePlatform,
   normalizeServices,
   normalizeSettings,
   normalizeTargets,
+  MAX_DELIVERY_MAX_AGE_MINUTES,
+  MIN_DELIVERY_MAX_AGE_MINUTES,
   platformLabel,
   restoreRow,
   rowSnapshot,
@@ -31,6 +34,7 @@ import {
   unique,
   validateRow,
   validateRows,
+  validateSettings,
   type IdentityResolveResponse,
   type LiveTarget,
   type Platform,
@@ -43,7 +47,11 @@ import {
 } from './model'
 
 const host = usePluginHost()
-const defaultSettings: SubscriptionSettings = { enabled: true, subscriptions: [] }
+const defaultSettings: SubscriptionSettings = {
+  enabled: true,
+  delivery_max_age_minutes: DEFAULT_DELIVERY_MAX_AGE_MINUTES,
+  subscriptions: [],
+}
 const settings = ref<SubscriptionSettings>(structuredClone(defaultSettings))
 const rows = ref<SubscriptionRow[]>([])
 const targets = ref<TargetsState>(emptyTargets())
@@ -70,7 +78,7 @@ let rowCounter = 0
 
 const hostErrorMessage = computed(() => host.error.value?.message ?? '')
 const context = computed(() => createRowContext(targets.value, rows.value, subscriberAvatars.value, avatarDataURLs.value))
-const errors = computed(() => validateRows(rows.value, context.value))
+const errors = computed(() => [...validateSettings(settings.value), ...validateRows(rows.value, context.value)])
 const contentSnapshot = computed(() => JSON.stringify(buildSettingsPayload(settings.value, rows.value, new Map())))
 const isDirty = computed(() => loaded.value && contentSnapshot.value !== savedSnapshot.value)
 const visibleRows = computed(() => rows.value.filter((row) => rowVisible(row)))
@@ -577,6 +585,25 @@ function errorMessage(error: unknown, fallback: string): string {
       </label>
       <div class="strip-metric"><span>订阅</span><strong>{{ rows.length }} / {{ settings.subscriptions.length }}</strong></div>
       <div class="strip-metric"><span>推送对象</span><strong>{{ targetMetric }}</strong></div>
+      <label class="delivery-age-field" for="delivery-max-age-input">
+        <span>投递时效</span>
+        <span class="delivery-age-control">
+          <input
+            id="delivery-max-age-input"
+            v-model.number="settings.delivery_max_age_minutes"
+            name="delivery_max_age_minutes"
+            type="number"
+            :min="MIN_DELIVERY_MAX_AGE_MINUTES"
+            :max="MAX_DELIVERY_MAX_AGE_MINUTES"
+            step="1"
+            inputmode="numeric"
+            autocomplete="off"
+            aria-describedby="delivery-max-age-help"
+          />
+          <strong>分钟</strong>
+        </span>
+        <small id="delivery-max-age-help">非直播动态可补发的最长时间，默认 30 分钟</small>
+      </label>
       <div class="strip-metric"><span>保存</span><strong>{{ errors.length === 0 ? '可保存' : '需处理' }}</strong></div>
       <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新对象' }}</button>
     </section>

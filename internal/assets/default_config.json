@@ -1,4 +1,5 @@
 {
   "enabled": true,
+  "delivery_max_age_minutes": 30,
   "subscriptions": []
 }

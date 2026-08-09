@@ -153,3 +153,20 @@ func TestBilibiliDynamicServiceMapping(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeDeliveryMaxAgeMinutes(t *testing.T) {
+	for name, test := range map[string]struct {
+		value int
+		want  int
+	}{
+		"missing uses default": {value: 0, want: 30},
+		"valid is preserved":   {value: 90, want: 90},
+		"maximum is clamped":   {value: 2000, want: 1440},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := normalizeDeliveryMaxAgeMinutes(test.value); got != test.want {
+				t.Fatalf("normalizeDeliveryMaxAgeMinutes(%d) = %d, want %d", test.value, got, test.want)
+			}
+		})
+	}
+}

@@ -15,15 +15,19 @@ import (
 )
 
 const (
-	schedulerTaskID = "subscription-hub-check"
-	schedulerCron   = "*/1 * * * *"
+	schedulerTaskID              = "subscription-hub-check"
+	schedulerCron                = "*/1 * * * *"
+	defaultDeliveryMaxAgeMinutes = 30
+	minimumDeliveryMaxAgeMinutes = 1
+	maximumDeliveryMaxAgeMinutes = 24 * 60
 )
 
 var schedulerRegistered atomic.Bool
 
 type settings struct {
-	Enabled       bool           `json:"enabled"`
-	Subscriptions []subscription `json:"subscriptions"`
+	Enabled               bool           `json:"enabled"`
+	DeliveryMaxAgeMinutes int            `json:"delivery_max_age_minutes"`
+	Subscriptions         []subscription `json:"subscriptions"`
 }
 
 type subscription struct {
@@ -224,9 +228,9 @@ func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) 
 }
 
 func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings, error) {
-	current := settings{Enabled: true, Subscriptions: []subscription{}}
+	current := settings{Enabled: true, DeliveryMaxAgeMinutes: defaultDeliveryMaxAgeMinutes, Subscriptions: []subscription{}}
 	_ = json.Unmarshal(assets.DefaultConfigJSON, &current)
-	result, err := event.Actions().ConfigRead(ctx, "enabled", "subscriptions")
+	result, err := event.Actions().ConfigRead(ctx, "enabled", "delivery_max_age_minutes", "subscriptions")
 	if err != nil {
 		_, _ = event.Actions().LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 			Level: "warn", Message: "订阅设置读取失败，使用默认设置", Fields: map[string]any{"error": err.Error()},
@@ -238,10 +242,14 @@ func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings,
 	if enabled, ok := values["enabled"].(bool); ok {
 		current.Enabled = enabled
 	}
+	if raw, ok := values["delivery_max_age_minutes"]; ok {
+		current.DeliveryMaxAgeMinutes = int(intScalar(raw))
+	}
 	if raw, ok := values["subscriptions"]; ok {
 		encoded, _ := json.Marshal(raw)
 		_ = json.Unmarshal(encoded, &current.Subscriptions)
 	}
+	current.DeliveryMaxAgeMinutes = normalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)
 	current.Subscriptions = normalizeSubscriptions(current.Subscriptions)
 	ensureScheduler(ctx, event)
 	return current, nil
@@ -270,8 +278,22 @@ func ensureScheduler(ctx context.Context, event *rayleabot.EventContext) bool {
 }
 
 func saveSettings(ctx context.Context, event *rayleabot.EventContext, current settings) error {
-	_, err := event.Actions().ConfigWrite(ctx, map[string]any{"enabled": current.Enabled, "subscriptions": current.Subscriptions})
+	_, err := event.Actions().ConfigWrite(ctx, map[string]any{
+		"enabled":                  current.Enabled,
+		"delivery_max_age_minutes": normalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes),
+		"subscriptions":            current.Subscriptions,
+	})
 	return err
+}
+
+func normalizeDeliveryMaxAgeMinutes(value int) int {
+	if value < minimumDeliveryMaxAgeMinutes {
+		return defaultDeliveryMaxAgeMinutes
+	}
+	if value > maximumDeliveryMaxAgeMinutes {
+		return maximumDeliveryMaxAgeMinutes
+	}
+	return value
 }
 
 func addSubscription(ctx context.Context, current *settings, event *rayleabot.EventContext, platform string) (string, bool) {

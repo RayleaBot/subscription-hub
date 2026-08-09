@@ -253,15 +253,15 @@ func TestAccountFeedCollectsMultipleSubjectsInOneRequest(t *testing.T) {
 func TestSubscriptionCheckBaselinesThenRendersNewDynamic(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.accounts = fixtureAccounts("primary")
-	now := time.Now()
+	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
 	current := settings{Enabled: true, Subscriptions: []subscription{{
 		ID: "bilibili-123456-group-10000", Platform: "bilibili", UID: "123456", Name: "测试 UP",
 		TargetType: "group", TargetID: "10000", Services: []string{"video"}, Enabled: true,
 		Subscribers: []subscriber{{ID: "42", Nickname: "订阅人"}},
 	}}}
-	fake.httpResponses = []rayleabot.ActionResult{dynamicFeedResult(videoDynamic("old", "已有视频", 1700000000))}
-	first := checkSubscriptionsWithActions(context.Background(), fake, current)
+	fake.httpResponses = []rayleabot.ActionResult{dynamicFeedResult(videoDynamic("old", "已有视频", now.Add(-time.Minute).Unix()))}
+	first := checkSubscriptionsWithActionsAt(context.Background(), fake, current, now)
 	if intScalar(first["sent"]) != 0 || !boolScalar(fake.kv[dynamicSourceKey(current.Subscriptions[0])]) {
 		t.Fatalf("first check did not establish baseline: result=%#v kv=%#v", first, fake.kv)
 	}
@@ -269,10 +269,10 @@ func TestSubscriptionCheckBaselinesThenRendersNewDynamic(t *testing.T) {
 		t.Fatalf("baseline emitted historical content")
 	}
 	fake.httpResponses = []rayleabot.ActionResult{dynamicFeedResult(
-		videoDynamic("new", "新视频", 1700000060),
-		videoDynamic("old", "已有视频", 1700000000),
+		videoDynamic("new", "新视频", now.Add(time.Minute).Unix()),
+		videoDynamic("old", "已有视频", now.Add(-time.Minute).Unix()),
 	)}
-	second := checkSubscriptionsWithActions(context.Background(), fake, current)
+	second := checkSubscriptionsWithActionsAt(context.Background(), fake, current, now.Add(2*time.Minute))
 	if intScalar(second["sent"]) != 1 || boolScalar(second["degraded"]) {
 		t.Fatalf("second check result = %#v", second)
 	}
@@ -290,7 +290,7 @@ func TestSubscriptionCheckBaselinesThenRendersNewDynamic(t *testing.T) {
 func TestSubscriptionCheckContinuesFanoutAfterTargetFailure(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.accounts = fixtureAccounts("primary")
-	now := time.Now()
+	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
 	subscriptions := []subscription{
 		{ID: "target-one", Platform: "bilibili", UID: "123456", Name: "测试 UP", TargetType: "group", TargetID: "10000", Services: []string{"video"}, Enabled: true},
@@ -299,9 +299,9 @@ func TestSubscriptionCheckContinuesFanoutAfterTargetFailure(t *testing.T) {
 	for _, item := range subscriptions {
 		fake.kv[dynamicSourceKey(item)] = true
 	}
-	fake.httpResponses = []rayleabot.ActionResult{dynamicFeedResult(videoDynamic("new", "新视频", 1700000060))}
+	fake.httpResponses = []rayleabot.ActionResult{dynamicFeedResult(videoDynamic("new", "新视频", now.Add(-time.Minute).Unix()))}
 	fake.messageErrors = []error{errors.New("target unavailable"), nil}
-	result := checkSubscriptionsWithActions(context.Background(), fake, settings{Enabled: true, Subscriptions: subscriptions})
+	result := checkSubscriptionsWithActionsAt(context.Background(), fake, settings{Enabled: true, Subscriptions: subscriptions}, now)
 	if intScalar(result["sent"]) != 1 || !boolScalar(result["degraded"]) || len(fake.messages) != 2 {
 		t.Fatalf("fanout result=%#v messages=%#v", result, fake.messages)
 	}
@@ -310,6 +310,49 @@ func TestSubscriptionCheckContinuesFanoutAfterTargetFailure(t *testing.T) {
 	}
 	if _, exists := fake.kv["seen:target-two:video:new"]; !exists {
 		t.Fatalf("successful target was not marked seen")
+	}
+}
+
+func TestSubscriptionCheckExpiresFailedDynamicDelivery(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.accounts = fixtureAccounts("primary")
+	now := time.Now().Truncate(time.Second)
+	seedSourceState(fake, now, "123456", "primary")
+	item := subscription{
+		ID: "stale-target", Platform: "bilibili", UID: "123456", Name: "测试 UP",
+		TargetType: "private", TargetID: "20000", Services: []string{"video"}, Enabled: true,
+	}
+	fake.kv[dynamicSourceKey(item)] = true
+	current := settings{Enabled: true, DeliveryMaxAgeMinutes: 5, Subscriptions: []subscription{item}}
+	fake.httpResponses = []rayleabot.ActionResult{dynamicFeedResult(videoDynamic(
+		"delayed", "发送失败后延迟恢复的视频", now.Add(-time.Minute).Unix(),
+	))}
+	fake.messageErrors = []error{errors.New("adapter unavailable")}
+
+	first := checkSubscriptionsWithActionsAt(context.Background(), fake, current, now)
+	if intScalar(first["sent"]) != 0 || !boolScalar(first["degraded"]) || len(fake.messages) != 1 {
+		t.Fatalf("initial failed delivery result=%#v messages=%#v", first, fake.messages)
+	}
+	if _, exists := fake.kv["seen:stale-target:video:delayed"]; exists {
+		t.Fatalf("fresh failed delivery was incorrectly marked seen")
+	}
+
+	fake.httpResponses = []rayleabot.ActionResult{dynamicFeedResult(videoDynamic(
+		"delayed", "发送失败后延迟恢复的视频", now.Add(-time.Minute).Unix(),
+	))}
+	second := checkSubscriptionsWithActionsAt(context.Background(), fake, current, now.Add(5*time.Minute))
+
+	if intScalar(second["sent"]) != 0 || boolScalar(second["degraded"]) {
+		t.Fatalf("expired delivery result = %#v", second)
+	}
+	if len(fake.renders) != 1 || len(fake.messages) != 1 {
+		t.Fatalf("expired delivery was retried: renders=%d messages=%d", len(fake.renders), len(fake.messages))
+	}
+	if _, exists := fake.kv["seen:stale-target:video:delayed"]; !exists {
+		t.Fatalf("expired delivery was not marked seen: %#v", fake.kv)
+	}
+	if len(fake.logs) == 0 || fake.logs[len(fake.logs)-1].Message != "Bilibili 过期动态已跳过" {
+		t.Fatalf("expired delivery skip was not logged: %#v", fake.logs)
 	}
 }
 

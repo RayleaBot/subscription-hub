@@ -2,6 +2,10 @@ export type Platform = 'bilibili' | 'weibo' | 'douyin' | 'netease_music'
 export type TargetType = 'group' | 'private'
 export type ResolveState = 'idle' | 'checking' | 'resolved' | 'error'
 
+export const DEFAULT_DELIVERY_MAX_AGE_MINUTES = 30
+export const MIN_DELIVERY_MAX_AGE_MINUTES = 1
+export const MAX_DELIVERY_MAX_AGE_MINUTES = 24 * 60
+
 export const PLATFORM_OPTIONS = [
   { value: 'bilibili', label: 'Bilibili', subjectLabel: 'UID', inputPlaceholder: 'UID 或 Bilibili 用户名' },
   { value: 'weibo', label: '微博', subjectLabel: 'UID', inputPlaceholder: 'UID 或微博主页标识' },
@@ -47,6 +51,7 @@ export interface Subscription {
 
 export interface SubscriptionSettings {
   enabled: boolean
+  delivery_max_age_minutes: number
   subscriptions: Subscription[]
 }
 
@@ -149,8 +154,25 @@ export function normalizeSettings(value: Record<string, unknown>): SubscriptionS
   const source = Array.isArray(value.subscriptions) ? value.subscriptions : []
   return {
     enabled: value.enabled !== false,
+    delivery_max_age_minutes: normalizeDeliveryMaxAgeMinutes(value.delivery_max_age_minutes),
     subscriptions: source.map(normalizeSubscription).filter((item): item is Subscription => item !== null),
   }
+}
+
+export function normalizeDeliveryMaxAgeMinutes(value: unknown): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return DEFAULT_DELIVERY_MAX_AGE_MINUTES
+  const minutes = Math.trunc(parsed)
+  if (minutes < MIN_DELIVERY_MAX_AGE_MINUTES) return DEFAULT_DELIVERY_MAX_AGE_MINUTES
+  return Math.min(minutes, MAX_DELIVERY_MAX_AGE_MINUTES)
+}
+
+export function validateSettings(value: Pick<SubscriptionSettings, 'delivery_max_age_minutes'>): string[] {
+  const minutes = Number(value.delivery_max_age_minutes)
+  if (!Number.isInteger(minutes) || minutes < MIN_DELIVERY_MAX_AGE_MINUTES || minutes > MAX_DELIVERY_MAX_AGE_MINUTES) {
+    return [`投递时效须为 ${MIN_DELIVERY_MAX_AGE_MINUTES}–${MAX_DELIVERY_MAX_AGE_MINUTES} 分钟的整数`]
+  }
+  return []
 }
 
 export function normalizeSubscription(value: unknown): Subscription | null {
@@ -277,7 +299,7 @@ function cloneRowSnapshot(row: SubscriptionRowSnapshot): SubscriptionRowSnapshot
 }
 
 export function buildSettingsPayload(
-  settings: Pick<SubscriptionSettings, 'enabled'>,
+  settings: Pick<SubscriptionSettings, 'enabled' | 'delivery_max_age_minutes'>,
   rows: SubscriptionRow[],
   targetsByKey: Map<string, LiveTarget>,
   subscriberIdentities: Map<string, Subscriber> = new Map(),
@@ -304,7 +326,11 @@ export function buildSettingsPayload(
       })
     }
   }
-  return { enabled: settings.enabled !== false, subscriptions }
+  return {
+    enabled: settings.enabled !== false,
+    delivery_max_age_minutes: normalizeDeliveryMaxAgeMinutes(settings.delivery_max_age_minutes),
+    subscriptions,
+  }
 }
 
 export function normalizeTargets(payload: unknown): TargetsState {
