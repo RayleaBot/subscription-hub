@@ -3,6 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import { Alert as AAlert } from 'ant-design-vue'
 import { usePluginHost } from '@rayleabot/plugin-ui'
 
+import { readCachedAvatarDataURLs, storeAvatarDataURLs } from './avatar-cache'
 import SubscriptionCard from './components/SubscriptionCard.vue'
 import {
   buildIdentityRequests,
@@ -85,7 +86,7 @@ const visibleRows = computed(() => rows.value.filter((row) => rowVisible(row)))
 const knownTargetCount = computed(() => context.value.targets.groups.length + context.value.targets.private_users.length)
 const targetMetric = computed(() => {
   if (targets.value.available) return `${targets.value.groups.length} 群聊 / ${targets.value.private_users.length} 私聊`
-  return knownTargetCount.value ? `${knownTargetCount.value} 个可用` : '未载入'
+  return knownTargetCount.value ? `已保留 ${knownTargetCount.value} 个已保存目标` : '暂不可用'
 })
 const dirtyStateText = computed(() => {
   if (!loaded.value) return '等待载入'
@@ -111,7 +112,7 @@ function applySettings(value: Record<string, unknown>, markSaved: boolean) {
   subscriberIdentities.value = collectSubscriberIdentities(normalized)
   loaded.value = true
   if (markSaved) savedSnapshot.value = signature(normalized, rows.value)
-  void hydrateAvatarURLs()
+  revalidateAvatarURLs()
 }
 
 function signature(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): string {
@@ -151,26 +152,26 @@ function rowVisible(row: SubscriptionRow): boolean {
 async function reloadTargets(refreshAvatars = true) {
   if (targetsLoading.value) return
   targetsLoading.value = true
-  setStatus('正在刷新推送对象…')
+  setStatus('正在刷新可选推送范围…')
   try {
     const payload = await host.client.request<Record<string, unknown>>('protocol.targets.reload', undefined, 5_000)
     targets.value = normalizeTargets(payload)
     const issue = targets.value.issues[0]?.message
     const liveCount = targets.value.groups.length + targets.value.private_users.length
     const knownCount = context.value.targets.groups.length + context.value.targets.private_users.length
-    if (targets.value.available) setStatus('推送对象已刷新')
-    else if (liveCount > 0) setStatus(`部分推送对象已刷新${issue ? `：${issue}` : ''}`)
-    else if (knownCount > 0) setStatus(`${issue ? `未拉到新对象：${issue}` : '未拉到新对象'}，已保留 ${knownCount} 个已保存对象`)
-    else setStatus(issue || '推送对象不可用', true)
+    if (targets.value.available) setStatus('可选推送范围已刷新')
+    else if (liveCount > 0) setStatus(`部分可选推送范围已刷新${issue ? `：${issue}` : ''}`)
+    else if (knownCount > 0) setStatus(`${issue ? `未拉到新的可选范围：${issue}` : '未拉到新的可选范围'}，已保留 ${knownCount} 个已保存目标`)
+    else setStatus(issue || '可选推送范围不可用', true)
   } catch (error) {
     targets.value = normalizeTargets({
       available: false,
       groups: [],
       private_users: [],
-      issues: [{ scope: 'protocol', message: errorMessage(error, '推送对象不可用') }],
+      issues: [{ scope: 'protocol', message: errorMessage(error, '可选推送范围不可用') }],
     })
     const knownCount = context.value.targets.groups.length + context.value.targets.private_users.length
-    setStatus(knownCount > 0 ? `未拉到新对象，已保留 ${knownCount} 个已保存对象` : errorMessage(error, '推送对象不可用'), knownCount === 0)
+    setStatus(knownCount > 0 ? `未拉到新的可选范围，已保留 ${knownCount} 个已保存目标` : errorMessage(error, '可选推送范围不可用'), knownCount === 0)
   } finally {
     targetsLoading.value = false
     if (refreshAvatars) revalidateAvatarURLs()
@@ -415,7 +416,11 @@ function revalidateAvatarURLs() {
   avatarGeneration += 1
   const sources = currentAvatarURLs()
   const activeSources = new Set(sources)
-  avatarDataURLs.value = new Map([...avatarDataURLs.value].filter(([source]) => activeSources.has(source)))
+  const next = readCachedAvatarDataURLs(sources)
+  for (const [source, dataURL] of avatarDataURLs.value) {
+    if (activeSources.has(source)) next.set(source, dataURL)
+  }
+  avatarDataURLs.value = next
   void resolveAvatarURLs(sources, true)
 }
 
@@ -439,12 +444,19 @@ async function resolveAvatarURLs(sources: string[], force = false) {
       const result = await host.client.invokeAction('subscription.resolve_avatars', { urls: batch }) as AvatarResolveResponse
       if (generation !== avatarGeneration) return
       const next = new Map(avatarDataURLs.value)
+      const refreshed = new Map<string, string>()
       for (const item of Array.isArray(result.items) ? result.items : []) {
         const source = String(item.source_url || '').trim()
         const dataURL = String(item.data_url || '').trim()
-        if (source && dataURL.startsWith('data:image/')) next.set(source, dataURL)
+        if (source && dataURL.startsWith('data:image/')) {
+          next.set(source, dataURL)
+          refreshed.set(source, dataURL)
+        }
       }
       avatarDataURLs.value = next
+      if (refreshed.size > 0) {
+        storeAvatarDataURLs(refreshed)
+      }
     }
   } catch {
     // Initials remain available when an upstream avatar host is unavailable.
@@ -460,7 +472,6 @@ async function reloadSettings() {
   try {
     const response = await host.client.reloadSettings()
     applySettings(response.config, true)
-    revalidateAvatarURLs()
     setStatus('设置已同步')
   } catch (error) {
     setStatus(errorMessage(error, '重新载入设置失败'), true)
@@ -516,7 +527,6 @@ async function saveSettings() {
     const payload = buildSettingsPayload(settings.value, rows.value, context.value.targetMap, subscriberIdentities.value)
     const response = await host.client.saveSettings(payload as unknown as Record<string, unknown>)
     applySettings(response.config, true)
-    revalidateAvatarURLs()
     setStatus('设置已同步')
   } catch (error) {
     setStatus(errorMessage(error, '保存设置失败'), true)
@@ -567,14 +577,7 @@ function errorMessage(error: unknown, fallback: string): string {
 <template>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
   <main id="main-content" class="page-shell">
-    <header class="page-header">
-      <div>
-        <p class="eyebrow" translate="no">raylea.subscription-hub</p>
-        <h1>订阅设置</h1>
-        <p>按平台账号管理推送对象</p>
-      </div>
-      <div class="status-pill" :class="{ 'is-error': statusIsError }" aria-live="polite">{{ status }}</div>
-    </header>
+    <h1 class="sr-only">订阅设置</h1>
 
     <AAlert v-if="hostErrorMessage" class="host-alert" type="error" :message="hostErrorMessage" show-icon />
 
@@ -584,7 +587,7 @@ function errorMessage(error: unknown, fallback: string): string {
         <span><strong>订阅中心</strong><small>{{ settings.enabled ? '启用' : '停用' }}</small></span>
       </label>
       <div class="strip-metric"><span>订阅</span><strong>{{ rows.length }} / {{ settings.subscriptions.length }}</strong></div>
-      <div class="strip-metric"><span>推送对象</span><strong>{{ targetMetric }}</strong></div>
+      <div class="strip-metric"><span>可选推送范围</span><strong>{{ targetMetric }}</strong></div>
       <label class="delivery-age-field" for="delivery-max-age-input">
         <span>投递时效</span>
         <span class="delivery-age-control">
@@ -604,8 +607,10 @@ function errorMessage(error: unknown, fallback: string): string {
         </span>
         <small id="delivery-max-age-help">非直播动态可补发的最长时间，默认 30 分钟</small>
       </label>
-      <div class="strip-metric"><span>保存</span><strong>{{ errors.length === 0 ? '可保存' : '需处理' }}</strong></div>
-      <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新对象' }}</button>
+      <div class="strip-metric" :class="{ 'is-error': statusIsError }">
+        <span>状态</span><strong :title="status" aria-live="polite">{{ status }}</strong>
+      </div>
+      <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button>
     </section>
 
     <section class="panel">

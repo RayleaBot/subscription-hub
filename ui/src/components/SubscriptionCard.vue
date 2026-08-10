@@ -99,8 +99,14 @@ function avatarURL(source: string): string {
     <div class="sub-card__head">
       <AvatarBadge :url="avatarURL(row.avatar_url)" :label="title" size="up" />
       <div class="sub-card__meta">
-        <strong>{{ title }}</strong>
-        <small>{{ subtitle }}</small>
+        <strong :title="title">{{ title }}</strong>
+        <small :title="subtitle">
+          <template v-if="row.uid">
+            <span>{{ platformLabel(row.platform) }} · {{ subjectLabel(row.platform) }}</span>
+            <span class="sub-card__identity-value">{{ row.uid }}</span>
+          </template>
+          <template v-else>{{ subtitle }}</template>
+        </small>
       </div>
       <div class="sub-card__status">
         <span v-if="row.resolved" class="badge">已校验</span>
