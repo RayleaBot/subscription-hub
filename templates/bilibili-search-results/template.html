@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>{{ .Stylesheet }}</style>
+  </head>
+  <body class="theme-{{ .Theme }}">
+    <main class="search-shell">
+      <article class="search-card">
+        <header class="search-banner">
+          <div class="search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"/><path d="m16.4 16.4 4.1 4.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </div>
+          <div class="search-text">
+            <strong>{{ if .query }}{{ .query }}{{ else }}UP 主搜索{{ end }}</strong>
+            <span>{{ if .subtitle }}{{ .subtitle }}{{ else }}Bilibili · 订阅中心{{ end }}</span>
+          </div>
+          <div class="banner-side">
+            {{ if .count }}<span class="count-pill">{{ .count }} 个结果</span>{{ end }}
+            <span class="brand">Bilibili</span>
+          </div>
+        </header>
+
+        <ol class="result-list">
+          {{ range .users }}
+          <li class="result-row">
+            <span class="rank rank--top-{{ .rank }}">{{ .rank }}</span>
+            <div class="avatar-wrap">
+              {{ if .avatar }}
+              <img class="avatar" src="{{ .avatar }}" alt="" />
+              {{ else }}
+              <div class="avatar avatar--fallback">UP</div>
+              {{ end }}
+              {{ if .live }}<span class="live-badge">直播中</span>{{ end }}
+            </div>
+            <div class="info">
+              <div class="name-row">
+                <strong>{{ .name }}</strong>
+                {{ if .level_icon }}<img class="lv-badge" src="{{ .level_icon }}" alt="" />{{ end }}
+                {{ if .verify_text }}
+                <span class="verify-chip{{ if .verify_org }} verify-chip--org{{ end }}">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.5 14.5 5h3.5v3.5L20.5 11 18 13.5V17h-3.5L12 19.5 9.5 17H6v-3.5L3.5 11 6 8.5V5h3.5L12 2.5Z" fill="currentColor" opacity="0.18"/><path d="m8.8 11.4 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  {{ .verify_text }}
+                </span>
+                {{ end }}
+              </div>
+              <div class="meta-row">
+                {{ if .uid_text }}<span class="uid-chip">{{ .uid_text }}</span>{{ end }}
+                {{ if .fans_text }}<span class="meta-chip meta-chip--fans">{{ .fans_text }}</span>{{ end }}
+                {{ if .videos_text }}<span class="meta-chip meta-chip--videos">{{ .videos_text }}</span>{{ end }}
+              </div>
+              {{ if .sign }}<p class="sign">{{ .sign }}</p>{{ end }}
+            </div>
+          </li>
+          {{ end }}
+        </ol>
+
+        <footer class="search-footer">
+          <span class="hint">{{ if .footer_hint }}{{ .footer_hint }}{{ else }}使用“前缀 + 订阅b站推送 [类型] UID或昵称”{{ end }}</span>
+          <span class="source">搜索结果来自 Bilibili</span>
+        </footer>
+      </article>
+    </main>
+  </body>
+</html>

@@ -25,6 +25,9 @@
     },
     {
       "path": "templates/bilibili-user-card"
+    },
+    {
+      "path": "templates/bilibili-search-results"
     }
   ],
   "capabilities": [
@@ -118,7 +121,7 @@
     {
       "name": "b站搜索up",
       "aliases": ["b站搜索UP", "B站搜索up", "B站搜索UP"],
-      "description": "按昵称关键词搜索 Bilibili UP 主并返回名称与 UID",
+      "description": "按昵称关键词搜索 Bilibili UP 主并以图片展示候选账号资料与 UID",
       "usage": "/b站搜索up UP昵称关键词",
       "permission": "everyone"
     },
@@ -234,7 +237,7 @@
           },
           {
             "title": "搜索 Bilibili UP",
-            "description": "按昵称关键词搜索 Bilibili UP 主，返回候选账号的名称与 UID。",
+            "description": "按昵称关键词搜索 Bilibili UP 主，以图片展示候选账号的资料与 UID。",
             "usage": "/b站搜索up UP昵称关键词",
             "command": "b站搜索up"
           }

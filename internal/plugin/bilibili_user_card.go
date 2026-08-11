@@ -30,8 +30,13 @@ func buildBilibiliUserCardData(action string, item subscription, user bilibiliUs
 
 // sendBilibiliUserCard 渲染并发送 UP 主资料卡片；渲染失败时降级为原文字回复。
 func sendBilibiliUserCard(ctx context.Context, event *rayleabot.EventContext, data map[string]any, fallbackMessage string) error {
+	return sendBilibiliCard(ctx, event, bilibiliUserCardTemplate, data, fallbackMessage)
+}
+
+// sendBilibiliCard 渲染指定模板并发送图片；渲染失败时降级为原文字回复。
+func sendBilibiliCard(ctx context.Context, event *rayleabot.EventContext, template string, data map[string]any, fallbackMessage string) error {
 	result, err := event.Actions().RenderImage(ctx, rayleabot.RenderImageRequest{
-		Template: bilibiliUserCardTemplate, Data: data, Theme: "default", Output: "png", FallbackText: fallbackMessage,
+		Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallbackMessage,
 	})
 	if err != nil {
 		return event.SendText(fallbackMessage)

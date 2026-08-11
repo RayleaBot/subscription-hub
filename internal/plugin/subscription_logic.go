@@ -250,6 +250,12 @@ type bilibiliUser struct {
 	AvatarURL string `json:"avatar_url,omitempty"`
 	Fans      int    `json:"fans,omitempty"`
 	Sign      string `json:"sign,omitempty"`
+	Videos    int    `json:"videos,omitempty"`
+	Level     int    `json:"level,omitempty"`
+	Verify    string `json:"verify,omitempty"`
+	VerifyOrg bool   `json:"verify_org,omitempty"`
+	Live      bool   `json:"live,omitempty"`
+	Senior    bool   `json:"senior,omitempty"`
 }
 
 func resolveBilibiliUsers(ctx context.Context, event *rayleabot.EventContext, query string) ([]bilibiliUser, error) {
@@ -312,6 +318,8 @@ func searchBilibili(ctx context.Context, event *rayleabot.EventContext, query st
 	return searchBilibiliWithActions(ctx, event.Actions(), query)
 }
 
+const bilibiliSearchResultLimit = 10
+
 func searchBilibiliWithActions(ctx context.Context, actions pluginActions, query string) ([]bilibiliUser, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -325,7 +333,7 @@ func searchBilibiliWithActions(ctx context.Context, actions pluginActions, query
 	values.Set("search_type", "bili_user")
 	values.Set("order", "totalrank")
 	values.Set("page", "1")
-	values.Set("pagesize", "5")
+	values.Set("pagesize", strconv.Itoa(bilibiliSearchResultLimit))
 	values.Set("keyword", query)
 	values.Set("web_location", "1430654")
 	endpoint := bilibiliUserSearchURL + "?" + values.Encode()
@@ -340,14 +348,21 @@ func searchBilibiliWithActions(ctx context.Context, actions pluginActions, query
 		uid := stringScalar(item["mid"])
 		name := cleanText(htmlTag.ReplaceAllString(firstText(item["uname"], item["name"]), ""))
 		if uid != "" && name != "" {
+			verify, verifyOrg := bilibiliVerifyBadge(item["official_verify"])
 			users = append(users, bilibiliUser{
 				UID:       uid,
 				Name:      name,
 				AvatarURL: normalizeBilibiliURL(firstNonNil(item["upic"], item["face"], item["avatar"])),
 				Fans:      int(intScalar(item["fans"])),
 				Sign:      cleanText(firstNonNil(item["usign"], item["sign"])),
+				Videos:    int(intScalar(item["videos"])),
+				Level:     int(intScalar(item["level"])),
+				Verify:    verify,
+				VerifyOrg: verifyOrg,
+				Live:      intScalar(item["is_live"]) == 1,
+				Senior:    intScalar(item["is_senior_member"]) == 1,
 			})
-			if len(users) == 5 {
+			if len(users) == bilibiliSearchResultLimit {
 				break
 			}
 		}
@@ -356,6 +371,15 @@ func searchBilibiliWithActions(ctx context.Context, actions pluginActions, query
 		return nil, fmt.Errorf("没有搜索到 Bilibili 用户：%s", query)
 	}
 	return users, nil
+}
+
+// bilibiliVerifyBadge 解析搜索结果的官方认证信息，返回认证文案与是否机构认证。
+func bilibiliVerifyBadge(value any) (string, bool) {
+	verify := mapValue(value)
+	if verify == nil {
+		return "", false
+	}
+	return cleanText(verify["desc"]), intScalar(verify["type"]) == 1
 }
 
 func friendlyBilibiliError(err error) string {
@@ -372,11 +396,8 @@ func friendlyBilibiliError(err error) string {
 	return message
 }
 
-func searchBilibiliUsers(ctx context.Context, event *rayleabot.EventContext, query string) string {
-	users, err := searchBilibili(ctx, event, query)
-	if err != nil {
-		return friendlyBilibiliError(err)
-	}
+// searchBilibiliUsersText 生成搜索结果的纯文字列表，用作结果卡片渲染失败时的降级回复。
+func searchBilibiliUsersText(query string, users []bilibiliUser) string {
 	lines := []string{"Bilibili UP 搜索结果：" + strings.TrimSpace(query)}
 	for index, user := range users {
 		fans := ""

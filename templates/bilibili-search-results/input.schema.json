@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["query", "platform", "users"],
+  "properties": {
+    "query": {
+      "type": "string"
+    },
+    "subtitle": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "count": {
+      "type": "integer"
+    },
+    "users": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "footer_hint": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

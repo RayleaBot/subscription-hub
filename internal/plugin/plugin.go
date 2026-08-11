@@ -128,7 +128,7 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 		result := checkSubscriptions(ctx, event, current)
 		return event.SendText(subscriptionCheckSummary(result))
 	case "search":
-		return event.SendText(searchBilibiliUsers(ctx, event, strings.Join(event.Event.Args(), " ")))
+		return replyBilibiliUserSearch(ctx, event, strings.Join(event.Event.Args(), " "))
 	case "preview":
 		return previewSubscriptionCard(ctx, event, strings.Join(event.Event.Args(), " "))
 	default:
