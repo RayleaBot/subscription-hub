@@ -28,7 +28,7 @@
             <span class="rank rank--top-{{ .rank }}">{{ .rank }}</span>
             <div class="avatar-wrap">
               {{ if .avatar }}
-              <img class="avatar" src="{{ .avatar }}" alt="" />
+              <img class="avatar" src="assets/avatar.svg" data-avatar="{{ .avatar }}" alt="" />
               {{ else }}
               <div class="avatar avatar--fallback">UP</div>
               {{ end }}
@@ -62,5 +62,16 @@
         </footer>
       </article>
     </main>
+    <script>
+      for (const image of document.querySelectorAll("img[data-avatar]")) {
+        const source = image.dataset.avatar;
+        if (!source) continue;
+        image.addEventListener("error", () => {
+          image.removeAttribute("data-avatar");
+          image.src = "assets/avatar.svg";
+        }, { once: true });
+        image.src = source;
+      }
+    </script>
   </body>
 </html>
