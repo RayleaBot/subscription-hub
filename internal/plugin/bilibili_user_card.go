@@ -35,17 +35,31 @@ func sendBilibiliUserCard(ctx context.Context, event *rayleabot.EventContext, da
 
 // sendBilibiliCard 渲染指定模板并发送图片；渲染失败时降级为原文字回复。
 func sendBilibiliCard(ctx context.Context, event *rayleabot.EventContext, template string, data map[string]any, fallbackMessage string) error {
-	result, err := event.Actions().RenderImage(ctx, rayleabot.RenderImageRequest{
-		Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallbackMessage,
-	})
-	if err != nil {
-		return event.SendText(fallbackMessage)
-	}
-	imagePath := stringScalar(result["image_path"])
-	if imagePath == "" {
+	return sendBilibiliCardWithRenderFallback(ctx, event, template, data, nil, fallbackMessage)
+}
+
+// sendBilibiliCardWithRenderFallback 在内联资源渲染失败时使用远程资源数据重试一次。
+func sendBilibiliCardWithRenderFallback(ctx context.Context, event *rayleabot.EventContext, template string, data, renderFallback map[string]any, fallbackMessage string) error {
+	imagePath, err := renderBilibiliCardImage(ctx, event.Actions(), template, data, renderFallback, fallbackMessage)
+	if err != nil || imagePath == "" {
 		return event.SendText(fallbackMessage)
 	}
 	return event.Send(event.Event.Target.Type, event.Event.Target.ID, rayleabot.Image(imagePath))
+}
+
+func renderBilibiliCardImage(ctx context.Context, actions pluginActions, template string, data, renderFallback map[string]any, fallbackMessage string) (string, error) {
+	render := func(input map[string]any) (rayleabot.ActionResult, error) {
+		return actions.RenderImage(ctx, rayleabot.RenderImageRequest{
+			Template: template, Data: input, Theme: "default", Output: "png", FallbackText: fallbackMessage,
+		})
+	}
+	result, err := render(data)
+	imagePath := stringScalar(result["image_path"])
+	if (err != nil || imagePath == "") && renderFallback != nil {
+		result, err = render(renderFallback)
+		imagePath = stringScalar(result["image_path"])
+	}
+	return imagePath, err
 }
 
 func serviceLabels(values []string, platform string) []string {

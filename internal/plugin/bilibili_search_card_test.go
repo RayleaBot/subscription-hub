@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -56,7 +57,7 @@ func TestBuildBilibiliSearchCardData(t *testing.T) {
 	}
 }
 
-func TestInlineBilibiliSearchAvatarsResolvesConcurrentlyAndDropsRemoteURLs(t *testing.T) {
+func TestInlineBilibiliSearchAvatarsFetchesAllThumbnailsConcurrently(t *testing.T) {
 	started := make(chan string, 2)
 	release := make(chan struct{})
 	released := false
@@ -78,11 +79,14 @@ func TestInlineBilibiliSearchAvatarsResolvesConcurrentlyAndDropsRemoteURLs(t *te
 
 	done := make(chan []bilibiliUser, 1)
 	go func() {
-		done <- inlineBilibiliSearchAvatars(context.Background(), actions, users)
+		resolved, _ := prepareBilibiliSearchAvatars(context.Background(), actions, users)
+		done <- resolved
 	}()
+	requested := make([]string, 0, 2)
 	for index := 0; index < 2; index++ {
 		select {
-		case <-started:
+		case requestURL := <-started:
+			requested = append(requested, requestURL)
 		case <-time.After(time.Second):
 			t.Fatal("avatar requests did not start concurrently")
 		}
@@ -101,11 +105,43 @@ func TestInlineBilibiliSearchAvatarsResolvesConcurrentlyAndDropsRemoteURLs(t *te
 			t.Fatalf("avatar %d was not inlined: %q", index, resolved[index].AvatarURL)
 		}
 	}
+	for _, requestURL := range requested {
+		if !strings.HasSuffix(requestURL, bilibiliSearchAvatarSuffix) {
+			t.Fatalf("search avatar did not request a compact thumbnail: %q", requestURL)
+		}
+	}
 	if resolved[2].AvatarURL != "" {
 		t.Fatalf("unsupported remote avatar reached render data: %q", resolved[2].AvatarURL)
 	}
 	if users[0].AvatarURL == "" {
 		t.Fatal("avatar resolution mutated the search result source")
+	}
+}
+
+func TestInlineBilibiliSearchAvatarsKeepsTrustedSourceWhenThumbnailFails(t *testing.T) {
+	sourceURL := "https://i2.hdslb.com/bfs/face/fallback.webp"
+	actions := &failedAvatarActions{fakePluginActions: newFakePluginActions()}
+	resolved, remote := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if len(resolved) != 1 || resolved[0].AvatarURL != sourceURL {
+		t.Fatalf("trusted avatar fallback was lost: %#v", resolved)
+	}
+	if len(remote) != 1 || remote[0].AvatarURL != sourceURL {
+		t.Fatalf("remote render fallback was lost: %#v", remote)
+	}
+}
+
+func TestRenderBilibiliCardImageRetriesWithoutInlineData(t *testing.T) {
+	primary := map[string]any{"avatar": "data:image/webp;base64,fixture"}
+	fallback := map[string]any{"avatar": "https://i0.hdslb.com/bfs/face/fixture.webp"}
+	fake := newFakePluginActions()
+	fake.renderErrors = []error{errors.New("render input too large"), nil}
+
+	imagePath, err := renderBilibiliCardImage(context.Background(), fake, bilibiliSearchResultsTemplate, primary, fallback, "fallback text")
+	if err != nil || imagePath != "plugin-test.png" {
+		t.Fatalf("render retry failed: path=%q err=%v", imagePath, err)
+	}
+	if len(fake.renders) != 2 || stringScalar(fake.renders[0].Data["avatar"]) != stringScalar(primary["avatar"]) || stringScalar(fake.renders[1].Data["avatar"]) != stringScalar(fallback["avatar"]) {
+		t.Fatalf("unexpected render retry requests: %#v", fake.renders)
 	}
 }
 
@@ -119,6 +155,14 @@ type blockingAvatarActions struct {
 	*fakePluginActions
 	started chan<- string
 	release <-chan struct{}
+}
+
+type failedAvatarActions struct {
+	*fakePluginActions
+}
+
+func (actions *failedAvatarActions) HTTPRequest(context.Context, rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+	return nil, context.DeadlineExceeded
 }
 
 func (actions *blockingAvatarActions) HTTPRequest(ctx context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {

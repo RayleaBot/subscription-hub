@@ -19,6 +19,7 @@ type fakePluginActions struct {
 	httpRequests  []rayleabot.HTTPRequest
 	kv            map[string]any
 	renders       []rayleabot.RenderImageRequest
+	renderErrors  []error
 	messages      []rayleabot.MessageSendRequest
 	messageErrors []error
 	logs          []rayleabot.LoggerWriteRequest
@@ -74,6 +75,13 @@ func (fake *fakePluginActions) LoggerWrite(_ context.Context, request rayleabot.
 
 func (fake *fakePluginActions) RenderImage(_ context.Context, request rayleabot.RenderImageRequest) (rayleabot.ActionResult, error) {
 	fake.renders = append(fake.renders, request)
+	if len(fake.renderErrors) > 0 {
+		err := fake.renderErrors[0]
+		fake.renderErrors = fake.renderErrors[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
 	return rayleabot.ActionResult{"image_path": "plugin-test.png"}, nil
 }
 

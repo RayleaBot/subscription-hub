@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	bilibiliSearchResultsTemplate      = "bilibili-search-results"
-	maxBilibiliSearchAvatarConcurrency = 10
+	bilibiliSearchResultsTemplate = "bilibili-search-results"
+	bilibiliSearchAvatarSuffix    = "@96w_96h_1c.webp"
 )
 
 // replyBilibiliUserSearch 搜索 UP 主并回复结果卡片；渲染失败时降级为文字列表。
@@ -20,9 +20,13 @@ func replyBilibiliUserSearch(ctx context.Context, event *rayleabot.EventContext,
 	if err != nil {
 		return event.SendText(friendlyBilibiliError(err))
 	}
-	users = inlineBilibiliSearchAvatars(ctx, event.Actions(), users)
-	data := buildBilibiliSearchCardData(query, users, event.CommandPrefixes)
-	return sendBilibiliCard(ctx, event, bilibiliSearchResultsTemplate, data, searchBilibiliUsersText(query, users))
+	renderUsers, remoteUsers := prepareBilibiliSearchAvatars(ctx, event.Actions(), users)
+	data := buildBilibiliSearchCardData(query, renderUsers, event.CommandPrefixes)
+	var renderFallback map[string]any
+	if hasInlineBilibiliSearchAvatar(renderUsers) {
+		renderFallback = buildBilibiliSearchCardData(query, remoteUsers, event.CommandPrefixes)
+	}
+	return sendBilibiliCardWithRenderFallback(ctx, event, bilibiliSearchResultsTemplate, data, renderFallback, searchBilibiliUsersText(query, users))
 }
 
 // buildBilibiliSearchCardData 生成 UP 主搜索结果卡片的渲染输入。
@@ -53,53 +57,65 @@ func buildBilibiliSearchCardData(query string, users []bilibiliUser, commandPref
 	}
 }
 
-// inlineBilibiliSearchAvatars 在进入 Chromium 前并发内联头像，避免远程图片阻塞页面加载。
-// 单个头像失败或批次超过大小限制时使用模板内置占位头像，不再把远程 URL 交给渲染器。
-func inlineBilibiliSearchAvatars(ctx context.Context, actions pluginActions, users []bilibiliUser) []bilibiliUser {
+// prepareBilibiliSearchAvatars 并发解析全部搜索结果的紧凑内联头像。
+// 单个头像无法内联时保留经过校验的源地址，供渲染器继续加载。
+func prepareBilibiliSearchAvatars(ctx context.Context, actions pluginActions, users []bilibiliUser) ([]bilibiliUser, []bilibiliUser) {
 	resolved := append([]bilibiliUser(nil), users...)
-	sizes := make([]int, len(resolved))
-	semaphore := make(chan struct{}, maxBilibiliSearchAvatarConcurrency)
+	remote := append([]bilibiliUser(nil), users...)
 	var wait sync.WaitGroup
 
 	for index := range resolved {
 		sourceURL := strings.TrimSpace(resolved[index].AvatarURL)
-		resolved[index].AvatarURL = ""
 		if sourceURL == "" {
 			continue
 		}
+		requestURL, trusted := bilibiliSearchAvatarURL(sourceURL)
+		if !trusted {
+			resolved[index].AvatarURL = ""
+			remote[index].AvatarURL = ""
+			continue
+		}
+		resolved[index].AvatarURL = sourceURL
+		remote[index].AvatarURL = sourceURL
 
 		wait.Add(1)
-		go func(index int, sourceURL string) {
+		go func(index int, requestURL string) {
 			defer wait.Done()
-			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-			case <-ctx.Done():
-				return
-			}
-
-			dataURL, size, err := resolveAvatarDataURL(ctx, actions, sourceURL)
+			dataURL, _, err := resolveAvatarDataURL(ctx, actions, requestURL)
 			if err != nil {
 				return
 			}
 			resolved[index].AvatarURL = dataURL
-			sizes[index] = size
-		}(index, sourceURL)
+		}(index, requestURL)
 	}
 
 	wait.Wait()
-	totalBytes := 0
-	for index := range resolved {
-		if resolved[index].AvatarURL == "" {
-			continue
+	return resolved, remote
+}
+
+func hasInlineBilibiliSearchAvatar(users []bilibiliUser) bool {
+	for _, user := range users {
+		if strings.HasPrefix(strings.TrimSpace(user.AvatarURL), "data:image/") {
+			return true
 		}
-		if totalBytes+sizes[index] > maxAvatarBatchBytes {
-			resolved[index].AvatarURL = ""
-			continue
-		}
-		totalBytes += sizes[index]
 	}
-	return resolved
+	return false
+}
+
+func bilibiliSearchAvatarURL(sourceURL string) (string, bool) {
+	parsed, _, err := validateAvatarSourceURL(sourceURL)
+	if err != nil {
+		return "", false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host != "i0.hdslb.com" && host != "i1.hdslb.com" && host != "i2.hdslb.com" {
+		return parsed.String(), true
+	}
+	if !strings.Contains(parsed.Path[strings.LastIndex(parsed.Path, "/")+1:], "@") {
+		parsed.Path += bilibiliSearchAvatarSuffix
+		parsed.RawPath = ""
+	}
+	return parsed.String(), true
 }
 
 func bilibiliSubscribeHint(commandPrefixes []string) string {
