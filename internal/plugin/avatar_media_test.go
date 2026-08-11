@@ -30,20 +30,6 @@ func TestResolveAvatarDataURLInlinesSupportedImage(t *testing.T) {
 	}
 }
 
-func TestResolveAvatarDataURLInlinesBilibiliDefaultAvatar(t *testing.T) {
-	fake := newFakePluginActions()
-	fake.httpResponses = []rayleabot.ActionResult{avatarHTTPResult()}
-	sourceURL := "https://static.hdslb.com/images/member/noface.gif"
-
-	dataURL, _, err := resolveAvatarDataURL(context.Background(), fake, sourceURL)
-	if err != nil || !strings.HasPrefix(dataURL, "data:image/png;base64,") {
-		t.Fatalf("default avatar was not inlined: data=%q err=%v", dataURL, err)
-	}
-	if len(fake.httpRequests) != 1 || fake.httpRequests[0].URL != sourceURL || fake.httpRequests[0].Headers["Referer"] != "https://www.bilibili.com/" {
-		t.Fatalf("unexpected default avatar request: %#v", fake.httpRequests)
-	}
-}
-
 func TestResolveAvatarDataURLRejectsUndeclaredShapesBeforeRequest(t *testing.T) {
 	fake := newFakePluginActions()
 	for _, sourceURL := range []string{
@@ -52,6 +38,7 @@ func TestResolveAvatarDataURLRejectsUndeclaredShapesBeforeRequest(t *testing.T) 
 		"https://i2.hdslb.com:8443/bfs/face/fixture.webp",
 		"https://q1.qlogo.cn/g?b=qq&nk=fixture&s=100",
 		"https://p.qlogo.cn/gh/100/200/100",
+		"https://static.hdslb.com/images/member/noface.gif",
 		"https://static.hdslb.com/images/member/noface.gif?variant=1",
 		"https://static.hdslb.com/images/member/other.gif",
 		"https://example.test/avatar.png",

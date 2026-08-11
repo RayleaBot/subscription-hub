@@ -117,12 +117,8 @@ func validateAvatarSourceURL(sourceURL string) (*url.URL, string, error) {
 	host := strings.ToLower(parsed.Hostname())
 	switch host {
 	case "i0.hdslb.com", "i1.hdslb.com", "i2.hdslb.com":
-		if parsed.RawQuery != "" || !strings.HasPrefix(parsed.EscapedPath(), "/bfs/face/") {
-			return nil, "", errUnsupportedAvatarURL
-		}
-		return parsed, "https://www.bilibili.com/", nil
-	case "static.hdslb.com":
-		if parsed.RawQuery != "" || parsed.EscapedPath() != "/images/member/noface.gif" {
+		path := parsed.EscapedPath()
+		if parsed.RawQuery != "" || (!strings.HasPrefix(path, "/bfs/face/") && !strings.HasPrefix(path, "/bfs/garb/")) {
 			return nil, "", errUnsupportedAvatarURL
 		}
 		return parsed, "https://www.bilibili.com/", nil

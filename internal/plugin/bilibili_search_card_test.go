@@ -78,12 +78,11 @@ func TestInlineBilibiliSearchAvatarsFetchesAllThumbnailsConcurrently(t *testing.
 
 	type result struct {
 		users []bilibiliUser
-		err   error
 	}
 	done := make(chan result, 1)
 	go func() {
-		resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, users)
-		done <- result{users: resolved, err: err}
+		resolved := prepareBilibiliSearchAvatars(context.Background(), actions, users)
+		done <- result{users: resolved}
 	}()
 	requested := make([]string, 0, 2)
 	for index := 0; index < 2; index++ {
@@ -103,9 +102,6 @@ func TestInlineBilibiliSearchAvatarsFetchesAllThumbnailsConcurrently(t *testing.
 	case <-time.After(time.Second):
 		t.Fatal("avatar resolution did not complete")
 	}
-	if prepared.err != nil {
-		t.Fatalf("avatar resolution failed: %v", prepared.err)
-	}
 	for index := 0; index < 2; index++ {
 		if !strings.HasPrefix(prepared.users[index].AvatarURL, "data:image/png;base64,") {
 			t.Fatalf("avatar %d was not inlined: %q", index, prepared.users[index].AvatarURL)
@@ -124,9 +120,9 @@ func TestInlineBilibiliSearchAvatarsFetchesAllThumbnailsConcurrently(t *testing.
 func TestInlineBilibiliSearchAvatarsRetriesOriginalSource(t *testing.T) {
 	sourceURL := "https://i2.hdslb.com/bfs/face/fallback.webp"
 	actions := &fallbackAvatarActions{fakePluginActions: newFakePluginActions()}
-	resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
-	if err != nil || len(resolved) != 1 || !strings.HasPrefix(resolved[0].AvatarURL, "data:image/png;base64,") {
-		t.Fatalf("original avatar retry failed: users=%#v err=%v", resolved, err)
+	resolved := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if len(resolved) != 1 || !strings.HasPrefix(resolved[0].AvatarURL, "data:image/png;base64,") {
+		t.Fatalf("original avatar retry failed: users=%#v", resolved)
 	}
 	if len(actions.requests) != 2 || !strings.HasSuffix(actions.requests[0].URL, bilibiliSearchAvatarSuffix) || actions.requests[1].URL != sourceURL {
 		t.Fatalf("unexpected avatar retry requests: %#v", actions.requests)
@@ -141,26 +137,39 @@ func TestInlineBilibiliSearchAvatarsRetriesOriginalSource(t *testing.T) {
 func TestInlineBilibiliSearchAvatarsUsesDefaultAvatarWithoutThumbnailSuffix(t *testing.T) {
 	sourceURL := "https://static.hdslb.com/images/member/noface.gif"
 	actions := newFakePluginActions()
-	actions.httpResponses = []rayleabot.ActionResult{avatarHTTPResult()}
 
-	resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
-	if err != nil || len(resolved) != 1 || !strings.HasPrefix(resolved[0].AvatarURL, "data:image/png;base64,") {
-		t.Fatalf("default search avatar was not inlined: users=%#v err=%v", resolved, err)
+	resolved := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if len(resolved) != 1 || resolved[0].AvatarURL != bilibiliSearchFallbackAvatar {
+		t.Fatalf("default search avatar did not use the template asset: %#v", resolved)
 	}
-	if len(actions.httpRequests) != 1 || actions.httpRequests[0].URL != sourceURL {
-		t.Fatalf("default avatar request was modified: %#v", actions.httpRequests)
+	if len(actions.httpRequests) != 0 {
+		t.Fatalf("default avatar should not require a remote request: %#v", actions.httpRequests)
 	}
 }
 
-func TestInlineBilibiliSearchAvatarsRejectsIncompleteResults(t *testing.T) {
+func TestInlineBilibiliSearchAvatarsUsesFallbackForIncompleteResults(t *testing.T) {
 	sourceURL := "https://i2.hdslb.com/bfs/face/fallback.webp"
 	actions := &failedAvatarActions{fakePluginActions: newFakePluginActions()}
-	resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
-	if err == nil || len(resolved) != 1 || resolved[0].AvatarURL != "" {
-		t.Fatalf("incomplete avatar result reached render data: users=%#v err=%v", resolved, err)
+	resolved := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if len(resolved) != 1 || resolved[0].AvatarURL != bilibiliSearchFallbackAvatar {
+		t.Fatalf("incomplete avatar did not use the template asset: %#v", resolved)
 	}
 	if len(actions.requests) != 2 {
 		t.Fatalf("avatar attempts = %d, want 2", len(actions.requests))
+	}
+}
+
+func TestInlineBilibiliSearchAvatarsSupportsGarbAvatar(t *testing.T) {
+	sourceURL := "https://i1.hdslb.com/bfs/garb/avatar.png"
+	actions := newFakePluginActions()
+	actions.httpResponses = []rayleabot.ActionResult{avatarHTTPResult()}
+
+	resolved := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if len(resolved) != 1 || !strings.HasPrefix(resolved[0].AvatarURL, "data:image/png;base64,") {
+		t.Fatalf("garb avatar was not inlined: %#v", resolved)
+	}
+	if len(actions.httpRequests) != 1 || !strings.HasSuffix(actions.httpRequests[0].URL, bilibiliSearchAvatarSuffix) {
+		t.Fatalf("garb avatar did not request a compact thumbnail: %#v", actions.httpRequests)
 	}
 }
 

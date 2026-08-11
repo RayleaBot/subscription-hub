@@ -2,7 +2,7 @@ package plugin
 
 import (
 	"context"
-	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,7 +14,7 @@ const (
 	bilibiliSearchResultsTemplate      = "bilibili-search-results"
 	bilibiliSearchAvatarSuffix         = "@96w_96h_1c.webp"
 	bilibiliSearchAvatarTimeoutSeconds = 6
-	bilibiliSearchAvatarErrorMessage   = "Bilibili UP 头像获取失败，请稍后重试。"
+	bilibiliSearchFallbackAvatar       = "assets/avatar.svg"
 	bilibiliSearchRenderErrorMessage   = "Bilibili UP 搜索结果图片生成失败，请稍后重试。"
 )
 
@@ -24,10 +24,7 @@ func replyBilibiliUserSearch(ctx context.Context, event *rayleabot.EventContext,
 	if err != nil {
 		return event.SendText(friendlyBilibiliError(err))
 	}
-	renderUsers, err := prepareBilibiliSearchAvatars(ctx, event.Actions(), users)
-	if err != nil {
-		return event.SendText(bilibiliSearchAvatarErrorMessage)
-	}
+	renderUsers := prepareBilibiliSearchAvatars(ctx, event.Actions(), users)
 	data := buildBilibiliSearchCardData(query, renderUsers, event.CommandPrefixes)
 	return sendBilibiliCard(ctx, event, bilibiliSearchResultsTemplate, data, bilibiliSearchRenderErrorMessage)
 }
@@ -61,21 +58,19 @@ func buildBilibiliSearchCardData(query string, users []bilibiliUser, commandPref
 }
 
 // prepareBilibiliSearchAvatars 并发解析全部搜索结果的紧凑内联头像。
-func prepareBilibiliSearchAvatars(ctx context.Context, actions pluginActions, users []bilibiliUser) ([]bilibiliUser, error) {
+// 单个头像无法读取时使用模板内置头像，不阻断其余搜索结果。
+func prepareBilibiliSearchAvatars(ctx context.Context, actions pluginActions, users []bilibiliUser) []bilibiliUser {
 	resolved := append([]bilibiliUser(nil), users...)
-	failed := make([]bool, len(resolved))
 	var wait sync.WaitGroup
 
 	for index := range resolved {
 		sourceURL := strings.TrimSpace(resolved[index].AvatarURL)
-		resolved[index].AvatarURL = ""
-		if sourceURL == "" {
-			failed[index] = true
+		resolved[index].AvatarURL = bilibiliSearchFallbackAvatar
+		if sourceURL == "" || isBilibiliDefaultAvatarURL(sourceURL) {
 			continue
 		}
 		requestURL, trusted := bilibiliSearchAvatarURL(sourceURL)
 		if !trusted {
-			failed[index] = true
 			continue
 		}
 
@@ -90,21 +85,17 @@ func prepareBilibiliSearchAvatars(ctx context.Context, actions pluginActions, us
 					return
 				}
 			}
-			failed[index] = true
 		}(index, requestURL, sourceURL)
 	}
 
 	wait.Wait()
-	failureCount := 0
-	for _, itemFailed := range failed {
-		if itemFailed {
-			failureCount++
-		}
-	}
-	if failureCount > 0 {
-		return resolved, fmt.Errorf("resolve %d Bilibili search avatars", failureCount)
-	}
-	return resolved, nil
+	return resolved
+}
+
+func isBilibiliDefaultAvatarURL(sourceURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(sourceURL))
+	return err == nil && parsed.Scheme == "https" && parsed.User == nil && parsed.Fragment == "" && parsed.Port() == "" &&
+		strings.EqualFold(parsed.Hostname(), "static.hdslb.com") && parsed.RawQuery == "" && parsed.EscapedPath() == "/images/member/noface.gif"
 }
 
 func bilibiliSearchAvatarURL(sourceURL string) (string, bool) {
