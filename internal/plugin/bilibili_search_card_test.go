@@ -74,13 +74,16 @@ func TestInlineBilibiliSearchAvatarsFetchesAllThumbnailsConcurrently(t *testing.
 	users := []bilibiliUser{
 		{UID: "1", AvatarURL: "https://i0.hdslb.com/bfs/face/one.webp"},
 		{UID: "2", AvatarURL: "https://i1.hdslb.com/bfs/face/two.webp"},
-		{UID: "3", AvatarURL: "https://example.test/remote.webp"},
 	}
 
-	done := make(chan []bilibiliUser, 1)
+	type result struct {
+		users []bilibiliUser
+		err   error
+	}
+	done := make(chan result, 1)
 	go func() {
-		resolved, _ := prepareBilibiliSearchAvatars(context.Background(), actions, users)
-		done <- resolved
+		resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, users)
+		done <- result{users: resolved, err: err}
 	}()
 	requested := make([]string, 0, 2)
 	for index := 0; index < 2; index++ {
@@ -94,15 +97,18 @@ func TestInlineBilibiliSearchAvatarsFetchesAllThumbnailsConcurrently(t *testing.
 	close(release)
 	released = true
 
-	var resolved []bilibiliUser
+	var prepared result
 	select {
-	case resolved = <-done:
+	case prepared = <-done:
 	case <-time.After(time.Second):
 		t.Fatal("avatar resolution did not complete")
 	}
+	if prepared.err != nil {
+		t.Fatalf("avatar resolution failed: %v", prepared.err)
+	}
 	for index := 0; index < 2; index++ {
-		if !strings.HasPrefix(resolved[index].AvatarURL, "data:image/png;base64,") {
-			t.Fatalf("avatar %d was not inlined: %q", index, resolved[index].AvatarURL)
+		if !strings.HasPrefix(prepared.users[index].AvatarURL, "data:image/png;base64,") {
+			t.Fatalf("avatar %d was not inlined: %q", index, prepared.users[index].AvatarURL)
 		}
 	}
 	for _, requestURL := range requested {
@@ -110,38 +116,64 @@ func TestInlineBilibiliSearchAvatarsFetchesAllThumbnailsConcurrently(t *testing.
 			t.Fatalf("search avatar did not request a compact thumbnail: %q", requestURL)
 		}
 	}
-	if resolved[2].AvatarURL != "" {
-		t.Fatalf("unsupported remote avatar reached render data: %q", resolved[2].AvatarURL)
-	}
 	if users[0].AvatarURL == "" {
 		t.Fatal("avatar resolution mutated the search result source")
 	}
 }
 
-func TestInlineBilibiliSearchAvatarsKeepsTrustedSourceWhenThumbnailFails(t *testing.T) {
+func TestInlineBilibiliSearchAvatarsRetriesOriginalSource(t *testing.T) {
 	sourceURL := "https://i2.hdslb.com/bfs/face/fallback.webp"
-	actions := &failedAvatarActions{fakePluginActions: newFakePluginActions()}
-	resolved, remote := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
-	if len(resolved) != 1 || resolved[0].AvatarURL != sourceURL {
-		t.Fatalf("trusted avatar fallback was lost: %#v", resolved)
+	actions := &fallbackAvatarActions{fakePluginActions: newFakePluginActions()}
+	resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if err != nil || len(resolved) != 1 || !strings.HasPrefix(resolved[0].AvatarURL, "data:image/png;base64,") {
+		t.Fatalf("original avatar retry failed: users=%#v err=%v", resolved, err)
 	}
-	if len(remote) != 1 || remote[0].AvatarURL != sourceURL {
-		t.Fatalf("remote render fallback was lost: %#v", remote)
+	if len(actions.requests) != 2 || !strings.HasSuffix(actions.requests[0].URL, bilibiliSearchAvatarSuffix) || actions.requests[1].URL != sourceURL {
+		t.Fatalf("unexpected avatar retry requests: %#v", actions.requests)
+	}
+	for _, request := range actions.requests {
+		if request.TimeoutSeconds != bilibiliSearchAvatarTimeoutSeconds {
+			t.Fatalf("avatar timeout = %d, want %d", request.TimeoutSeconds, bilibiliSearchAvatarTimeoutSeconds)
+		}
 	}
 }
 
-func TestRenderBilibiliCardImageRetriesWithoutInlineData(t *testing.T) {
+func TestInlineBilibiliSearchAvatarsRejectsIncompleteResults(t *testing.T) {
+	sourceURL := "https://i2.hdslb.com/bfs/face/fallback.webp"
+	actions := &failedAvatarActions{fakePluginActions: newFakePluginActions()}
+	resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if err == nil || len(resolved) != 1 || resolved[0].AvatarURL != "" {
+		t.Fatalf("incomplete avatar result reached render data: users=%#v err=%v", resolved, err)
+	}
+	if len(actions.requests) != 2 {
+		t.Fatalf("avatar attempts = %d, want 2", len(actions.requests))
+	}
+}
+
+func TestRenderBilibiliCardImageDoesNotRetryRemoteData(t *testing.T) {
 	primary := map[string]any{"avatar": "data:image/webp;base64,fixture"}
-	fallback := map[string]any{"avatar": "https://i0.hdslb.com/bfs/face/fixture.webp"}
 	fake := newFakePluginActions()
 	fake.renderErrors = []error{errors.New("render input too large"), nil}
 
-	imagePath, err := renderBilibiliCardImage(context.Background(), fake, bilibiliSearchResultsTemplate, primary, fallback, "fallback text")
-	if err != nil || imagePath != "plugin-test.png" {
-		t.Fatalf("render retry failed: path=%q err=%v", imagePath, err)
+	imagePath, err := renderBilibiliCardImage(context.Background(), fake, bilibiliSearchResultsTemplate, primary, "fallback text")
+	if err == nil || imagePath != "" {
+		t.Fatalf("render failure was hidden: path=%q err=%v", imagePath, err)
 	}
-	if len(fake.renders) != 2 || stringScalar(fake.renders[0].Data["avatar"]) != stringScalar(primary["avatar"]) || stringScalar(fake.renders[1].Data["avatar"]) != stringScalar(fallback["avatar"]) {
-		t.Fatalf("unexpected render retry requests: %#v", fake.renders)
+	if len(fake.renders) != 1 || stringScalar(fake.renders[0].Data["avatar"]) != stringScalar(primary["avatar"]) {
+		t.Fatalf("unexpected render requests: %#v", fake.renders)
+	}
+}
+
+func TestRenderBilibiliCardImageWaitsPastServerRenderTimeout(t *testing.T) {
+	actions := &deadlineRenderActions{fakePluginActions: newFakePluginActions()}
+	started := time.Now()
+	imagePath, err := renderBilibiliCardImage(context.Background(), actions, bilibiliSearchResultsTemplate, map[string]any{}, "fallback text")
+	if err != nil || imagePath != "plugin-test.png" {
+		t.Fatalf("render failed: path=%q err=%v", imagePath, err)
+	}
+	wait := actions.deadline.Sub(started)
+	if wait <= 30*time.Second || wait > bilibiliRenderActionTimeout+time.Second {
+		t.Fatalf("render action timeout = %s, want > 30s and <= %s", wait, bilibiliRenderActionTimeout)
 	}
 }
 
@@ -159,10 +191,35 @@ type blockingAvatarActions struct {
 
 type failedAvatarActions struct {
 	*fakePluginActions
+	requests []rayleabot.HTTPRequest
 }
 
-func (actions *failedAvatarActions) HTTPRequest(context.Context, rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+type fallbackAvatarActions struct {
+	*fakePluginActions
+	requests []rayleabot.HTTPRequest
+}
+
+type deadlineRenderActions struct {
+	*fakePluginActions
+	deadline time.Time
+}
+
+func (actions *failedAvatarActions) HTTPRequest(_ context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+	actions.requests = append(actions.requests, request)
 	return nil, context.DeadlineExceeded
+}
+
+func (actions *fallbackAvatarActions) HTTPRequest(_ context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+	actions.requests = append(actions.requests, request)
+	if len(actions.requests) == 1 {
+		return nil, context.DeadlineExceeded
+	}
+	return avatarHTTPResult(), nil
+}
+
+func (actions *deadlineRenderActions) RenderImage(ctx context.Context, request rayleabot.RenderImageRequest) (rayleabot.ActionResult, error) {
+	actions.deadline, _ = ctx.Deadline()
+	return actions.fakePluginActions.RenderImage(ctx, request)
 }
 
 func (actions *blockingAvatarActions) HTTPRequest(ctx context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
@@ -176,12 +233,16 @@ func (actions *blockingAvatarActions) HTTPRequest(ctx context.Context, request r
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	return avatarHTTPResult(), nil
+}
+
+func avatarHTTPResult() rayleabot.ActionResult {
 	body := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
 	return rayleabot.ActionResult{
 		"status_code": 200,
 		"headers":     map[string]any{"Content-Type": "image/png"},
 		"body_base64": base64.StdEncoding.EncodeToString(body),
-	}, nil
+	}
 }
 
 func TestBilibiliLevelIcon(t *testing.T) {
@@ -196,20 +257,6 @@ func TestBilibiliLevelIcon(t *testing.T) {
 		if got := bilibiliLevelIcon(input[0].(int), input[1].(bool)); got != want {
 			t.Fatalf("bilibiliLevelIcon(%v, %v) = %q, want %q", input[0], input[1], got, want)
 		}
-	}
-}
-
-func TestSearchBilibiliUsersTextFormatsFallback(t *testing.T) {
-	users := []bilibiliUser{
-		{UID: "1", Name: "甲", Fans: 9999},
-		{UID: "2", Name: "乙"},
-	}
-	lines := strings.Split(searchBilibiliUsersText("测试", users), "\n")
-	if len(lines) != 3 || lines[0] != "Bilibili UP 搜索结果：测试" {
-		t.Fatalf("unexpected fallback text: %#v", lines)
-	}
-	if lines[1] != "1. 甲（UID 1）｜粉丝 9999" || lines[2] != "2. 乙（UID 2）" {
-		t.Fatalf("unexpected fallback lines: %#v", lines)
 	}
 }
 

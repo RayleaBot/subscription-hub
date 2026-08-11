@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	maxAvatarResolveItems = 4
-	maxAvatarBytes        = 512 << 10
-	maxAvatarBatchBytes   = 2 << 20
+	maxAvatarResolveItems       = 4
+	maxAvatarBytes              = 512 << 10
+	maxAvatarBatchBytes         = 2 << 20
+	defaultAvatarTimeoutSeconds = 3
 )
 
 var errUnsupportedAvatarURL = errors.New("unsupported avatar url")
@@ -68,6 +69,10 @@ func avatarURLsFromPayload(payload map[string]any) []string {
 }
 
 func resolveAvatarDataURL(ctx context.Context, actions pluginActions, sourceURL string) (string, int, error) {
+	return resolveAvatarDataURLWithTimeout(ctx, actions, sourceURL, defaultAvatarTimeoutSeconds)
+}
+
+func resolveAvatarDataURLWithTimeout(ctx context.Context, actions pluginActions, sourceURL string, timeoutSeconds int) (string, int, error) {
 	parsed, referer, err := validateAvatarSourceURL(sourceURL)
 	if err != nil {
 		return "", 0, err
@@ -82,7 +87,7 @@ func resolveAvatarDataURL(ctx context.Context, actions pluginActions, sourceURL 
 			"Referer":       referer,
 			"User-Agent":    bilibiliUserAgent,
 		},
-		TimeoutSeconds: 3,
+		TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
 		return "", 0, fmt.Errorf("fetch avatar: %w", err)

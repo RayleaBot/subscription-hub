@@ -396,19 +396,6 @@ func friendlyBilibiliError(err error) string {
 	return message
 }
 
-// searchBilibiliUsersText 生成搜索结果的纯文字列表，用作结果卡片渲染失败时的降级回复。
-func searchBilibiliUsersText(query string, users []bilibiliUser) string {
-	lines := []string{"Bilibili UP 搜索结果：" + strings.TrimSpace(query)}
-	for index, user := range users {
-		fans := ""
-		if user.Fans > 0 {
-			fans = "｜粉丝 " + formatCount(user.Fans)
-		}
-		lines = append(lines, fmt.Sprintf("%d. %s（UID %s）%s", index+1, user.Name, user.UID, fans))
-	}
-	return strings.Join(lines, "\n")
-}
-
 func formatCount(value int) string {
 	if value < 10000 {
 		return strconv.Itoa(value)

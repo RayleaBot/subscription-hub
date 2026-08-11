@@ -4,11 +4,15 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
-const bilibiliUserCardTemplate = "bilibili-user-card"
+const (
+	bilibiliUserCardTemplate    = "bilibili-user-card"
+	bilibiliRenderActionTimeout = 35 * time.Second
+)
 
 // buildBilibiliUserCardData 生成订阅/取消订阅 UP 主资料卡片的渲染输入。
 // action 取值：subscribed（新订阅）、updated（更新订阅）、unsubscribed（取消订阅）。
@@ -33,33 +37,22 @@ func sendBilibiliUserCard(ctx context.Context, event *rayleabot.EventContext, da
 	return sendBilibiliCard(ctx, event, bilibiliUserCardTemplate, data, fallbackMessage)
 }
 
-// sendBilibiliCard 渲染指定模板并发送图片；渲染失败时降级为原文字回复。
+// sendBilibiliCard 渲染指定模板并发送图片；渲染失败时发送指定回退文本。
 func sendBilibiliCard(ctx context.Context, event *rayleabot.EventContext, template string, data map[string]any, fallbackMessage string) error {
-	return sendBilibiliCardWithRenderFallback(ctx, event, template, data, nil, fallbackMessage)
-}
-
-// sendBilibiliCardWithRenderFallback 在内联资源渲染失败时使用远程资源数据重试一次。
-func sendBilibiliCardWithRenderFallback(ctx context.Context, event *rayleabot.EventContext, template string, data, renderFallback map[string]any, fallbackMessage string) error {
-	imagePath, err := renderBilibiliCardImage(ctx, event.Actions(), template, data, renderFallback, fallbackMessage)
+	imagePath, err := renderBilibiliCardImage(ctx, event.Actions(), template, data, fallbackMessage)
 	if err != nil || imagePath == "" {
 		return event.SendText(fallbackMessage)
 	}
 	return event.Send(event.Event.Target.Type, event.Event.Target.ID, rayleabot.Image(imagePath))
 }
 
-func renderBilibiliCardImage(ctx context.Context, actions pluginActions, template string, data, renderFallback map[string]any, fallbackMessage string) (string, error) {
-	render := func(input map[string]any) (rayleabot.ActionResult, error) {
-		return actions.RenderImage(ctx, rayleabot.RenderImageRequest{
-			Template: template, Data: input, Theme: "default", Output: "png", FallbackText: fallbackMessage,
-		})
-	}
-	result, err := render(data)
-	imagePath := stringScalar(result["image_path"])
-	if (err != nil || imagePath == "") && renderFallback != nil {
-		result, err = render(renderFallback)
-		imagePath = stringScalar(result["image_path"])
-	}
-	return imagePath, err
+func renderBilibiliCardImage(ctx context.Context, actions pluginActions, template string, data map[string]any, fallbackMessage string) (string, error) {
+	renderCtx, cancel := context.WithTimeout(ctx, bilibiliRenderActionTimeout)
+	defer cancel()
+	result, err := actions.RenderImage(renderCtx, rayleabot.RenderImageRequest{
+		Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallbackMessage,
+	})
+	return stringScalar(result["image_path"]), err
 }
 
 func serviceLabels(values []string, platform string) []string {
