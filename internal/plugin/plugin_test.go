@@ -75,7 +75,7 @@ func TestNonBilibiliSubscriptionKeepsOriginalSubjectName(t *testing.T) {
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": []string{"洛天依"}},
 	}}
-	if _, changed := addSubscription(t.Context(), &current, event, "netease_music"); !changed {
+	if outcome := addSubscription(t.Context(), &current, event, "netease_music"); !outcome.Changed {
 		t.Fatal("subscription was not added")
 	}
 	if len(current.Subscriptions) != 1 || current.Subscriptions[0].Name != "洛天依" {
@@ -138,8 +138,8 @@ func TestRemoveSubscriptionKeepsUnremovedServices(t *testing.T) {
 	event := &rayleabot.EventContext{Event: rayleabot.Event{
 		Target: rayleabot.Target{Type: "group", ID: "100"}, Payload: map[string]any{"args": []string{"直播", "42"}},
 	}}
-	_, changed := removeSubscription(&current, event, "bilibili")
-	if !changed || len(current.Subscriptions) != 1 || !reflect.DeepEqual(current.Subscriptions[0].Services, []string{"video"}) {
+	outcome := removeSubscription(&current, event, "bilibili")
+	if !outcome.Changed || len(current.Subscriptions) != 1 || !reflect.DeepEqual(current.Subscriptions[0].Services, []string{"video"}) {
 		t.Fatalf("partial removal failed: %#v", current.Subscriptions)
 	}
 }

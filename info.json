@@ -1,7 +1,7 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅中心",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "manifest_version": "2",
   "plugin_protocol_version": "1",
   "runtime": "go",
@@ -22,6 +22,9 @@
   "render_templates": [
     {
       "path": "templates/bilibili-update"
+    },
+    {
+      "path": "templates/bilibili-user-card"
     }
   ],
   "capabilities": [

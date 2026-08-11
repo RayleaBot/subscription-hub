@@ -107,21 +107,21 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 	case "status":
 		return event.SendText(formatStatus(current))
 	case "add":
-		message, changed := addSubscription(ctx, &current, event, platform)
-		if changed {
+		outcome := addSubscription(ctx, &current, event, platform)
+		if outcome.Changed {
 			if err := saveSettings(ctx, event, current); err != nil {
 				return err
 			}
 		}
-		return event.SendText(message)
+		return replySubscriptionOutcome(ctx, event, platform, outcome)
 	case "remove":
-		message, changed := removeSubscription(&current, event, platform)
-		if changed {
+		outcome := removeSubscription(&current, event, platform)
+		if outcome.Changed {
 			if err := saveSettings(ctx, event, current); err != nil {
 				return err
 			}
 		}
-		return event.SendText(message)
+		return replySubscriptionOutcome(ctx, event, platform, outcome)
 	case "list", "list_all":
 		return event.SendText(formatSubscriptions(current, event, platform, operation == "list_all"))
 	case "check":
@@ -134,6 +134,21 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 	default:
 		return event.Result(map[string]any{"handled": false})
 	}
+}
+
+// replySubscriptionOutcome 回复订阅变更结果：bilibili 平台成功时发送 UP 主资料卡片，
+// 其余情况（非 bilibili、未变更、渲染失败）回退为文字。
+func replySubscriptionOutcome(ctx context.Context, event *rayleabot.EventContext, platform string, outcome subscriptionOutcome) error {
+	if platform != "bilibili" || !outcome.Changed || outcome.Item == nil {
+		return event.SendText(outcome.Message)
+	}
+	item := *outcome.Item
+	user := bilibiliUser{UID: item.UID, Name: item.Name, AvatarURL: item.AvatarURL}
+	if outcome.User != nil {
+		user = *outcome.User
+	}
+	data := buildBilibiliUserCardData(outcome.Action, item, user, outcome.Services)
+	return sendBilibiliUserCard(ctx, event, data, outcome.Message)
 }
 
 func commandOperation(command string) (string, string) {
@@ -296,20 +311,32 @@ func normalizeDeliveryMaxAgeMinutes(value int) int {
 	return value
 }
 
-func addSubscription(ctx context.Context, current *settings, event *rayleabot.EventContext, platform string) (string, bool) {
+type subscriptionOutcome struct {
+	Message  string
+	Changed  bool
+	Action   string
+	Item     *subscription
+	User     *bilibiliUser
+	Services []string
+}
+
+func addSubscription(ctx context.Context, current *settings, event *rayleabot.EventContext, platform string) subscriptionOutcome {
 	services, query, ok := parseSubscriptionArgs(event.Event.Args(), platform)
 	if !ok {
-		return "请填写要订阅的账号 ID 或主页标识。", false
+		return subscriptionOutcome{Message: "请填写要订阅的账号 ID 或主页标识。"}
 	}
 	uid := subjectIDFromInput(platform, query)
 	name := strings.TrimSpace(query)
 	avatarURL := ""
+	var resolvedUser *bilibiliUser
 	if platform == "bilibili" {
 		users, err := resolveBilibiliUsers(ctx, event, query)
 		if err != nil || len(users) == 0 {
-			return friendlyBilibiliError(err), false
+			return subscriptionOutcome{Message: friendlyBilibiliError(err)}
 		}
 		uid, name, avatarURL = users[0].UID, users[0].Name, users[0].AvatarURL
+		user := users[0]
+		resolvedUser = &user
 	} else {
 		if uid == "" {
 			uid = safeSubjectID(query)
@@ -319,7 +346,7 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 		}
 	}
 	if uid == "" || event.Event.Target.ID == "" {
-		return "当前会话无法绑定订阅目标。", false
+		return subscriptionOutcome{Message: "当前会话无法绑定订阅目标。"}
 	}
 	targetType := event.Event.Target.Type
 	if targetType != "private" {
@@ -341,19 +368,33 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 		}
 		item.Services = mergeServices(item.Services, services, platform)
 		item.Subscribers = mergeSubscriber(item.Subscribers, event)
-		return "已更新订阅：" + platformName(platform) + " " + item.Name + "（" + servicesText(item.Services, platform) + "）", true
+		return subscriptionOutcome{
+			Message:  "已更新订阅：" + platformName(platform) + " " + item.Name + "（" + servicesText(item.Services, platform) + "）",
+			Changed:  true,
+			Action:   "updated",
+			Item:     item,
+			User:     resolvedUser,
+			Services: item.Services,
+		}
 	}
 	current.Subscriptions = append(current.Subscriptions, subscription{
 		ID: id, Platform: platform, UID: uid, Name: name, AvatarURL: avatarURL, TargetType: targetType, TargetID: event.Event.Target.ID,
 		TargetName: currentTargetName(event), Services: services, Subscribers: mergeSubscriber(nil, event), Enabled: true,
 	})
-	return "已订阅：" + platformName(platform) + " " + name + "（" + servicesText(services, platform) + "）", true
+	return subscriptionOutcome{
+		Message:  "已订阅：" + platformName(platform) + " " + name + "（" + servicesText(services, platform) + "）",
+		Changed:  true,
+		Action:   "subscribed",
+		Item:     &current.Subscriptions[len(current.Subscriptions)-1],
+		User:     resolvedUser,
+		Services: services,
+	}
 }
 
-func removeSubscription(current *settings, event *rayleabot.EventContext, platform string) (string, bool) {
+func removeSubscription(current *settings, event *rayleabot.EventContext, platform string) subscriptionOutcome {
 	services, query, ok := parseSubscriptionArgs(event.Event.Args(), platform)
 	if !ok {
-		return "请填写要取消的账号 ID 或主页标识。", false
+		return subscriptionOutcome{Message: "请填写要取消的账号 ID 或主页标识。"}
 	}
 	uid := subjectIDFromInput(platform, query)
 	if uid == "" {
@@ -361,9 +402,12 @@ func removeSubscription(current *settings, event *rayleabot.EventContext, platfo
 	}
 	remaining := make([]subscription, 0, len(current.Subscriptions))
 	removed := false
+	var removedItem *subscription
 	for _, item := range current.Subscriptions {
 		matchesSubject := item.UID == uid || strings.EqualFold(item.Name, strings.TrimSpace(query))
 		if item.Platform == platform && matchesSubject && item.TargetType == normalizedTargetType(event.Event.Target.Type) && item.TargetID == event.Event.Target.ID {
+			matched := item
+			removedItem = &matched
 			nextServices := removeServices(item.Services, services, platform)
 			removed = true
 			if len(nextServices) == 0 {
@@ -374,10 +418,16 @@ func removeSubscription(current *settings, event *rayleabot.EventContext, platfo
 		remaining = append(remaining, item)
 	}
 	if !removed {
-		return "当前会话没有这项订阅。", false
+		return subscriptionOutcome{Message: "当前会话没有这项订阅。"}
 	}
 	current.Subscriptions = remaining
-	return "已取消订阅：" + platformName(platform) + " " + query + "（" + servicesText(services, platform) + "）", true
+	return subscriptionOutcome{
+		Message:  "已取消订阅：" + platformName(platform) + " " + query + "（" + servicesText(services, platform) + "）",
+		Changed:  true,
+		Action:   "unsubscribed",
+		Item:     removedItem,
+		Services: services,
+	}
 }
 
 func normalizeSubscriptions(items []subscription) []subscription {

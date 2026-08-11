@@ -249,6 +249,7 @@ type bilibiliUser struct {
 	Name      string `json:"name"`
 	AvatarURL string `json:"avatar_url,omitempty"`
 	Fans      int    `json:"fans,omitempty"`
+	Sign      string `json:"sign,omitempty"`
 }
 
 func resolveBilibiliUsers(ctx context.Context, event *rayleabot.EventContext, query string) ([]bilibiliUser, error) {
@@ -287,7 +288,24 @@ func readBilibiliUserWithActions(ctx context.Context, actions pluginActions, uid
 	if digits(resolvedUID) == "" || name == "" {
 		return bilibiliUser{}, errors.New("没有找到这个 Bilibili 用户")
 	}
-	return bilibiliUser{UID: resolvedUID, Name: name, AvatarURL: normalizeBilibiliURL(firstNonNil(data["face"], data["avatar"], data["upic"]))}, nil
+	user := bilibiliUser{
+		UID:       resolvedUID,
+		Name:      name,
+		AvatarURL: normalizeBilibiliURL(firstNonNil(data["face"], data["avatar"], data["upic"])),
+		Sign:      cleanText(data["sign"]),
+	}
+	user.Fans = readBilibiliFans(ctx, actions, accounts[0], resolvedUID)
+	return user, nil
+}
+
+// readBilibiliFans 读取 UP 主粉丝数，失败时静默返回 0（卡片不显示粉丝行）。
+func readBilibiliFans(ctx context.Context, actions pluginActions, account bilibiliAccount, uid string) int {
+	endpoint := bilibiliRelationStatURL + "?" + url.Values{"vmid": []string{uid}}.Encode()
+	document, err := newBilibiliClient(actions).requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
+	if err != nil {
+		return 0
+	}
+	return int(intScalar(nestedValue(document, "data", "follower")))
 }
 
 func searchBilibili(ctx context.Context, event *rayleabot.EventContext, query string) ([]bilibiliUser, error) {
@@ -322,7 +340,13 @@ func searchBilibiliWithActions(ctx context.Context, actions pluginActions, query
 		uid := stringScalar(item["mid"])
 		name := cleanText(htmlTag.ReplaceAllString(firstText(item["uname"], item["name"]), ""))
 		if uid != "" && name != "" {
-			users = append(users, bilibiliUser{UID: uid, Name: name, AvatarURL: normalizeBilibiliURL(firstNonNil(item["upic"], item["face"], item["avatar"])), Fans: int(intScalar(item["fans"]))})
+			users = append(users, bilibiliUser{
+				UID:       uid,
+				Name:      name,
+				AvatarURL: normalizeBilibiliURL(firstNonNil(item["upic"], item["face"], item["avatar"])),
+				Fans:      int(intScalar(item["fans"])),
+				Sign:      cleanText(firstNonNil(item["usign"], item["sign"])),
+			})
 			if len(users) == 5 {
 				break
 			}

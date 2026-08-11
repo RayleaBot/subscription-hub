@@ -111,14 +111,14 @@ func TestBilibiliSearchUsesWBIEndpoint(t *testing.T) {
 	fake.httpResponses = []rayleabot.ActionResult{httpJSONResult(200, map[string]any{
 		"code": 0,
 		"data": map[string]any{"result": []any{
-			map[string]any{"mid": 10001, "uname": "测试 UP", "fans": 128000, "upic": "//i0.hdslb.com/test.jpg"},
+			map[string]any{"mid": 10001, "uname": "测试 UP", "fans": 128000, "upic": "//i0.hdslb.com/test.jpg", "usign": "测试简介"},
 		}},
 	})}
 	users, err := searchBilibiliWithActions(context.Background(), fake, "测试 UP")
 	if err != nil {
 		t.Fatalf("searchBilibiliWithActions() error = %v", err)
 	}
-	if len(users) != 1 || users[0].UID != "10001" || users[0].Name != "测试 UP" {
+	if len(users) != 1 || users[0].UID != "10001" || users[0].Name != "测试 UP" || users[0].Fans != 128000 || users[0].Sign != "测试简介" {
 		t.Fatalf("unexpected users: %#v", users)
 	}
 	if len(fake.httpRequests) != 1 {
@@ -159,20 +159,45 @@ func TestBilibiliUserLookupUsesWBIEndpoint(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.accounts = fixtureAccounts("primary")
 	seedSourceState(fake, time.Now(), "", "primary")
-	fake.httpResponses = []rayleabot.ActionResult{httpJSONResult(200, map[string]any{
-		"code": 0,
-		"data": map[string]any{"mid": 123456, "name": "测试 UP", "face": "//i0.hdslb.com/face.jpg"},
-	})}
+	fake.httpResponses = []rayleabot.ActionResult{
+		httpJSONResult(200, map[string]any{
+			"code": 0,
+			"data": map[string]any{"mid": 123456, "name": "测试 UP", "face": "//i0.hdslb.com/face.jpg", "sign": "测试简介"},
+		}),
+		httpJSONResult(200, map[string]any{"code": 0, "data": map[string]any{"follower": 128000}}),
+	}
 	user, err := readBilibiliUserWithActions(context.Background(), fake, "123456")
 	if err != nil || user.UID != "123456" || user.Name != "测试 UP" || user.AvatarURL != "https://i0.hdslb.com/face.jpg" {
 		t.Fatalf("WBI user lookup user=%#v, err=%v", user, err)
 	}
-	if len(fake.httpRequests) != 1 {
+	if user.Sign != "测试简介" || user.Fans != 128000 {
+		t.Fatalf("WBI user lookup profile user=%#v", user)
+	}
+	if len(fake.httpRequests) != 2 {
 		t.Fatalf("user lookup requests = %#v", fake.httpRequests)
 	}
 	parsed, _ := url.Parse(fake.httpRequests[0].URL)
 	if parsed.Path != "/x/space/wbi/acc/info" || parsed.Query().Get("mid") != "123456" || parsed.Query().Get("w_rid") == "" {
 		t.Fatalf("user lookup did not use signed WBI endpoint: %s", fake.httpRequests[0].URL)
+	}
+	stat, _ := url.Parse(fake.httpRequests[1].URL)
+	if stat.Path != "/x/relation/stat" || stat.Query().Get("vmid") != "123456" {
+		t.Fatalf("fans lookup did not use relation stat endpoint: %s", fake.httpRequests[1].URL)
+	}
+}
+
+func TestBilibiliUserLookupToleratesFansFailure(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.accounts = fixtureAccounts("primary")
+	seedSourceState(fake, time.Now(), "", "primary")
+	fake.httpResponses = []rayleabot.ActionResult{httpJSONResult(200, map[string]any{
+		"code": 0,
+		"data": map[string]any{"mid": 123456, "name": "测试 UP"},
+	})}
+	fake.httpErrors = []error{nil, errors.New("network down")}
+	user, err := readBilibiliUserWithActions(context.Background(), fake, "123456")
+	if err != nil || user.UID != "123456" || user.Fans != 0 {
+		t.Fatalf("fans failure should be tolerated, user=%#v, err=%v", user, err)
 	}
 }
 
