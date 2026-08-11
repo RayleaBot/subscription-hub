@@ -138,6 +138,20 @@ func TestInlineBilibiliSearchAvatarsRetriesOriginalSource(t *testing.T) {
 	}
 }
 
+func TestInlineBilibiliSearchAvatarsUsesDefaultAvatarWithoutThumbnailSuffix(t *testing.T) {
+	sourceURL := "https://static.hdslb.com/images/member/noface.gif"
+	actions := newFakePluginActions()
+	actions.httpResponses = []rayleabot.ActionResult{avatarHTTPResult()}
+
+	resolved, err := prepareBilibiliSearchAvatars(context.Background(), actions, []bilibiliUser{{UID: "1", AvatarURL: sourceURL}})
+	if err != nil || len(resolved) != 1 || !strings.HasPrefix(resolved[0].AvatarURL, "data:image/png;base64,") {
+		t.Fatalf("default search avatar was not inlined: users=%#v err=%v", resolved, err)
+	}
+	if len(actions.httpRequests) != 1 || actions.httpRequests[0].URL != sourceURL {
+		t.Fatalf("default avatar request was modified: %#v", actions.httpRequests)
+	}
+}
+
 func TestInlineBilibiliSearchAvatarsRejectsIncompleteResults(t *testing.T) {
 	sourceURL := "https://i2.hdslb.com/bfs/face/fallback.webp"
 	actions := &failedAvatarActions{fakePluginActions: newFakePluginActions()}

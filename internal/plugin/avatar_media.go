@@ -121,6 +121,11 @@ func validateAvatarSourceURL(sourceURL string) (*url.URL, string, error) {
 			return nil, "", errUnsupportedAvatarURL
 		}
 		return parsed, "https://www.bilibili.com/", nil
+	case "static.hdslb.com":
+		if parsed.RawQuery != "" || parsed.EscapedPath() != "/images/member/noface.gif" {
+			return nil, "", errUnsupportedAvatarURL
+		}
+		return parsed, "https://www.bilibili.com/", nil
 	case "q1.qlogo.cn":
 		query := parsed.Query()
 		if parsed.EscapedPath() != "/g" || query.Get("b") != "qq" || digits(query.Get("nk")) == "" || !avatarSizeAllowed(query.Get("s")) {
