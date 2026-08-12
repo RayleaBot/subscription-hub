@@ -2,11 +2,15 @@ package plugin
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"html/template"
 	"os"
 	"strings"
 	"testing"
 )
+
+const bilibiliOfficialDefaultAvatarSHA256 = "a1cc0fa827befd75d9c248a16e7fc0f37fa1501cd65c78c35d86812b4bab595c"
 
 func TestBilibiliSearchTemplatePreservesInlineAvatarOutsideURLContext(t *testing.T) {
 	source, err := os.ReadFile("../../templates/bilibili-search-results/template.html")
@@ -37,5 +41,24 @@ func TestBilibiliSearchTemplatePreservesInlineAvatarOutsideURLContext(t *testing
 	}
 	if !strings.Contains(html, "image.src = source") {
 		t.Fatalf("search template did not activate deferred avatar sources: %s", html)
+	}
+}
+
+func TestBilibiliSearchTemplateUsesOfficialDefaultAvatar(t *testing.T) {
+	asset, err := os.ReadFile("../../templates/bilibili-search-results/assets/bilibili-default-avatar.gif")
+	if err != nil {
+		t.Fatalf("read Bilibili default avatar: %v", err)
+	}
+	if hash := fmt.Sprintf("%x", sha256.Sum256(asset)); hash != bilibiliOfficialDefaultAvatarSHA256 {
+		t.Fatalf("Bilibili default avatar hash = %s", hash)
+	}
+
+	source, err := os.ReadFile("../../templates/bilibili-search-results/template.html")
+	if err != nil {
+		t.Fatalf("read search template: %v", err)
+	}
+	html := string(source)
+	if !strings.Contains(html, bilibiliSearchFallbackAvatar) || strings.Contains(html, "assets/avatar.svg") {
+		t.Fatalf("search template does not use the official default avatar")
 	}
 }

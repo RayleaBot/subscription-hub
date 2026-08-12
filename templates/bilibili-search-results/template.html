@@ -27,11 +27,7 @@
           <li class="result-row">
             <span class="rank rank--top-{{ .rank }}">{{ .rank }}</span>
             <div class="avatar-wrap">
-              {{ if .avatar }}
-              <img class="avatar" src="assets/avatar.svg" data-avatar="{{ .avatar }}" alt="" />
-              {{ else }}
-              <div class="avatar avatar--fallback">UP</div>
-              {{ end }}
+              <img class="avatar" src="assets/bilibili-default-avatar.gif"{{ if .avatar }} data-avatar="{{ .avatar }}"{{ end }} alt="" />
               {{ if .live }}<span class="live-badge">直播中</span>{{ end }}
             </div>
             <div class="info">
@@ -68,7 +64,7 @@
         if (!source) continue;
         image.addEventListener("error", () => {
           image.removeAttribute("data-avatar");
-          image.src = "assets/avatar.svg";
+          image.src = "assets/bilibili-default-avatar.gif";
         }, { once: true });
         image.src = source;
       }

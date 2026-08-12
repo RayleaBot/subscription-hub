@@ -14,7 +14,7 @@ const (
 	bilibiliSearchResultsTemplate      = "bilibili-search-results"
 	bilibiliSearchAvatarSuffix         = "@96w_96h_1c.webp"
 	bilibiliSearchAvatarTimeoutSeconds = 6
-	bilibiliSearchFallbackAvatar       = "assets/avatar.svg"
+	bilibiliSearchFallbackAvatar       = "assets/bilibili-default-avatar.gif"
 	bilibiliSearchRenderErrorMessage   = "Bilibili UP 搜索结果图片生成失败，请稍后重试。"
 )
 
@@ -58,7 +58,7 @@ func buildBilibiliSearchCardData(query string, users []bilibiliUser, commandPref
 }
 
 // prepareBilibiliSearchAvatars 并发解析全部搜索结果的紧凑内联头像。
-// 单个头像无法读取时使用模板内置头像，不阻断其余搜索结果。
+// 单个头像无法读取时使用模板内置的 Bilibili 官方默认头像，不阻断其余搜索结果。
 func prepareBilibiliSearchAvatars(ctx context.Context, actions pluginActions, users []bilibiliUser) []bilibiliUser {
 	resolved := append([]bilibiliUser(nil), users...)
 	var wait sync.WaitGroup
