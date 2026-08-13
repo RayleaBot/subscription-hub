@@ -26,7 +26,7 @@ func replyBilibiliUserSearch(ctx context.Context, event *rayleabot.EventContext,
 	}
 	renderUsers := prepareBilibiliSearchAvatars(ctx, event.Actions(), users)
 	data := buildBilibiliSearchCardData(query, renderUsers, event.CommandPrefixes)
-	return sendBilibiliCard(ctx, event, bilibiliSearchResultsTemplate, data, bilibiliSearchRenderErrorMessage)
+	return sendRenderedCard(ctx, event, bilibiliSearchResultsTemplate, data, bilibiliSearchRenderErrorMessage)
 }
 
 // buildBilibiliSearchCardData 生成 UP 主搜索结果卡片的渲染输入。

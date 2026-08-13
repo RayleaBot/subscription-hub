@@ -1,19 +1,19 @@
 :root {
-  --page-bg: #f5f6fa;
+  --page-bg: #faf6f2;
   --card: #ffffff;
-  --card-soft: #f7f8fb;
-  --card-softer: #fbfcff;
-  --line: #e9edf3;
-  --line-strong: #dfe5ee;
-  --text: #18191c;
-  --text-subtle: #61666d;
-  --text-muted: #9499a0;
-  --bili-pink: #fb7299;
-  --bili-pink-soft: #fff1f6;
-  --bili-blue: #00aeec;
+  --card-soft: #fbf8f5;
+  --card-softer: #fdfbf9;
+  --line: #f0e7de;
+  --line-strong: #e7d9cc;
+  --text: #1f1a17;
+  --text-subtle: #6b625c;
+  --text-muted: #9a9089;
+  --weibo-orange: #ff8200;
+  --weibo-orange-soft: #fff3e4;
+  --weibo-red: #e6162d;
   --neutral: #8a8f99;
-  --neutral-soft: #f1f2f5;
-  --shadow: 0 18px 48px rgba(20, 28, 43, 0.09);
+  --neutral-soft: #f4efe9;
+  --shadow: 0 18px 48px rgba(74, 42, 14, 0.10);
   --radius: 8px;
   font-family: "HarmonyOS Sans SC", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
 }
@@ -37,7 +37,7 @@ body {
   min-height: 360px;
   padding: 24px 28px;
   background:
-    linear-gradient(180deg, rgba(251, 114, 153, 0.10), rgba(245, 246, 250, 0) 190px),
+    linear-gradient(180deg, rgba(255, 130, 0, 0.10), rgba(250, 246, 242, 0) 190px),
     var(--page-bg);
 }
 
@@ -55,7 +55,7 @@ body {
   gap: 14px;
   padding: 18px 24px;
   color: #ffffff;
-  background: linear-gradient(120deg, var(--bili-pink), #f989b0 58%, var(--bili-blue) 130%);
+  background: linear-gradient(120deg, var(--weibo-orange), #ff9d45 52%, var(--weibo-red) 135%);
 }
 
 .status-banner--unsubscribed {
@@ -136,7 +136,29 @@ body {
   border-radius: 50%;
   object-fit: cover;
   background: var(--card-soft);
-  box-shadow: 0 0 0 2px rgba(251, 114, 153, 0.22), 0 10px 24px rgba(20, 28, 43, 0.12);
+  box-shadow: 0 0 0 2px rgba(255, 130, 0, 0.22), 0 10px 24px rgba(74, 42, 14, 0.12);
+}
+
+.v-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffa53d, var(--weibo-orange));
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 3px 8px rgba(74, 42, 14, 0.18);
+}
+
+.v-badge--org {
+  background: linear-gradient(135deg, #57a4ff, #2f7fe0);
 }
 
 .profile-text {
@@ -156,40 +178,12 @@ body {
   min-width: 0;
   max-width: 460px;
   overflow: hidden;
-  color: #111318;
+  color: #16110e;
   font-size: 28px;
   font-weight: 800;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.uid-badge {
-  flex: 0 0 auto;
-  padding: 4px 10px;
-  border: 1px solid rgba(251, 114, 153, 0.26);
-  border-radius: 999px;
-  background: var(--bili-pink-soft);
-  color: var(--bili-pink);
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 800;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.meta-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.lv-badge {
-  display: block;
-  flex: 0 0 auto;
-  width: auto;
-  height: 20px;
 }
 
 .verify-chip {
@@ -201,10 +195,10 @@ body {
   min-height: 24px;
   padding: 0 10px;
   overflow: hidden;
-  border: 1px solid rgba(228, 158, 25, 0.30);
+  border: 1px solid rgba(255, 130, 0, 0.32);
   border-radius: 999px;
-  background: #fff8e8;
-  color: #c78a12;
+  background: var(--weibo-orange-soft);
+  color: #d96b00;
   font-size: 13px;
   font-weight: 800;
   line-height: 1;
@@ -220,15 +214,30 @@ body {
 }
 
 .verify-chip--org {
-  border-color: rgba(0, 174, 236, 0.26);
-  background: rgba(0, 174, 236, 0.07);
-  color: #1689b7;
+  border-color: rgba(47, 127, 224, 0.28);
+  background: rgba(47, 127, 224, 0.07);
+  color: #2b6cb8;
 }
 
-.meta-chip--neutral {
-  border: 1px solid var(--line-strong);
-  background: var(--neutral-soft);
-  color: var(--text-subtle);
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.uid-badge {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 130, 0, 0.28);
+  border-radius: 999px;
+  background: var(--weibo-orange-soft);
+  color: #e66f00;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .meta-chip {
@@ -236,10 +245,10 @@ body {
   align-items: center;
   min-height: 26px;
   padding: 0 12px;
-  border: 1px solid rgba(0, 174, 236, 0.22);
+  border: 1px solid rgba(230, 22, 45, 0.20);
   border-radius: 999px;
-  background: rgba(0, 174, 236, 0.07);
-  color: #1689b7;
+  background: rgba(230, 22, 45, 0.06);
+  color: #c22738;
   font-size: 15px;
   font-weight: 800;
   line-height: 1;
@@ -284,10 +293,10 @@ p {
   justify-content: center;
   min-height: 26px;
   padding: 0 12px;
-  border: 1px solid rgba(251, 114, 153, 0.28);
+  border: 1px solid rgba(255, 130, 0, 0.30);
   border-radius: 999px;
-  background: var(--bili-pink-soft);
-  color: var(--bili-pink);
+  background: var(--weibo-orange-soft);
+  color: #e66f00;
   font-size: 14px;
   font-weight: 800;
   line-height: 1;

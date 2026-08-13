@@ -38,6 +38,23 @@ func sliceValue(value any) []any {
 	return nil
 }
 
+// mapSliceValue 同时接受 []any 与 []map[string]any（如 buildSubscriberCards 的返回值）。
+func mapSliceValue(value any) []map[string]any {
+	switch typed := value.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		result := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if object := mapValue(item); object != nil {
+				result = append(result, object)
+			}
+		}
+		return result
+	}
+	return nil
+}
+
 func stringScalar(value any) string {
 	switch typed := value.(type) {
 	case string:

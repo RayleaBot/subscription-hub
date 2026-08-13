@@ -26,6 +26,7 @@ const (
 	bilibiliRelationStatURL = "https://api.bilibili.com/x/relation/stat"
 	bilibiliFollowURL       = "https://api.bilibili.com/x/relation/modify"
 	bilibiliUserInfoURL     = "https://api.bilibili.com/x/space/wbi/acc/info"
+	bilibiliUserVideosURL   = "https://api.bilibili.com/x/space/wbi/arc/search"
 	bilibiliUserSearchURL   = "https://api.bilibili.com/x/web-interface/wbi/search/type"
 	bilibiliVideoViewURL    = "https://api.bilibili.com/x/web-interface/view"
 	bilibiliOpusDetailURL   = "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/detail"
@@ -85,12 +86,20 @@ func (err *bilibiliSourceError) cooldown() bool {
 }
 
 type bilibiliClient struct {
-	actions pluginActions
-	now     func() time.Time
+	actions        pluginActions
+	now            func() time.Time
+	timeoutSeconds int
 }
 
 func newBilibiliClient(actions pluginActions) *bilibiliClient {
-	return &bilibiliClient{actions: actions, now: time.Now}
+	return &bilibiliClient{actions: actions, now: time.Now, timeoutSeconds: 30}
+}
+
+func (client *bilibiliClient) requestTimeout() int {
+	if client.timeoutSeconds > 0 {
+		return client.timeoutSeconds
+	}
+	return 30
 }
 
 func readBilibiliAccounts(ctx context.Context, actions pluginActions) ([]bilibiliAccount, error) {
@@ -313,7 +322,7 @@ func (client *bilibiliClient) requestJSON(
 	}
 	response, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
 		Method: method, URL: requestURL, Headers: bilibiliRequestHeaders(account.Cookie, origin, origin+"/", body != ""),
-		TimeoutSeconds: 30, BodyText: body,
+		TimeoutSeconds: client.requestTimeout(), BodyText: body,
 	})
 	if err != nil {
 		return nil, err

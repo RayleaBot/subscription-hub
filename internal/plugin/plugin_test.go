@@ -29,8 +29,24 @@ func TestCommandOperationCoversPlatformMutations(t *testing.T) {
 	if platform, operation := commandOperation("B站搜索UP"); platform != "bilibili" || operation != "search" {
 		t.Fatalf("search alias is not wired: %q %q", platform, operation)
 	}
+	if platform, operation := commandOperation("微博搜索博主"); platform != "weibo" || operation != "search" {
+		t.Fatalf("weibo search command is not wired: %q %q", platform, operation)
+	}
 	if platform, operation := commandOperation("预览订阅卡片"); platform != "bilibili" || operation != "preview" {
 		t.Fatalf("preview command is not wired: %q %q", platform, operation)
+	}
+}
+
+func TestInteractiveCardCommandsReserveReplyBudget(t *testing.T) {
+	for _, operation := range []string{"add", "remove", "search", "preview"} {
+		if !interactiveCommandOperation(operation) {
+			t.Fatalf("%s should share the interactive reply budget", operation)
+		}
+	}
+	for _, operation := range []string{"status", "list", "list_all"} {
+		if interactiveCommandOperation(operation) {
+			t.Fatalf("%s should not receive the card rendering budget", operation)
+		}
 	}
 }
 

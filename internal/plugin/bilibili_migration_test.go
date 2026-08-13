@@ -6,14 +6,24 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
+type fakeHTTPRoute struct {
+	path          string
+	queryContains string
+	result        rayleabot.ActionResult
+	err           error
+}
+
 type fakePluginActions struct {
+	mu            sync.Mutex
 	accounts      rayleabot.ActionResult
+	httpRoutes    []fakeHTTPRoute
 	httpResponses []rayleabot.ActionResult
 	httpErrors    []error
 	httpRequests  []rayleabot.HTTPRequest
@@ -30,7 +40,18 @@ func newFakePluginActions() *fakePluginActions {
 }
 
 func (fake *fakePluginActions) HTTPRequest(_ context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	fake.httpRequests = append(fake.httpRequests, request)
+	if fake.httpRoutes != nil {
+		if parsed, parseErr := url.Parse(request.URL); parseErr == nil {
+			for _, route := range fake.httpRoutes {
+				if parsed.Path == route.path && (route.queryContains == "" || strings.Contains(request.URL, route.queryContains)) {
+					return route.result, route.err
+				}
+			}
+		}
+	}
 	if len(fake.httpErrors) > 0 {
 		err := fake.httpErrors[0]
 		fake.httpErrors = fake.httpErrors[1:]
@@ -47,10 +68,14 @@ func (fake *fakePluginActions) HTTPRequest(_ context.Context, request rayleabot.
 }
 
 func (fake *fakePluginActions) ThirdPartyAccountRead(context.Context, rayleabot.ThirdPartyAccountReadRequest) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	return fake.accounts, nil
 }
 
 func (fake *fakePluginActions) KVGet(_ context.Context, key string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	value, exists := fake.kv[key]
 	if !exists {
 		return rayleabot.ActionResult{"exists": false}, nil
@@ -59,21 +84,29 @@ func (fake *fakePluginActions) KVGet(_ context.Context, key string) (rayleabot.A
 }
 
 func (fake *fakePluginActions) KVSet(_ context.Context, key string, value any) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	fake.kv[key] = value
 	return rayleabot.ActionResult{"ok": true}, nil
 }
 
 func (fake *fakePluginActions) KVDelete(_ context.Context, key string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	delete(fake.kv, key)
 	return rayleabot.ActionResult{"ok": true}, nil
 }
 
 func (fake *fakePluginActions) LoggerWrite(_ context.Context, request rayleabot.LoggerWriteRequest) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	fake.logs = append(fake.logs, request)
 	return rayleabot.ActionResult{"ok": true}, nil
 }
 
 func (fake *fakePluginActions) RenderImage(_ context.Context, request rayleabot.RenderImageRequest) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	fake.renders = append(fake.renders, request)
 	if len(fake.renderErrors) > 0 {
 		err := fake.renderErrors[0]
@@ -86,6 +119,8 @@ func (fake *fakePluginActions) RenderImage(_ context.Context, request rayleabot.
 }
 
 func (fake *fakePluginActions) MessageSend(_ context.Context, request rayleabot.MessageSendRequest) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
 	fake.messages = append(fake.messages, request)
 	if len(fake.messageErrors) > 0 {
 		err := fake.messageErrors[0]
@@ -167,12 +202,16 @@ func TestBilibiliUserLookupUsesWBIEndpoint(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.accounts = fixtureAccounts("primary")
 	seedSourceState(fake, time.Now(), "", "primary")
-	fake.httpResponses = []rayleabot.ActionResult{
-		httpJSONResult(200, map[string]any{
+	fake.httpRoutes = []fakeHTTPRoute{
+		{path: "/x/space/wbi/acc/info", result: httpJSONResult(200, map[string]any{
 			"code": 0,
-			"data": map[string]any{"mid": 123456, "name": "测试 UP", "face": "//i0.hdslb.com/face.jpg", "sign": "测试简介"},
-		}),
-		httpJSONResult(200, map[string]any{"code": 0, "data": map[string]any{"follower": 128000}}),
+			"data": map[string]any{
+				"mid": 123456, "name": "测试 UP", "face": "//i0.hdslb.com/face.jpg", "sign": "测试简介", "level": 6,
+				"official": map[string]any{"type": 0, "title": "bilibili 知名UP主", "desc": "认证说明"},
+			},
+		})},
+		{path: "/x/relation/stat", result: httpJSONResult(200, map[string]any{"code": 0, "data": map[string]any{"follower": 128000}})},
+		{path: "/x/space/wbi/arc/search", result: httpJSONResult(200, map[string]any{"code": 0, "data": map[string]any{"page": map[string]any{"count": 233}}})},
 	}
 	user, err := readBilibiliUserWithActions(context.Background(), fake, "123456")
 	if err != nil || user.UID != "123456" || user.Name != "测试 UP" || user.AvatarURL != "https://i0.hdslb.com/face.jpg" {
@@ -181,16 +220,29 @@ func TestBilibiliUserLookupUsesWBIEndpoint(t *testing.T) {
 	if user.Sign != "测试简介" || user.Fans != 128000 {
 		t.Fatalf("WBI user lookup profile user=%#v", user)
 	}
-	if len(fake.httpRequests) != 2 {
+	if user.Level != 6 || user.Verify != "bilibili 知名UP主" || user.VerifyOrg || user.Videos != 233 {
+		t.Fatalf("WBI user lookup detail fields user=%#v", user)
+	}
+	if len(fake.httpRequests) != 3 {
 		t.Fatalf("user lookup requests = %#v", fake.httpRequests)
 	}
 	parsed, _ := url.Parse(fake.httpRequests[0].URL)
 	if parsed.Path != "/x/space/wbi/acc/info" || parsed.Query().Get("mid") != "123456" || parsed.Query().Get("w_rid") == "" {
 		t.Fatalf("user lookup did not use signed WBI endpoint: %s", fake.httpRequests[0].URL)
 	}
-	stat, _ := url.Parse(fake.httpRequests[1].URL)
-	if stat.Path != "/x/relation/stat" || stat.Query().Get("vmid") != "123456" {
-		t.Fatalf("fans lookup did not use relation stat endpoint: %s", fake.httpRequests[1].URL)
+	// 粉丝数与投稿数并发读取，顺序不固定。
+	var sawFans, sawVideos bool
+	for _, request := range fake.httpRequests[1:] {
+		requestURL, _ := url.Parse(request.URL)
+		switch requestURL.Path {
+		case "/x/relation/stat":
+			sawFans = requestURL.Query().Get("vmid") == "123456"
+		case "/x/space/wbi/arc/search":
+			sawVideos = requestURL.Query().Get("mid") == "123456" && requestURL.Query().Get("w_rid") != ""
+		}
+	}
+	if !sawFans || !sawVideos {
+		t.Fatalf("supplementary lookups missing: fans=%v videos=%v, requests=%#v", sawFans, sawVideos, fake.httpRequests)
 	}
 }
 
@@ -198,13 +250,15 @@ func TestBilibiliUserLookupToleratesFansFailure(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.accounts = fixtureAccounts("primary")
 	seedSourceState(fake, time.Now(), "", "primary")
-	fake.httpResponses = []rayleabot.ActionResult{httpJSONResult(200, map[string]any{
-		"code": 0,
-		"data": map[string]any{"mid": 123456, "name": "测试 UP"},
-	})}
-	fake.httpErrors = []error{nil, errors.New("network down")}
+	fake.httpRoutes = []fakeHTTPRoute{
+		{path: "/x/space/wbi/acc/info", result: httpJSONResult(200, map[string]any{
+			"code": 0,
+			"data": map[string]any{"mid": 123456, "name": "测试 UP"},
+		})},
+		{path: "/x/relation/stat", err: errors.New("network down")},
+	}
 	user, err := readBilibiliUserWithActions(context.Background(), fake, "123456")
-	if err != nil || user.UID != "123456" || user.Fans != 0 {
+	if err != nil || user.UID != "123456" || user.Fans != 0 || user.Videos != 0 {
 		t.Fatalf("fans failure should be tolerated, user=%#v, err=%v", user, err)
 	}
 }

@@ -44,6 +44,9 @@ func checkSubscriptionsWithActionsAt(ctx context.Context, actions pluginActions,
 	failures := append([]string(nil), sourceResult.Errors...)
 	sent := 0
 	preparedCache := map[string]map[string]any{}
+	avatarCache := &bilibiliAvatarCache{}
+	avatarCtx, cancelAvatarResolution := context.WithTimeout(ctx, bilibiliUpdateAvatarTotalTimeout)
+	defer cancelAvatarResolution()
 	for _, item := range subscriptions {
 		dynamicInitialized := dynamicSourceInitialized(ctx, actions, item)
 		for _, update := range sourceResult.Updates {
@@ -63,7 +66,7 @@ func checkSubscriptionsWithActionsAt(ctx context.Context, actions pluginActions,
 				continue
 			}
 			prepared := prepareBilibiliUpdate(ctx, actions, update, preparedCache)
-			if sendBilibiliUpdate(ctx, actions, item, update, prepared, &failures) {
+			if sendBilibiliUpdate(ctx, avatarCtx, actions, item, update, prepared, avatarCache, &failures) {
 				sent++
 			}
 		}
@@ -191,8 +194,9 @@ func mergeMissingBilibiliDetail(target, source map[string]any) {
 	}
 }
 
-func sendBilibiliUpdate(ctx context.Context, actions pluginActions, item subscription, update, prepared map[string]any, failures *[]string) bool {
+func sendBilibiliUpdate(ctx, avatarCtx context.Context, actions pluginActions, item subscription, update, prepared map[string]any, avatarCache *bilibiliAvatarCache, failures *[]string) bool {
 	data := buildBilibiliRenderData(item, prepared)
+	inlineBilibiliUpdateAvatarsWithCache(avatarCtx, actions, data, avatarCache)
 	rendered, err := actions.RenderImage(ctx, rayleabot.RenderImageRequest{
 		Template: "bilibili-update", Data: data, Theme: "default", Output: "png", FallbackText: buildBilibiliFallback(data),
 	})

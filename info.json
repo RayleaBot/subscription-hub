@@ -1,7 +1,7 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅中心",
-  "version": "0.2.4",
+  "version": "0.2.6",
   "manifest_version": "2",
   "plugin_protocol_version": "1",
   "runtime": "go",
@@ -28,6 +28,12 @@
     },
     {
       "path": "templates/bilibili-search-results"
+    },
+    {
+      "path": "templates/weibo-search-results"
+    },
+    {
+      "path": "templates/weibo-user-card"
     }
   ],
   "capabilities": [
@@ -54,7 +60,21 @@
       "i1.hdslb.com",
       "i2.hdslb.com",
       "p.qlogo.cn",
-      "q1.qlogo.cn"
+      "q1.qlogo.cn",
+      "m.weibo.cn",
+      "s.weibo.com",
+      "tva1.sinaimg.cn",
+      "tva2.sinaimg.cn",
+      "tva3.sinaimg.cn",
+      "tva4.sinaimg.cn",
+      "tvax1.sinaimg.cn",
+      "tvax2.sinaimg.cn",
+      "tvax3.sinaimg.cn",
+      "tvax4.sinaimg.cn",
+      "wx1.sinaimg.cn",
+      "wx2.sinaimg.cn",
+      "wx3.sinaimg.cn",
+      "wx4.sinaimg.cn"
     ],
     "third_party_account_platforms": [
       "bilibili",
@@ -85,13 +105,13 @@
     {
       "name": "订阅微博推送",
       "description": "订阅当前群聊或私聊的指定微博账号更新，类型可选，不填表示全部类型",
-      "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或主页标识",
+      "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或昵称",
       "permission": "super_admin"
     },
     {
       "name": "取消微博推送",
       "description": "取消当前群聊或私聊的指定微博账号订阅，类型可选，不填表示全部类型",
-      "usage": "/取消微博推送 [微博|图片|视频|转发] UID或主页标识",
+      "usage": "/取消微博推送 [微博|图片|视频|转发] UID或昵称",
       "permission": "super_admin"
     },
     {
@@ -123,6 +143,12 @@
       "aliases": ["b站搜索UP", "B站搜索up", "B站搜索UP"],
       "description": "按昵称关键词搜索 Bilibili UP 主并以图片展示候选账号资料与 UID",
       "usage": "/b站搜索up UP昵称关键词",
+      "permission": "everyone"
+    },
+    {
+      "name": "微博搜索博主",
+      "description": "按昵称关键词搜索微博博主并以图片展示候选账号资料与 UID",
+      "usage": "/微博搜索博主 昵称关键词",
       "permission": "everyone"
     },
     {
@@ -220,7 +246,7 @@
           {
             "title": "订阅微博",
             "description": "为当前群聊或私聊订阅指定微博账号的更新，类型可选，不填表示全部类型。",
-            "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或主页标识",
+            "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或昵称",
             "command": "订阅微博推送"
           },
           {
@@ -240,6 +266,12 @@
             "description": "按昵称关键词搜索 Bilibili UP 主，以图片展示候选账号的资料与 UID。",
             "usage": "/b站搜索up UP昵称关键词",
             "command": "b站搜索up"
+          },
+          {
+            "title": "搜索微博博主",
+            "description": "按昵称关键词搜索微博博主，以图片展示候选账号的资料与 UID。",
+            "usage": "/微博搜索博主 昵称关键词",
+            "command": "微博搜索博主"
           }
         ]
       },
@@ -255,7 +287,7 @@
           {
             "title": "取消微博",
             "description": "取消当前群聊或私聊的指定微博账号订阅，类型可选，不填表示全部类型。",
-            "usage": "/取消微博推送 [微博|图片|视频|转发] UID或主页标识",
+            "usage": "/取消微博推送 [微博|图片|视频|转发] UID或昵称",
             "command": "取消微博推送"
           },
           {

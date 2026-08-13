@@ -20,11 +20,7 @@
         <header class="dynamic-header">
           <div class="author">
             <div class="avatar-wrap">
-              {{ if $authorAvatar }}
-              <img class="avatar" src="{{ $authorAvatar }}" alt="" />
-              {{ else }}
-              <div class="avatar avatar--fallback">B</div>
-              {{ end }}
+              <img class="avatar" src="assets/bilibili-default-avatar.gif"{{ if $authorAvatar }} data-avatar="{{ $authorAvatar }}"{{ end }} alt="" />
             </div>
             <div class="author-text">
               <strong>{{ $authorName }}{{ if $authorUID }}<em>（{{ $authorUID }}）</em>{{ end }}</strong>
@@ -81,11 +77,7 @@
         <section class="repost-card" aria-label="转发内容">
           <header class="repost-header">
             <div class="repost-author">
-              {{ if $originalAvatar }}
-              <img class="repost-avatar" src="{{ $originalAvatar }}" alt="" />
-              {{ else }}
-              <div class="repost-avatar repost-avatar--fallback">原</div>
-              {{ end }}
+              <img class="repost-avatar" src="assets/bilibili-default-avatar.gif"{{ if $originalAvatar }} data-avatar="{{ $originalAvatar }}"{{ end }} data-fallback="assets/bilibili-default-avatar.gif" alt="" />
               <div>
                 <strong>{{ $originalAuthor }}</strong>
                 <span>{{ .category }}{{ if .created_at }} · {{ .created_at }}{{ end }}</span>
@@ -123,11 +115,7 @@
             <div class="subscriber-list">
               {{ range .subscriber_cards }}
               <div class="subscriber-card">
-                {{ if .avatar_url }}
-                <img class="subscriber-avatar" src="{{ .avatar_url }}" alt="" />
-                {{ else }}
-                <div class="subscriber-avatar subscriber-avatar--fallback">{{ if .display_name }}{{ .display_name }}{{ else }}{{ .id }}{{ end }}</div>
-                {{ end }}
+                <img class="subscriber-avatar" src="assets/bilibili-default-avatar.gif"{{ if .avatar_url }} data-avatar="{{ .avatar_url }}"{{ end }} alt="" />
                 <div class="subscriber-info">
                   <div class="subscriber-name-row">
                     <strong>{{ .display_name }}</strong>
@@ -154,5 +142,16 @@
         </footer>
       </article>
     </main>
+    <script>
+      for (const image of document.querySelectorAll("img[data-avatar]")) {
+        const source = image.dataset.avatar;
+        if (!source) continue;
+        image.addEventListener("error", () => {
+          image.removeAttribute("data-avatar");
+          image.src = image.dataset.fallback || "assets/bilibili-default-avatar.gif";
+        }, { once: true });
+        image.src = source;
+      }
+    </script>
   </body>
 </html>

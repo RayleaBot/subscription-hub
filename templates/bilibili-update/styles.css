@@ -83,19 +83,6 @@ body {
   box-shadow: 0 0 0 1px rgba(251, 114, 153, 0.18);
 }
 
-.avatar--fallback,
-.repost-avatar--fallback {
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-weight: 800;
-}
-
-.avatar--fallback {
-  background: linear-gradient(135deg, var(--bili-pink), var(--bili-blue));
-  font-size: 24px;
-}
-
 .author-text,
 .repost-author div {
   display: grid;
@@ -469,12 +456,6 @@ h1 {
   background: #ffffff;
 }
 
-.repost-avatar--fallback {
-  background: #ccd3dd;
-  color: #ffffff;
-  font-size: 14px;
-}
-
 .repost-author strong {
   max-width: 500px;
   color: #33373d;
@@ -599,19 +580,6 @@ h1 {
   border-radius: 50%;
   object-fit: cover;
   background: var(--card-soft);
-}
-
-.subscriber-avatar--fallback {
-  display: grid;
-  place-items: center;
-  max-width: 34px;
-  overflow: hidden;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--bili-pink), var(--bili-blue));
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1;
-  text-align: center;
 }
 
 .subscriber-info {

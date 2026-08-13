@@ -370,6 +370,7 @@ func sendBilibiliPreview(ctx context.Context, event *rayleabot.EventContext, upd
 		item.Name = firstText(author["name"], "Bilibili 预览")
 	}
 	data := buildBilibiliRenderData(item, update)
+	inlineBilibiliUpdateAvatars(ctx, event.Actions(), data)
 	result, err := event.Actions().RenderImage(ctx, rayleabot.RenderImageRequest{
 		Template: "bilibili-update", Data: data, Theme: "default", Output: "png", FallbackText: buildBilibiliFallback(data),
 	})

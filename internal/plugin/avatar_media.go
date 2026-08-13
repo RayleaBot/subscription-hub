@@ -139,6 +139,10 @@ func validateAvatarSourceURL(sourceURL string) (*url.URL, string, error) {
 			return nil, "", errUnsupportedAvatarURL
 		}
 		return parsed, "https://qun.qq.com/", nil
+	case "tva1.sinaimg.cn", "tva2.sinaimg.cn", "tva3.sinaimg.cn", "tva4.sinaimg.cn",
+		"tvax1.sinaimg.cn", "tvax2.sinaimg.cn", "tvax3.sinaimg.cn", "tvax4.sinaimg.cn",
+		"wx1.sinaimg.cn", "wx2.sinaimg.cn", "wx3.sinaimg.cn", "wx4.sinaimg.cn":
+		return parsed, "https://weibo.com/", nil
 	default:
 		return nil, "", errUnsupportedAvatarURL
 	}

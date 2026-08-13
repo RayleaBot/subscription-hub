@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
@@ -259,22 +261,47 @@ type bilibiliUser struct {
 }
 
 func resolveBilibiliUsers(ctx context.Context, event *rayleabot.EventContext, query string) ([]bilibiliUser, error) {
+	return resolveBilibiliUsersWithActions(ctx, event.Actions(), query)
+}
+
+func resolveBilibiliUsersWithActions(ctx context.Context, actions pluginActions, query string) ([]bilibiliUser, error) {
 	query = strings.TrimSpace(query)
 	if uid := subjectIDFromInput("bilibili", query); uid != "" {
-		user, err := readBilibiliUser(ctx, event, uid)
+		user, err := readBilibiliUserWithActions(ctx, actions, uid)
 		if err != nil {
 			return nil, err
 		}
 		return []bilibiliUser{user}, nil
 	}
-	return searchBilibili(ctx, event, query)
+	return searchBilibiliWithActions(ctx, actions, query)
 }
 
-func readBilibiliUser(ctx context.Context, event *rayleabot.EventContext, uid string) (bilibiliUser, error) {
-	return readBilibiliUserWithActions(ctx, event.Actions(), uid)
+// matchBilibiliUserByQuery 在解析结果中挑选订阅目标：UID/链接输入按 UID 精确匹配，
+// 昵称输入要求昵称完全一致；都不满足时返回 nil（调用方提示候选列表）。
+func matchBilibiliUserByQuery(users []bilibiliUser, query string) *bilibiliUser {
+	trimmed := strings.TrimSpace(query)
+	if uid := subjectIDFromInput("bilibili", trimmed); uid != "" {
+		for index := range users {
+			if users[index].UID == uid {
+				return &users[index]
+			}
+		}
+	}
+	for index := range users {
+		if strings.EqualFold(strings.TrimSpace(users[index].Name), trimmed) {
+			return &users[index]
+		}
+	}
+	return nil
 }
+
+// bilibiliUserDetailTimeout 限制 UID 资料读取（资料+粉丝数+投稿数）的整体耗时，
+// 确保订阅回复在插件事件 60s 超时前发出。
+const bilibiliUserDetailTimeout = 15 * time.Second
 
 func readBilibiliUserWithActions(ctx context.Context, actions pluginActions, uid string) (bilibiliUser, error) {
+	ctx, cancel := context.WithTimeout(ctx, bilibiliUserDetailTimeout)
+	defer cancel()
 	accounts, err := readBilibiliAccounts(ctx, actions)
 	if err != nil {
 		return bilibiliUser{}, err
@@ -299,32 +326,72 @@ func readBilibiliUserWithActions(ctx context.Context, actions pluginActions, uid
 		Name:      name,
 		AvatarURL: normalizeBilibiliURL(firstNonNil(data["face"], data["avatar"], data["upic"])),
 		Sign:      cleanText(data["sign"]),
+		Level:     int(intScalar(data["level"])),
 	}
-	user.Fans = readBilibiliFans(ctx, actions, accounts[0], resolvedUID)
+	if verify := mapValue(data["official"]); verify != nil {
+		user.Verify = firstCleanText(verify["title"], verify["desc"])
+		user.VerifyOrg = intScalar(verify["type"]) == 1
+	}
+	// 粉丝数与投稿数是补充信息，并发读取并各给 8s 预算，避免串行放大整体耗时。
+	var wait sync.WaitGroup
+	wait.Add(2)
+	go func() {
+		defer wait.Done()
+		user.Fans = readBilibiliFans(ctx, actions, accounts[0], resolvedUID)
+	}()
+	go func() {
+		defer wait.Done()
+		user.Videos = readBilibiliVideos(ctx, actions, accounts[0], resolvedUID)
+	}()
+	wait.Wait()
 	return user, nil
 }
 
 // readBilibiliFans 读取 UP 主粉丝数，失败时静默返回 0（卡片不显示粉丝行）。
 func readBilibiliFans(ctx context.Context, actions pluginActions, account bilibiliAccount, uid string) int {
 	endpoint := bilibiliRelationStatURL + "?" + url.Values{"vmid": []string{uid}}.Encode()
-	document, err := newBilibiliClient(actions).requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
+	client := newBilibiliClient(actions)
+	client.timeoutSeconds = 8
+	document, err := client.requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
 	if err != nil {
 		return 0
 	}
 	return int(intScalar(nestedValue(document, "data", "follower")))
 }
 
+// readBilibiliVideos 读取 UP 主投稿视频数，失败时静默返回 0（卡片不显示视频行）。
+func readBilibiliVideos(ctx context.Context, actions pluginActions, account bilibiliAccount, uid string) int {
+	values := bilibiliDeviceQuery()
+	values.Set("mid", uid)
+	values.Set("ps", "1")
+	values.Set("pn", "1")
+	values.Set("order", "pubdate")
+	endpoint := bilibiliUserVideosURL + "?" + values.Encode()
+	client := newBilibiliClient(actions)
+	client.timeoutSeconds = 8
+	document, err := client.requestJSON(ctx, "GET", endpoint, account, true, false, "", true)
+	if err != nil {
+		return 0
+	}
+	return int(intScalar(nestedValue(document, "data", "page", "count")))
+}
+
 func searchBilibili(ctx context.Context, event *rayleabot.EventContext, query string) ([]bilibiliUser, error) {
 	return searchBilibiliWithActions(ctx, event.Actions(), query)
 }
 
-const bilibiliSearchResultLimit = 10
+const (
+	bilibiliSearchResultLimit  = 10
+	bilibiliSearchTotalTimeout = 15 * time.Second
+)
 
 func searchBilibiliWithActions(ctx context.Context, actions pluginActions, query string) ([]bilibiliUser, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, errors.New("用法：/b站搜索up UP昵称关键词")
 	}
+	ctx, cancel := context.WithTimeout(ctx, bilibiliSearchTotalTimeout)
+	defer cancel()
 	accounts, err := readBilibiliAccounts(ctx, actions)
 	if err != nil {
 		return nil, err

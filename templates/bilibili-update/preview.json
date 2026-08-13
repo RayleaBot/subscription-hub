@@ -11,7 +11,7 @@
   "category": "视频动态",
   "author": {
     "name": "RayleaBot 示例账号",
-    "avatar": "assets/avatar.svg",
+    "avatar": "assets/bilibili-default-avatar.gif",
     "uid": "100000000000000009"
   },
   "author_uid_text": "UID 100000000000000009",
@@ -49,7 +49,7 @@
     "category": "图文动态",
     "author": {
       "name": "原动态作者",
-      "avatar": "assets/original-avatar.svg",
+      "avatar": "assets/bilibili-default-avatar.gif",
       "uid": "10000001"
     },
     "author_uid_text": "UID 10000001",

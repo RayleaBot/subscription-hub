@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/assets"
@@ -20,6 +21,7 @@ const (
 	defaultDeliveryMaxAgeMinutes = 30
 	minimumDeliveryMaxAgeMinutes = 1
 	maximumDeliveryMaxAgeMinutes = 24 * 60
+	interactiveReplyTimeout      = 50 * time.Second
 )
 
 var schedulerRegistered atomic.Bool
@@ -98,57 +100,140 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 	if command == "" {
 		return event.Result(map[string]any{"handled": false})
 	}
-	current, err := loadSettings(ctx, event)
+	platform, operation := commandOperation(command)
+	if operation == "" {
+		return event.Result(map[string]any{"handled": false})
+	}
+
+	// 搜索、订阅变更和预览会串联配置读写、第三方请求、头像内联与图片渲染。
+	// 为默认 60s 插件事件期限保留终态回复余量，并让各阶段共享同一个总预算。
+	commandCtx := ctx
+	cancel := func() {}
+	if interactiveCommandOperation(operation) {
+		commandCtx, cancel = context.WithTimeout(ctx, interactiveReplyTimeout)
+	}
+	defer cancel()
+
+	if operation == "search" {
+		query := strings.Join(event.Event.Args(), " ")
+		if platform == "weibo" {
+			return replyWeiboUserSearch(commandCtx, event, query)
+		}
+		return replyBilibiliUserSearch(commandCtx, event, query)
+	}
+	if operation == "preview" {
+		return previewSubscriptionCard(commandCtx, event, strings.Join(event.Event.Args(), " "))
+	}
+
+	current, err := loadSettings(commandCtx, event)
 	if err != nil {
 		return err
 	}
-	platform, operation := commandOperation(command)
 	switch operation {
 	case "status":
 		return event.SendText(formatStatus(current))
 	case "add":
-		outcome := addSubscription(ctx, &current, event, platform)
+		outcome := addSubscription(commandCtx, &current, event, platform)
 		if outcome.Changed {
-			if err := saveSettings(ctx, event, current); err != nil {
+			if err := saveSettings(commandCtx, event, current); err != nil {
 				return err
 			}
 		}
-		return replySubscriptionOutcome(ctx, event, platform, outcome)
+		return replySubscriptionOutcome(commandCtx, event, platform, outcome)
 	case "remove":
 		outcome := removeSubscription(&current, event, platform)
 		if outcome.Changed {
-			if err := saveSettings(ctx, event, current); err != nil {
+			if err := saveSettings(commandCtx, event, current); err != nil {
 				return err
 			}
 		}
-		return replySubscriptionOutcome(ctx, event, platform, outcome)
+		return replySubscriptionOutcome(commandCtx, event, platform, outcome)
 	case "list", "list_all":
 		return event.SendText(formatSubscriptions(current, event, platform, operation == "list_all"))
 	case "check":
 		result := checkSubscriptions(ctx, event, current)
 		return event.SendText(subscriptionCheckSummary(result))
-	case "search":
-		return replyBilibiliUserSearch(ctx, event, strings.Join(event.Event.Args(), " "))
-	case "preview":
-		return previewSubscriptionCard(ctx, event, strings.Join(event.Event.Args(), " "))
+	}
+	return event.Result(map[string]any{"handled": false})
+}
+
+func interactiveCommandOperation(operation string) bool {
+	switch operation {
+	case "add", "remove", "search", "preview":
+		return true
 	default:
-		return event.Result(map[string]any{"handled": false})
+		return false
 	}
 }
 
-// replySubscriptionOutcome 回复订阅变更结果：bilibili 平台成功时发送 UP 主资料卡片，
-// 其余情况（非 bilibili、未变更、渲染失败）回退为文字。
+// replySubscriptionOutcome 回复订阅变更结果：bilibili/微博平台成功时发送资料卡片，
+// 其余情况（其他平台、未变更、渲染失败）回退为文字。
 func replySubscriptionOutcome(ctx context.Context, event *rayleabot.EventContext, platform string, outcome subscriptionOutcome) error {
-	if platform != "bilibili" || !outcome.Changed || outcome.Item == nil {
+	if outcome.Action == "candidates" {
+		return replySubscriptionCandidates(ctx, event, platform, outcome)
+	}
+	if !outcome.Changed || outcome.Item == nil {
 		return event.SendText(outcome.Message)
 	}
 	item := *outcome.Item
-	user := bilibiliUser{UID: item.UID, Name: item.Name, AvatarURL: item.AvatarURL}
-	if outcome.User != nil {
-		user = *outcome.User
+	switch platform {
+	case "bilibili":
+		user := bilibiliUser{UID: item.UID, Name: item.Name, AvatarURL: item.AvatarURL}
+		if outcome.User != nil {
+			user = *outcome.User
+		}
+		// 头像内联为 dataURL；内联失败时回退模板默认头像，不再把远程 URL 交给渲染。
+		user.AvatarURL = inlineBilibiliCardAvatar(ctx, event.Actions(), firstText(user.AvatarURL, item.AvatarURL))
+		item.AvatarURL = ""
+		data := buildBilibiliUserCardData(outcome.Action, item, user, outcome.Services)
+		return sendBilibiliUserCard(ctx, event, data, outcome.Message)
+	case "weibo":
+		user := weiboUser{UID: item.UID, Name: item.Name, AvatarURL: item.AvatarURL}
+		if outcome.WeiboUser != nil {
+			user = *outcome.WeiboUser
+		}
+		user.AvatarURL = inlineWeiboCardAvatar(ctx, event.Actions(), firstText(user.AvatarURL, item.AvatarURL))
+		data := buildWeiboUserCardData(outcome.Action, item, user, outcome.Services)
+		return sendRenderedCard(ctx, event, weiboUserCardTemplate, data, outcome.Message)
 	}
-	data := buildBilibiliUserCardData(outcome.Action, item, user, outcome.Services)
-	return sendBilibiliUserCard(ctx, event, data, outcome.Message)
+	return event.SendText(outcome.Message)
+}
+
+// replySubscriptionCandidates 回复昵称无精确匹配的场景：提示文字走非终态的 message.send，
+// 搜索结果图片占用事件的终态回复（每个事件只允许一次终态回复）；图片失败时以 result 收尾。
+func replySubscriptionCandidates(ctx context.Context, event *rayleabot.EventContext, platform string, outcome subscriptionOutcome) error {
+	if _, err := event.Actions().MessageSend(ctx, rayleabot.MessageSendRequest{
+		TargetType: normalizedTargetType(event.Event.Target.Type),
+		TargetID:   event.Event.Target.ID,
+		Message:    rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text(outcome.Message)}},
+	}); err != nil {
+		// 非终态发送失败时退化为终态文字回复。
+		return event.SendText(outcome.Message)
+	}
+	var data map[string]any
+	template := ""
+	switch platform {
+	case "bilibili":
+		if len(outcome.BilibiliCandidates) > 0 {
+			renderUsers := prepareBilibiliSearchAvatars(ctx, event.Actions(), outcome.BilibiliCandidates)
+			data = buildBilibiliSearchCardData(outcome.CandidatesQuery, renderUsers, event.CommandPrefixes)
+			template = bilibiliSearchResultsTemplate
+		}
+	case "weibo":
+		if len(outcome.WeiboCandidates) > 0 {
+			renderUsers := prepareWeiboSearchAvatars(ctx, event.Actions(), outcome.WeiboCandidates)
+			data = buildWeiboSearchCardData(outcome.CandidatesQuery, renderUsers, event.CommandPrefixes)
+			template = weiboSearchResultsTemplate
+		}
+	}
+	if template == "" {
+		return event.Result(map[string]any{"handled": true, "card": false})
+	}
+	imagePath, err := renderBilibiliCardImage(ctx, event.Actions(), template, data, outcome.Message)
+	if err != nil || imagePath == "" {
+		return event.Result(map[string]any{"handled": true, "card": false})
+	}
+	return event.Send(event.Event.Target.Type, event.Event.Target.ID, rayleabot.Image(imagePath))
 }
 
 func commandOperation(command string) (string, string) {
@@ -173,6 +258,8 @@ func commandOperation(command string) (string, string) {
 		return "netease_music", "remove"
 	case "b站搜索up", "b站搜索UP", "B站搜索up", "B站搜索UP":
 		return "bilibili", "search"
+	case "微博搜索博主":
+		return "weibo", "search"
 	case "订阅列表":
 		return "", "list"
 	case "b站订阅列表":
@@ -225,7 +312,14 @@ func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) 
 			if resolveErr != nil || len(users) == 0 {
 				return event.Result(map[string]any{"platform": platform, "query": query, "exact": false, "candidates": []any{}, "message": friendlyBilibiliError(resolveErr)})
 			}
-			return event.Result(map[string]any{"platform": platform, "query": query, "exact": len(users) == 1, "user": users[0], "candidates": users})
+			return event.Result(bilibiliManagementResolution(query, users))
+		}
+		if platform == "weibo" {
+			users, resolveErr := resolveWeiboUsers(ctx, event, query)
+			if resolveErr != nil || len(users) == 0 {
+				return event.Result(map[string]any{"platform": platform, "query": query, "exact": false, "candidates": []any{}, "message": friendlyWeiboError(resolveErr)})
+			}
+			return event.Result(weiboManagementResolution(query, users))
 		}
 		uid := subjectIDFromInput(platform, query)
 		if uid == "" {
@@ -240,6 +334,24 @@ func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) 
 	default:
 		return event.Result(map[string]any{"handled": false, "message": "未知订阅中心管理动作。"})
 	}
+}
+
+func bilibiliManagementResolution(query string, users []bilibiliUser) map[string]any {
+	result := map[string]any{"platform": "bilibili", "query": query, "exact": false, "candidates": users}
+	if matched := matchBilibiliUserByQuery(users, query); matched != nil {
+		result["exact"] = true
+		result["user"] = *matched
+	}
+	return result
+}
+
+func weiboManagementResolution(query string, users []weiboUser) map[string]any {
+	result := map[string]any{"platform": "weibo", "query": query, "exact": false, "candidates": users}
+	if matched := matchWeiboUserByQuery(users, query); matched != nil {
+		result["exact"] = true
+		result["user"] = *matched
+	}
+	return result
 }
 
 func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings, error) {
@@ -312,15 +424,23 @@ func normalizeDeliveryMaxAgeMinutes(value int) int {
 }
 
 type subscriptionOutcome struct {
-	Message  string
-	Changed  bool
-	Action   string
-	Item     *subscription
-	User     *bilibiliUser
-	Services []string
+	Message            string
+	Changed            bool
+	Action             string
+	Item               *subscription
+	User               *bilibiliUser
+	WeiboUser          *weiboUser
+	Services           []string
+	CandidatesQuery    string
+	BilibiliCandidates []bilibiliUser
+	WeiboCandidates    []weiboUser
 }
 
 func addSubscription(ctx context.Context, current *settings, event *rayleabot.EventContext, platform string) subscriptionOutcome {
+	return addSubscriptionWithActions(ctx, event.Actions(), current, event, platform)
+}
+
+func addSubscriptionWithActions(ctx context.Context, actions pluginActions, current *settings, event *rayleabot.EventContext, platform string) subscriptionOutcome {
 	services, query, ok := parseSubscriptionArgs(event.Event.Args(), platform)
 	if !ok {
 		return subscriptionOutcome{Message: "请填写要订阅的账号 ID 或主页标识。"}
@@ -329,14 +449,43 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 	name := strings.TrimSpace(query)
 	avatarURL := ""
 	var resolvedUser *bilibiliUser
+	var resolvedWeiboUser *weiboUser
 	if platform == "bilibili" {
-		users, err := resolveBilibiliUsers(ctx, event, query)
+		users, err := resolveBilibiliUsersWithActions(ctx, actions, query)
 		if err != nil || len(users) == 0 {
 			return subscriptionOutcome{Message: friendlyBilibiliError(err)}
 		}
-		uid, name, avatarURL = users[0].UID, users[0].Name, users[0].AvatarURL
-		user := users[0]
-		resolvedUser = &user
+		matched := matchBilibiliUserByQuery(users, query)
+		if matched == nil {
+			return subscriptionOutcome{
+				Message:            "没有找到昵称与「" + query + "」完全一致的 Bilibili UP 主。可以参考下面的搜索结果，用更准确的昵称或 UID 重新订阅。",
+				Action:             "candidates",
+				CandidatesQuery:    query,
+				BilibiliCandidates: users,
+			}
+		}
+		uid, name, avatarURL = matched.UID, matched.Name, matched.AvatarURL
+		resolvedUser = matched
+	} else if platform == "weibo" {
+		users, err := resolveWeiboUsersWithActions(ctx, actions, query)
+		if err == nil && len(users) > 0 {
+			matched := matchWeiboUserByQuery(users, query)
+			if matched == nil {
+				return subscriptionOutcome{
+					Message:         "没有找到昵称与「" + query + "」完全一致的微博博主。可以参考下面的搜索结果，用更准确的昵称或 UID 重新订阅。",
+					Action:          "candidates",
+					CandidatesQuery: query,
+					WeiboCandidates: users,
+				}
+			}
+			uid, name, avatarURL = matched.UID, matched.Name, matched.AvatarURL
+			resolvedWeiboUser = matched
+		} else if explicitUID := weiboUIDFromInput(query); explicitUID != "" {
+			// 显式 UID/主页链接在联网解析失败时保留本地订阅行为。
+			uid, name = explicitUID, explicitUID
+		} else {
+			return subscriptionOutcome{Message: friendlyWeiboError(err)}
+		}
 	} else {
 		if uid == "" {
 			uid = safeSubjectID(query)
@@ -369,12 +518,13 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 		item.Services = mergeServices(item.Services, services, platform)
 		item.Subscribers = mergeSubscriber(item.Subscribers, event)
 		return subscriptionOutcome{
-			Message:  "已更新订阅：" + platformName(platform) + " " + item.Name + "（" + servicesText(item.Services, platform) + "）",
-			Changed:  true,
-			Action:   "updated",
-			Item:     item,
-			User:     resolvedUser,
-			Services: item.Services,
+			Message:   "已更新订阅：" + platformName(platform) + " " + item.Name + "（" + servicesText(item.Services, platform) + "）",
+			Changed:   true,
+			Action:    "updated",
+			Item:      item,
+			User:      resolvedUser,
+			WeiboUser: resolvedWeiboUser,
+			Services:  item.Services,
 		}
 	}
 	current.Subscriptions = append(current.Subscriptions, subscription{
@@ -382,12 +532,13 @@ func addSubscription(ctx context.Context, current *settings, event *rayleabot.Ev
 		TargetName: currentTargetName(event), Services: services, Subscribers: mergeSubscriber(nil, event), Enabled: true,
 	})
 	return subscriptionOutcome{
-		Message:  "已订阅：" + platformName(platform) + " " + name + "（" + servicesText(services, platform) + "）",
-		Changed:  true,
-		Action:   "subscribed",
-		Item:     &current.Subscriptions[len(current.Subscriptions)-1],
-		User:     resolvedUser,
-		Services: services,
+		Message:   "已订阅：" + platformName(platform) + " " + name + "（" + servicesText(services, platform) + "）",
+		Changed:   true,
+		Action:    "subscribed",
+		Item:      &current.Subscriptions[len(current.Subscriptions)-1],
+		User:      resolvedUser,
+		WeiboUser: resolvedWeiboUser,
+		Services:  services,
 	}
 }
 

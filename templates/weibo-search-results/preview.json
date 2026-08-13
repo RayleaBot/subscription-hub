@@ -1,0 +1,89 @@
+{
+  "query": "测试博主",
+  "subtitle": "微博 · 订阅中心",
+  "platform": "微博",
+  "count": 8,
+  "users": [
+    {
+      "rank": 1,
+      "name": "示例博主一号",
+      "uid_text": "UID 6000000001",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "粉丝 1286.5万",
+      "verify_text": "微博认证：知名科技博主",
+      "verify_org": false,
+      "sign": "这个简介用于检查搜索结果卡片的长文本截断效果，简介区域最多展示一行。"
+    },
+    {
+      "rank": 2,
+      "name": "示例博主二号",
+      "uid_text": "UID 6000000002",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "粉丝 864.2万",
+      "verify_text": "微博认证：示例科技有限公司官方微博",
+      "verify_org": true,
+      "sign": "每周三、五更新，感谢关注。"
+    },
+    {
+      "rank": 3,
+      "name": "示例博主三号",
+      "uid_text": "UID 6000000003",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "粉丝 452.0万",
+      "verify_text": "微博认证",
+      "verify_org": false,
+      "sign": "记录生活的日常博主。"
+    },
+    {
+      "rank": 4,
+      "name": "示例博主四号",
+      "uid_text": "UID 6000000004",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "粉丝 98.6万",
+      "verify_text": "",
+      "verify_org": false,
+      "sign": ""
+    },
+    {
+      "rank": 5,
+      "name": "示例博主五号",
+      "uid_text": "UID 6000000005",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "粉丝 45.1万",
+      "verify_text": "微博认证：美食领域创作者",
+      "verify_org": false,
+      "sign": "唯有美食不可辜负。"
+    },
+    {
+      "rank": 6,
+      "name": "示例博主六号",
+      "uid_text": "UID 6000000006",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "粉丝 12.3万",
+      "verify_text": "",
+      "verify_org": false,
+      "sign": "分享摄影与旅行。"
+    },
+    {
+      "rank": 7,
+      "name": "示例博主七号",
+      "uid_text": "UID 6000000007",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "粉丝 8.4万",
+      "verify_text": "微博认证：示例新闻媒体官方账号",
+      "verify_org": true,
+      "sign": "权威资讯，每日速递。"
+    },
+    {
+      "rank": 8,
+      "name": "示例博主八号",
+      "uid_text": "UID 6000000008",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "fans_text": "",
+      "verify_text": "",
+      "verify_org": false,
+      "sign": ""
+    }
+  ],
+  "footer_hint": "使用“前缀 + 订阅微博推送 [类型] UID或昵称”"
+}

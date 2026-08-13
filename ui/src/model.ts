@@ -8,7 +8,7 @@ export const MAX_DELIVERY_MAX_AGE_MINUTES = 24 * 60
 
 export const PLATFORM_OPTIONS = [
   { value: 'bilibili', label: 'Bilibili', subjectLabel: 'UID', inputPlaceholder: 'UID 或 Bilibili 用户名' },
-  { value: 'weibo', label: '微博', subjectLabel: 'UID', inputPlaceholder: 'UID 或微博主页标识' },
+  { value: 'weibo', label: '微博', subjectLabel: 'UID', inputPlaceholder: 'UID 或微博昵称' },
   { value: 'douyin', label: '抖音', subjectLabel: '抖音号', inputPlaceholder: '抖音号或主页标识' },
   { value: 'netease_music', label: '网易云音乐', subjectLabel: 'ID', inputPlaceholder: '歌曲、歌单、专辑或音乐人 ID' },
 ] as const satisfies ReadonlyArray<{

@@ -1,0 +1,9 @@
+{
+  "id": "weibo-search-results",
+  "version": "1",
+  "entry_html": "template.html",
+  "stylesheet": "styles.css",
+  "input_schema": "input.schema.json",
+  "width": 900,
+  "height": 1200
+}
