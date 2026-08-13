@@ -1,30 +1,224 @@
-# RayleaBot Subscription Hub Plugin
+# 订阅中心
 
-`raylea.subscription-hub` 提供第三方内容订阅、定时检查、推送渲染和 Vue 管理页面。插件后端、管理页面、模板与静态资源共同进入独立 artifact。
+RayleaBot 官方插件 · `raylea.subscription-hub`
 
-## 目录结构
+订阅平台账号，把更新推到指定群聊或私聊。Bilibili 支持定时检查并发送图文推送卡片；微博支持搜索博主、订阅资料卡片；抖音和网易云音乐可以写入订阅并用命令管理。
 
-- `cmd/subscription-hub/`：只负责启动进程。
-- `internal/plugin/`：订阅命令、平台处理、调度和测试。
-- `internal/assets/`：由 Go 嵌入的默认配置；构建时映射为 artifact 根目录的 `default_config.json`。
-- `ui/`：Vue 管理页面。
-- `templates/`：推送渲染模板与静态资源。
-- `tools/build/`：统一组装后端、UI、默认配置与模板。
+## 功能
 
-## 本地联调
+- 为当前群聊或私聊订阅 Bilibili、微博、抖音、网易云音乐对象
+- 按类型筛选：例如只收直播、只收视频、只收图文
+- 按昵称搜索 Bilibili UP 主和微博博主，用图片展示候选资料与 UID
+- 订阅、取消订阅成功时，Bilibili / 微博发送资料卡片
+- Bilibili 直播与动态按约每分钟检查一次，有更新则推送卡片
+- 在插件管理页集中开关订阅中心、设置投递时效、编辑多目标订阅
+- 超级管理员可立即检查、预览卡片、查看全部会话的订阅列表
 
-将本仓库路径写入 RayleaBot 根目录下被忽略的 `plugin-workspace.local.json`，并运行：
+## 安装
 
-```powershell
-$env:RAYLEA_PLUGIN_DEV = 'watch'
-$env:RAYLEA_SERVER_RELOAD = 'watch'
-node scripts/start-dev.mjs
+本插件独立发布，不随 RayleaBot 主程序打包。安装后默认停用，需要在插件列表里**启用**才会工作。推送卡片依赖 RayleaBot 的图片渲染环境。
+
+### 插件商店
+
+1. 打开 Web 管理面，进入 [插件商店](https://github.com/RayleaBot/RayleaBot/blob/main/docs/user/management-surface.md)（`/plugins/store`）。
+2. 找到 **订阅中心**，安装与当前系统匹配的版本。
+3. 安装前确认：插件会作为本机原生程序运行。
+4. 到 **插件列表**（`/plugins`）启用 `raylea.subscription-hub`。
+
+### 本地安装包
+
+也可以在插件列表中安装本仓库 [GitHub Release](https://github.com/RayleaBot/plugin-subscription-hub/releases) 里对应平台的 ZIP：
+
+| 平台 | 资源 |
+| --- | --- |
+| Windows x64 | `windows-x64` |
+| Linux x64 | `linux-x64` |
+| macOS arm64 | `macos-arm64` |
+
+### 使用前准备
+
+1. 打开 **三方账号**（`/third-party-accounts`），为需要访问的平台保存 Cookie。Bilibili 搜索、用户解析和更新检查需要有效账号。微博账号用于昵称搜索和完整资料补全；通过 UID 或主页链接订阅、取消订阅不以微博账号为前提，资料不完整时卡片使用默认头像和已有标识。
+2. 确认插件已启用，且订阅中心管理页里的总开关为开启。
+3. 订阅、取消订阅、立即检查、预览卡片和「全部订阅列表」需要**超级管理员**。在 **权限策略** 里配置超级管理员。
+
+## 使用方法
+
+命令前缀以管理面 **插件设置** 为准，下面按默认前缀 `/` 书写。订阅和取消订阅绑定**当前会话**：在群里发就推到这个群，私聊发就推到这个私聊。
+
+### 日常查询
+
+| 命令 | 权限 | 说明 |
+| --- | --- | --- |
+| `/订阅状态` | 所有人 | 查看启用状态、订阅数量 |
+| `/订阅列表` | 所有人 | 当前会话的全部订阅 |
+| `/b站订阅列表` | 所有人 | 当前会话的 Bilibili 订阅 |
+| `/微博订阅列表` | 所有人 | 当前会话的微博订阅 |
+| `/抖音订阅列表` | 所有人 | 当前会话的抖音订阅 |
+| `/网易云音乐订阅列表` | 所有人 | 当前会话的网易云音乐订阅 |
+| `/b站搜索up <关键词>` | 所有人 | 搜索 Bilibili UP 主，图片展示资料和 UID |
+| `/微博搜索博主 <关键词>` | 所有人 | 搜索微博博主，图片展示资料和 UID |
+
+`/b站搜索UP`、`/B站搜索up`、`/B站搜索UP` 与 `/b站搜索up` 相同。
+
+### 订阅与取消
+
+| 命令 | 权限 | 说明 |
+| --- | --- | --- |
+| `/订阅b站推送 [类型] UID或昵称` | 超级管理员 | 订阅 Bilibili；类型可选 |
+| `/取消b站推送 [类型] UID或昵称` | 超级管理员 | 取消 Bilibili；不填类型表示全部 |
+| `/订阅微博推送 [类型] UID或昵称` | 超级管理员 | 订阅微博；类型可选 |
+| `/取消微博推送 [类型] UID或昵称` | 超级管理员 | 取消微博 |
+| `/订阅抖音推送 [类型] 抖音号或主页标识` | 超级管理员 | 写入抖音订阅 |
+| `/取消抖音推送 [类型] 抖音号或主页标识` | 超级管理员 | 取消抖音订阅 |
+| `/订阅网易云音乐推送 [类型] ID或主页标识` | 超级管理员 | 写入网易云音乐订阅 |
+| `/取消网易云音乐推送 [类型] ID或主页标识` | 超级管理员 | 取消网易云音乐订阅 |
+
+类型可以省略，省略表示该平台全部类型。
+
+| 平台 | 可选类型 |
+| --- | --- |
+| Bilibili | `直播` `视频` `图文` `文章` `转发` |
+| 微博 | `微博` `图片` `视频` `转发` |
+| 抖音 | `视频` `图文` `直播` |
+| 网易云音乐 | `歌曲` `专辑` `歌单` `音乐人` |
+
+Bilibili 的「图文」也可写成「动态」，「文章」也可写成「专栏」。对象可以是 UID、昵称或主页链接。
+
+```text
+你：/b站搜索up 永雏塔菲
+机器人：（候选 UP 主卡片，含 UID）
+
+你：/订阅b站推送 直播 永雏塔菲
+机器人：（订阅成功资料卡片）
+
+你：/订阅b站推送 https://space.bilibili.com/123456
+机器人：（订阅该 UID 的全部类型）
+
+你：/订阅微博推送 视频 1234567890
+机器人：（微博订阅资料卡片）
+
+你：/取消b站推送 直播 永雏塔菲
+机器人：（取消该账号的直播订阅；若还有其他类型则保留）
 ```
 
-启动脚本会把主仓库的 Go 与 Vue SDK 映射到 `.rayleabot/`，构建当前平台 artifact，再通过离线 `plugin dev-sync` 原子同步到 `plugins/installed/`。构建或同步失败时继续使用上一个已安装产物。
+昵称必须与平台资料完全一致。对不上时，插件会发搜索结果，请改用更准确的昵称或 UID。
 
-## 发布
+同一账号在同一会话里再次订阅，会合并类型并更新资料，而不是重复一条。发订阅命令的人会记为该条订阅的订阅人，出现在 Bilibili 推送卡片上。
 
-推送 `v*` 标签后，工作流使用固定 SDK 引用测试 Go 与 Vue 代码，构建 Windows x64、Linux x64 和 macOS arm64 ZIP，并创建 GitHub Release。插件目录仓库随后记录产物摘要并发布签名目录。
+### 管理命令
 
-License: MIT
+| 命令 | 权限 | 说明 |
+| --- | --- | --- |
+| `/全部订阅列表` | 超级管理员 | 所有群聊和私聊的订阅 |
+| `/全部b站订阅列表` | 超级管理员 | 全部 Bilibili 订阅 |
+| `/全部微博订阅列表` | 超级管理员 | 全部微博订阅 |
+| `/全部抖音订阅列表` | 超级管理员 | 全部抖音订阅 |
+| `/全部网易云音乐订阅列表` | 超级管理员 | 全部网易云音乐订阅 |
+| `/立即检查订阅` | 超级管理员 | 立刻检查并推送新内容 |
+| `/预览订阅卡片 [类型或链接]` | 超级管理员 | 预览 Bilibili 推送卡片 |
+
+预览可用 `直播`、`视频`、`图文`、`文章`、`转发`，或直接跟 Bilibili 视频 / 图文动态 / 直播间链接。
+
+## 管理页
+
+打开 **插件列表 → 订阅中心 → 订阅设置**。聊天命令和管理页共用同一份订阅配置。
+
+| 项目 | 作用 |
+| --- | --- |
+| 订阅中心开关 | 关闭后停止定时检查 |
+| 投递时效 | 非直播动态最多补发多久，默认 30 分钟，范围 1～1440 分钟 |
+| 添加订阅 | 选择平台、填写账号、校验对象、勾选推送群聊 / 私聊和内容类型 |
+| 订阅人 | 填写 QQ 号，显示在推送卡片上 |
+| 立即检查 | 立刻跑一遍 Bilibili 检查 |
+| 打开卡片预览 | 打开 Bilibili 更新卡片的模板预览 |
+
+同一平台账号的多个推送目标可以放在一张卡片里编辑。保存前会校验对象和目标；Bilibili / 微博支持按昵称解析，对不上时从候选列表里点选。
+
+定时任务也会出现在管理面 **任务调度**，标签为「订阅检查」。
+
+## 推送说明
+
+- **会定时拉取并推送**：Bilibili 直播、视频、图文动态、专栏、转发。
+- **可搜索、可订阅、发资料卡片**：微博。定时检查不会拉取微博更新。
+- **可写入订阅、可用命令查看和取消**：抖音、网易云音乐。定时检查不会拉取这两类更新。
+
+Bilibili 检查规则：
+
+- 约每分钟检查一次；也可在管理页或聊天里立即检查。
+- 某条订阅第一次成功连上动态源时，只记下当前进度，**不会**把历史动态一次性刷进群里。直播开播仍会推送。
+- 超过投递时效的非直播动态会被跳过，避免补发过旧内容。
+- 没有可用的 Bilibili Cookie 时，检查和搜索会提示先到三方账号页保存账号。
+
+## 说明
+
+- Cookie / CK 只保存在 RayleaBot 的密钥存储里，插件管理页和聊天都不会回显明文。
+- 关闭订阅中心总开关后，已保存的订阅还在，只是停止检查。
+- 取消时若指定了类型，只去掉该类型；该账号在当前会话已没有任何类型时，整条订阅删除。
+- 推送失败时查看 **实时日志**，可按插件 `raylea.subscription-hub` 筛选。
+- 卡片发不出来时检查渲染环境；订阅、取消在卡片失败时会回退为文字结果。
+
+## 开发
+
+插件后端、Vue 管理页、默认配置和渲染模板共同进入独立 artifact。构建或同步失败时继续使用上一个已安装产物。`.rayleabot/` 只属于本地开发，不进入提交或发布包。
+
+### 目录结构
+
+```text
+plugin-subscription-hub/
+  cmd/subscription-hub/              进程入口
+  internal/plugin/                   订阅命令、平台请求、调度、渲染和测试
+  internal/assets/default_config.json 默认开关与投递时效
+  ui/                                Vue 管理页
+  templates/                         推送与资料卡片模板
+  tools/build/                       组装后端、UI、默认配置与模板
+  info.json
+```
+
+### 本地联调
+
+1. 将本仓库路径写入 RayleaBot 根目录下被 Git 忽略的 `plugin-workspace.local.json`：
+
+```json
+{
+  "workspace_version": "1",
+  "plugins": [
+    {
+      "id": "raylea.subscription-hub",
+      "path": "../RayleaBotPlugins/plugin-subscription-hub"
+    }
+  ]
+}
+```
+
+2. 在 **RayleaBot 主仓库根目录** 启动：
+
+```powershell
+$env:RAYLEA_PLUGIN_DEV = "watch"
+$env:RAYLEA_SERVER_RELOAD = "watch"
+.\start.bat
+```
+
+启动器会把主仓库的 Go 与 Vue SDK 映射到 `.rayleabot/`，构建当前平台 artifact，再通过离线 `plugin dev-sync` 同步到 `plugins/installed/`。
+
+联调 Bilibili / 微博能力时，在 Web 三方账号页保存测试用 Cookie。不要把真实凭据写入仓库、fixtures、日志或 README。
+
+### 测试与构建
+
+```powershell
+go test -race ./...
+pnpm --dir ui install --frozen-lockfile
+pnpm --dir ui typecheck
+pnpm --dir ui test
+pnpm --dir ui build
+go run ./tools/build -target windows-x64
+```
+
+### 发布
+
+`v*` 标签对应的发布工作流使用固定 SDK 引用测试 Go 与 Vue 代码，构建 Windows x64、Linux x64 和 macOS arm64 ZIP，并创建 GitHub Release。[plugin-catalog](https://github.com/RayleaBot/plugin-catalog) 记录产物摘要并发布签名目录。
+
+本地联调与商店分发说明见 [插件商店与独立开发](https://github.com/RayleaBot/RayleaBot/blob/main/docs/plugin/store-and-development.md)。
+
+## License
+
+[MIT](./LICENSE)
