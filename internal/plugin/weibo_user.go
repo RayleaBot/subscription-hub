@@ -61,11 +61,7 @@ func readWeiboUserWithActions(ctx context.Context, actions pluginActions, uid st
 	if err != nil {
 		return weiboUser{}, err
 	}
-	values := url.Values{}
-	values.Set("type", "uid")
-	values.Set("value", uid)
-	values.Set("containerid", "100505"+uid)
-	document, err := requestWeiboAcrossAccounts(ctx, actions, accounts, weiboMobileContainerURL+"?"+values.Encode(), weiboMobileReferer)
+	document, err := requestWeiboAcrossAccounts(ctx, actions, accounts, weiboUserContainerURL(uid), weiboMobileReferer)
 	if err != nil {
 		return weiboUser{}, errors.New(friendlyWeiboSourceError("微博用户信息读取失败", err))
 	}

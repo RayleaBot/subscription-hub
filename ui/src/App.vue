@@ -544,7 +544,7 @@ async function checkNow() {
   try {
     const result = await host.client.invokeAction('subscription.check_now')
     if (result.skipped === 'disabled') setStatus('订阅中心未启用')
-    else if (result.skipped === 'no_bilibili_subscriptions') setStatus('没有可检查的 Bilibili 订阅')
+    else if (result.skipped === 'no_checkable_subscriptions' || result.skipped === 'no_bilibili_subscriptions') setStatus('没有可检查的订阅')
     else {
       const checked = Number(result.checked || 0)
       const sent = Number(result.sent || 0)
@@ -558,9 +558,9 @@ async function checkNow() {
   }
 }
 
-function openPreview() {
+function openPreview(templateId: string) {
   try {
-    host.client.send('render_template.open', { template_id: 'plugin.raylea.subscription-hub.bilibili-update' })
+    host.client.send('render_template.open', { template_id: `plugin.raylea.subscription-hub.${templateId}` })
   } catch (error) {
     setStatus(errorMessage(error, '无法打开卡片预览'), true)
   }
@@ -676,7 +676,8 @@ function errorMessage(error: unknown, fallback: string): string {
         <button type="button" class="button" :disabled="saving" @click="reloadSettings">重新载入</button>
         <button type="button" class="button" :disabled="saving" @click="resetSettings">恢复默认</button>
         <button type="button" class="button" :disabled="checking || saving" @click="checkNow">{{ checking ? '检查中…' : '立即检查' }}</button>
-        <button type="button" class="button" @click="openPreview">打开卡片预览</button>
+        <button type="button" class="button" @click="openPreview('bilibili-update')">打开 Bilibili 卡片预览</button>
+        <button type="button" class="button" @click="openPreview('weibo-update')">打开微博卡片预览</button>
         <button type="button" class="button button--primary" :disabled="!loaded || errors.length > 0 || saving" @click="saveSettings">{{ saving ? '保存中…' : '保存设置' }}</button>
       </div>
     </footer>

@@ -2,8 +2,11 @@ package plugin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -13,6 +16,7 @@ import (
 
 const (
 	weiboMobileContainerURL = "https://m.weibo.cn/api/container/getIndex"
+	weiboStatusShowURL      = "https://m.weibo.cn/statuses/show"
 	weiboWebUserSearchURL   = "https://s.weibo.com/user"
 	weiboMobileReferer      = "https://m.weibo.cn/"
 	weiboWebSearchReferer   = "https://s.weibo.com/"
@@ -24,12 +28,20 @@ const (
 	weiboDetailTotalTimeout    = 15 * time.Second
 )
 
-var weiboSecretPattern = regexp.MustCompile(`(?i)(["']?)(SUBP?|XSRF-TOKEN|X-CSRF-TOKEN|_T_WM|MLOGIN)(["']?)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^;,\s]+)`)
+var weiboSecretPattern = regexp.MustCompile(`(?i)(["']?)(SUBP?|XSRF-TOKEN|X-CSRF-TOKEN|_T_WM|MLOGIN|user_token)(["']?)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^;,\s]+)`)
 
 type weiboAccount struct {
 	ID     string
 	Label  string
 	Cookie string
+}
+
+func (account weiboAccount) key() string {
+	if value := strings.TrimSpace(account.ID); value != "" {
+		return value
+	}
+	digest := sha256.Sum256([]byte(account.Cookie))
+	return "cookie-" + hex.EncodeToString(digest[:6])
 }
 
 type weiboSourceError struct {
@@ -43,6 +55,10 @@ func (err *weiboSourceError) Error() string {
 		return ""
 	}
 	return strings.TrimSpace(err.Message)
+}
+
+func (err *weiboSourceError) cooldown() bool {
+	return err != nil && (err.Kind == "risk_control" || err.Kind == "rate_limit")
 }
 
 func readWeiboAccounts(ctx context.Context, actions pluginActions) ([]weiboAccount, error) {
@@ -113,12 +129,42 @@ func weiboSearchPageHeaders(cookie string) map[string]string {
 	return headers
 }
 
+func weiboUserContainerURL(uid string) string {
+	uid = strings.TrimSpace(uid)
+	values := url.Values{}
+	values.Set("type", "uid")
+	values.Set("value", uid)
+	values.Set("containerid", "100505"+uid)
+	return weiboMobileContainerURL + "?" + values.Encode()
+}
+
+func weiboUserFeedURL(uid string, cursor ...string) string {
+	uid = strings.TrimSpace(uid)
+	values := url.Values{}
+	values.Set("type", "uid")
+	values.Set("value", uid)
+	values.Set("containerid", "107603"+uid)
+	if len(cursor) > 0 {
+		if sinceID := strings.TrimSpace(cursor[0]); sinceID != "" && sinceID != "0" {
+			values.Set("since_id", sinceID)
+		}
+	}
+	return weiboMobileContainerURL + "?" + values.Encode()
+}
+
+func weiboStatusShowEndpoint(id string) string {
+	values := url.Values{}
+	values.Set("id", strings.TrimSpace(id))
+	return weiboStatusShowURL + "?" + values.Encode()
+}
+
 type weiboClient struct {
 	actions pluginActions
+	now     func() time.Time
 }
 
 func newWeiboClient(actions pluginActions) *weiboClient {
-	return &weiboClient{actions: actions}
+	return &weiboClient{actions: actions, now: time.Now}
 }
 
 func (client *weiboClient) requestJSON(ctx context.Context, rawURL string, account weiboAccount, referer string) (map[string]any, error) {
@@ -138,7 +184,7 @@ func (client *weiboClient) requestJSON(ctx context.Context, rawURL string, accou
 		return nil, &weiboSourceError{Kind: kind, Message: weiboDiagnosticText(response, nil), HTTPStatus: status}
 	}
 	if status < 200 || status >= 300 || weiboDocumentRejected(document) {
-		return nil, &weiboSourceError{Kind: weiboErrorKind(status), Message: weiboDiagnosticText(response, document), HTTPStatus: status}
+		return nil, &weiboSourceError{Kind: weiboClassifyError(status, document), Message: weiboDiagnosticText(response, document), HTTPStatus: status}
 	}
 	return document, nil
 }
@@ -178,6 +224,52 @@ func weiboErrorKind(status int) string {
 	default:
 		return "upstream"
 	}
+}
+
+func weiboClassifyError(status int, document map[string]any) string {
+	kind := weiboErrorKind(status)
+	if kind == "auth" || kind == "risk_control" || kind == "rate_limit" {
+		return kind
+	}
+	if weiboDocumentLooksLikeAuth(document) {
+		return "auth"
+	}
+	if weiboDocumentLooksLikeRisk(document) {
+		return "risk_control"
+	}
+	return kind
+}
+
+func weiboDocumentMessage(document map[string]any) string {
+	return strings.ToLower(firstText(
+		document["msg"], document["message"],
+		nestedValue(document, "data", "msg"), nestedValue(document, "data", "message"),
+	))
+}
+
+func weiboDocumentLooksLikeAuth(document map[string]any) bool {
+	message := weiboDocumentMessage(document)
+	for _, marker := range []string{"登录", "登陆", "login", "未登录", "expired"} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	if data := mapValue(document["data"]); data != nil {
+		if _, exists := data["login"]; exists && !boolScalar(data["login"]) {
+			return true
+		}
+	}
+	return false
+}
+
+func weiboDocumentLooksLikeRisk(document map[string]any) bool {
+	message := weiboDocumentMessage(document)
+	for _, marker := range []string{"风控", "验证", "captcha", "安全", "频繁", "拦截"} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func weiboDiagnosticText(response rayleabot.ActionResult, document map[string]any) string {

@@ -77,6 +77,16 @@ func isBilibiliContentHost(host string) bool {
 
 func previewSubscriptionCard(ctx context.Context, event *rayleabot.EventContext, input string) error {
 	input = strings.TrimSpace(input)
+	if weiboRef := parseWeiboPreviewURL(input); weiboRef != nil {
+		update, err := fetchWeiboPreview(ctx, event.Actions(), weiboRef)
+		if err != nil {
+			return event.SendText(ensureSentence(err.Error()))
+		}
+		return sendWeiboPreview(ctx, event, update, true)
+	}
+	if looksLikeWeiboPreviewURL(input) {
+		return event.SendText("暂不支持这个微博链接。")
+	}
 	previewRef := parseBilibiliPreviewURL(input)
 	if previewRef != nil {
 		update, err := fetchBilibiliPreview(ctx, event.Actions(), previewRef)
@@ -88,11 +98,79 @@ func previewSubscriptionCard(ctx context.Context, event *rayleabot.EventContext,
 	if looksLikeBilibiliPreviewURL(input) {
 		return event.SendText("暂不支持这个 Bilibili 链接。")
 	}
+	platform, service := parsePreviewInput(input)
+	if platform == "weibo" {
+		return sendWeiboPreview(ctx, event, sampleWeiboUpdate(service), false)
+	}
+	return sendBilibiliPreview(ctx, event, sampleBilibiliUpdate(service), false)
+}
+
+func parsePreviewInput(input string) (string, string) {
+	input = strings.TrimSpace(input)
+	if platform, rest, ok := splitPreviewPlatform(input); ok {
+		if platform == "weibo" {
+			service := normalizeService(rest, "weibo")
+			if service == "" || service == "all" {
+				service = "post"
+			}
+			return "weibo", service
+		}
+		service := normalizeService(rest, "bilibili")
+		if service == "" || service == "all" {
+			service = "video"
+		}
+		return "bilibili", service
+	}
+	if service := uniqueWeiboPreviewService(input); service != "" {
+		return "weibo", service
+	}
 	service := normalizeService(input, "bilibili")
 	if service == "" || service == "all" {
 		service = "video"
 	}
-	return sendBilibiliPreview(ctx, event, sampleBilibiliUpdate(service), false)
+	return "bilibili", service
+}
+
+func splitPreviewPlatform(input string) (string, string, bool) {
+	fields := strings.Fields(input)
+	if len(fields) == 0 {
+		return "", "", false
+	}
+	first, lower := fields[0], strings.ToLower(fields[0])
+	switch {
+	case first == "微博" || lower == "weibo":
+		return "weibo", strings.Join(fields[1:], " "), true
+	case first == "b站" || first == "B站" || lower == "bilibili" || lower == "bili":
+		return "bilibili", strings.Join(fields[1:], " "), true
+	}
+	if strings.HasPrefix(input, "微博") && input != "微博" {
+		return "weibo", strings.TrimSpace(strings.TrimPrefix(input, "微博")), true
+	}
+	if len(lower) > 5 && strings.HasPrefix(lower, "weibo") {
+		return "weibo", strings.TrimSpace(input[5:]), true
+	}
+	if strings.HasPrefix(input, "b站") && input != "b站" {
+		return "bilibili", strings.TrimSpace(strings.TrimPrefix(input, "b站")), true
+	}
+	if strings.HasPrefix(input, "B站") && input != "B站" {
+		return "bilibili", strings.TrimSpace(strings.TrimPrefix(input, "B站")), true
+	}
+	return "", "", false
+}
+
+func uniqueWeiboPreviewService(input string) string {
+	if normalizeService(input, "bilibili") != "" {
+		return ""
+	}
+	switch normalizeService(input, "weibo") {
+	case "image":
+		return "image"
+	case "post":
+		if input == "文字" {
+			return "post"
+		}
+	}
+	return ""
 }
 
 func fetchBilibiliPreview(ctx context.Context, actions pluginActions, ref *bilibiliPreviewRef) (map[string]any, error) {

@@ -1,7 +1,7 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅中心",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "manifest_version": "2",
   "plugin_protocol_version": "1",
   "runtime": "go",
@@ -34,6 +34,9 @@
     },
     {
       "path": "templates/weibo-user-card"
+    },
+    {
+      "path": "templates/weibo-update"
     }
   ],
   "capabilities": [
@@ -219,8 +222,8 @@
     },
     {
       "name": "预览订阅卡片",
-      "description": "使用示例类型或 Bilibili 链接预览订阅推送卡片",
-      "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|Bilibili链接]",
+      "description": "使用示例类型或 Bilibili / 微博链接预览订阅推送卡片",
+      "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|图片|Bilibili或微博链接]",
       "permission": "super_admin"
     }
   ],
@@ -380,8 +383,8 @@
           },
           {
             "title": "预览订阅卡片",
-            "description": "使用内置示例类型，或使用视频、图文动态和直播间链接生成订阅推送图片。",
-            "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|Bilibili链接]",
+            "description": "使用内置示例类型，或使用 Bilibili / 微博链接生成订阅推送图片。微博的视频和转发写成「微博 视频」「微博 转发」。",
+            "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|图片|Bilibili或微博链接]",
             "command": "预览订阅卡片"
           }
         ]
@@ -390,8 +393,8 @@
         "title": "配置说明",
         "items": [
           {
-            "title": "Bilibili 账号",
-            "description": "平台 Cookie 在 Web 三方账号页面配置。",
+            "title": "Bilibili / 微博账号",
+            "description": "平台 Cookie 在 Web 三方账号页面配置。微博检查按订阅 UID 读取博主微博列表，不需要关注订阅博主。",
             "permission": "super_admin"
           },
           {

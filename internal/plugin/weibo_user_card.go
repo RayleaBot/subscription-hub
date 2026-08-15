@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"context"
-	"strings"
 )
 
 const weiboUserCardTemplate = "weibo-user-card"
@@ -29,14 +28,11 @@ func buildWeiboUserCardData(action string, item subscription, user weiboUser, ca
 
 // inlineWeiboCardAvatar 把可抓取的微博头像内联为 dataURL；失败返回空，模板回退到内置默认头像。
 func inlineWeiboCardAvatar(ctx context.Context, actions pluginActions, sourceURL string) string {
-	sourceURL = strings.TrimSpace(sourceURL)
+	sourceURL = weiboCardAvatarURL(sourceURL)
 	if sourceURL == "" {
 		return ""
 	}
-	if _, _, err := validateAvatarSourceURL(sourceURL); err != nil {
-		return ""
-	}
-	dataURL, _, err := resolveAvatarDataURLWithTimeout(ctx, actions, sourceURL, weiboSearchAvatarTimeoutSeconds)
+	dataURL, _, err := resolveAvatarDataURLLimited(ctx, actions, sourceURL, weiboSearchAvatarTimeoutSeconds, maxUpdateCardAvatarBytes)
 	if err != nil {
 		return ""
 	}

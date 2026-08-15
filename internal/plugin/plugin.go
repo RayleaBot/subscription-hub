@@ -83,12 +83,14 @@ func handleEvent(ctx context.Context, event *rayleabot.EventContext) error {
 		if action != "" && action != "check_subscriptions" {
 			return event.Result(map[string]any{"handled": false})
 		}
-		current, err := loadSettings(ctx, event)
+		checkEventCtx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)
+		defer cancel()
+		current, err := loadSettings(checkEventCtx, event)
 		if err != nil {
 			return err
 		}
-		result := checkSubscriptions(ctx, event, current)
-		logSubscriptionCheck(ctx, event.Actions(), result)
+		result := checkSubscriptions(checkEventCtx, event, current)
+		logSubscriptionCheck(checkEventCtx, event.Actions(), result)
 		return event.Result(result)
 	case "management.action":
 		return handleManagementAction(ctx, event)
@@ -106,7 +108,7 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 		return event.Result(map[string]any{"handled": false})
 	}
 
-	// 搜索、订阅变更和预览会串联配置读写、第三方请求、头像内联与图片渲染。
+	// 搜索、订阅检查、订阅变更和预览会串联配置读写、第三方请求、头像内联与图片渲染。
 	// 为默认 60s 插件事件期限保留终态回复余量，并让各阶段共享同一个总预算。
 	commandCtx := ctx
 	cancel := func() {}
@@ -152,7 +154,7 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 	case "list", "list_all":
 		return event.SendText(formatSubscriptions(current, event, platform, operation == "list_all"))
 	case "check":
-		result := checkSubscriptions(ctx, event, current)
+		result := checkSubscriptions(commandCtx, event, current)
 		return event.SendText(subscriptionCheckSummary(result))
 	}
 	return event.Result(map[string]any{"handled": false})
@@ -160,7 +162,7 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 
 func interactiveCommandOperation(operation string) bool {
 	switch operation {
-	case "add", "remove", "search", "preview":
+	case "add", "remove", "search", "preview", "check":
 		return true
 	default:
 		return false
@@ -284,7 +286,7 @@ func commandOperation(command string) (string, string) {
 	case "立即检查订阅":
 		return "", "check"
 	case "预览订阅卡片":
-		return "bilibili", "preview"
+		return "", "preview"
 	default:
 		return "", ""
 	}
@@ -293,6 +295,11 @@ func commandOperation(command string) (string, string) {
 func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) error {
 	action, _ := event.Event.Payload["action"].(string)
 	payload, _ := event.Event.Payload["payload"].(map[string]any)
+	cancel := func() {}
+	if strings.TrimSpace(action) == "subscription.check_now" {
+		ctx, cancel = context.WithTimeout(ctx, interactiveReplyTimeout)
+	}
+	defer cancel()
 	current, err := loadSettings(ctx, event)
 	if err != nil {
 		return err

@@ -449,6 +449,7 @@ func diagnosticExcerpt(value string, limit int) string {
 	value = strings.Join(strings.Fields(value), " ")
 	value = bilibiliAuthorizationPattern.ReplaceAllString(value, "${1}${2}${3}${4}[已隐藏]")
 	value = bilibiliSecretPattern.ReplaceAllString(value, "${1}${2}${3}${4}[已隐藏]")
+	value = weiboSecretPattern.ReplaceAllString(value, "${1}${2}${3}${4}[已隐藏]")
 	value = strings.TrimRight(strings.TrimSpace(value), "。.;； ")
 	if len([]rune(value)) <= limit {
 		return value
