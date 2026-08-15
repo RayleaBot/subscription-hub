@@ -111,3 +111,18 @@ func TestResolveAvatarDataURLsDeduplicatesBatchAndReportsFailures(t *testing.T) 
 		t.Fatalf("duplicate avatar generated %d requests", len(fake.httpRequests))
 	}
 }
+
+func TestInlineUpdateCardAvatarRejectsOversizedBody(t *testing.T) {
+	fake := newFakePluginActions()
+	body := make([]byte, maxUpdateCardAvatarBytes+8)
+	copy(body, []byte{0xff, 0xd8, 0xff, 0xe0})
+	fake.httpResponses = []rayleabot.ActionResult{{
+		"status_code": 200,
+		"headers":     map[string]any{"Content-Type": "image/jpeg"},
+		"body_base64": base64.StdEncoding.EncodeToString(body),
+	}}
+	got := inlineBilibiliCardAvatarWithTimeout(context.Background(), fake, "https://wx4.sinaimg.cn/orj480/face.jpg", 3)
+	if got != "" {
+		t.Fatalf("oversized weibo avatar was inlined: %q", got)
+	}
+}

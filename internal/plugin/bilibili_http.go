@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
@@ -377,6 +379,14 @@ func requestBilibiliAcrossAccounts(
 
 func decodeBilibiliDocument(result rayleabot.ActionResult) map[string]any {
 	body := stringScalar(result["body_text"])
+	if body == "" {
+		if encoded := stringScalar(result["body_base64"]); encoded != "" {
+			raw, err := base64.StdEncoding.DecodeString(encoded)
+			if err == nil && utf8.Valid(raw) {
+				body = string(raw)
+			}
+		}
+	}
 	if body == "" {
 		return nil
 	}

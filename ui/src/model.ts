@@ -30,6 +30,7 @@ export interface Subscriber {
   nickname?: string
   group_nickname?: string
   title?: string
+  base_role?: string
   role?: string
   role_label?: string
   avatar_url?: string
@@ -610,6 +611,7 @@ function normalizeSubscriber(value: unknown): Subscriber | null {
     nickname: trim(value.nickname) || undefined,
     group_nickname: trim(value.group_nickname) || undefined,
     title: trim(value.title) || undefined,
+    base_role: trim(value.base_role) || undefined,
     role: trim(value.role) || undefined,
     role_label: trim(value.role_label) || undefined,
     avatar_url: trim(value.avatar_url) || undefined,

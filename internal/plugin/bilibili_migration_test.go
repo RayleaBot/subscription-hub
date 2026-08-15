@@ -33,10 +33,17 @@ type fakePluginActions struct {
 	messages      []rayleabot.MessageSendRequest
 	messageErrors []error
 	logs          []rayleabot.LoggerWriteRequest
+	groupMembers  map[string]rayleabot.ActionResult
+	groupErrors   map[string]error
+	groupRequests []string
 }
 
 func newFakePluginActions() *fakePluginActions {
-	return &fakePluginActions{kv: map[string]any{}}
+	return &fakePluginActions{
+		kv:           map[string]any{},
+		groupMembers: map[string]rayleabot.ActionResult{},
+		groupErrors:  map[string]error{},
+	}
 }
 
 func (fake *fakePluginActions) HTTPRequest(_ context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
@@ -130,6 +137,20 @@ func (fake *fakePluginActions) MessageSend(_ context.Context, request rayleabot.
 		}
 	}
 	return rayleabot.ActionResult{"message_id": "fixture-message"}, nil
+}
+
+func (fake *fakePluginActions) GroupMemberGet(_ context.Context, groupID, userID string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	key := groupMemberKey(groupID, userID)
+	fake.groupRequests = append(fake.groupRequests, key)
+	if err := fake.groupErrors[key]; err != nil {
+		return nil, err
+	}
+	if result := fake.groupMembers[key]; result != nil {
+		return result, nil
+	}
+	return rayleabot.ActionResult{"user_id": userID, "role": "member"}, nil
 }
 
 func TestWBISigningMatchesPreMigrationVector(t *testing.T) {

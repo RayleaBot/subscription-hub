@@ -13,10 +13,7 @@ var bilibiliServiceLabels = map[string]string{
 
 func buildBilibiliRenderData(item subscription, update map[string]any) map[string]any {
 	subscriberCards := buildSubscriberCards(item.Subscribers)
-	author := mapValue(update["author"])
-	if author == nil {
-		author = map[string]any{"name": firstText(item.Name, item.UID), "uid": item.UID}
-	}
+	author := renderSubscriptionAuthor(item, update["author"])
 	title := truncateRunes(firstText(update["title"], "订阅更新"), 72)
 	summary := truncateRunes(stringScalar(update["summary"]), 420)
 	summaryHTML := limitBilibiliHTML(stringScalar(update["summary_html"]), 420)
@@ -41,6 +38,17 @@ func buildBilibiliRenderData(item subscription, update map[string]any) map[strin
 		"subscription":     map[string]any{"uid": item.UID, "name": firstText(item.Name, item.UID)},
 		"subscribers":      item.Subscribers, "subscriber_cards": subscriberCards, "subscriber_text": subscriberNames(subscriberCards),
 	}
+}
+
+func renderSubscriptionAuthor(item subscription, value any) map[string]any {
+	author := cloneJSONMap(mapValue(value))
+	if author == nil {
+		author = map[string]any{}
+	}
+	author["name"] = firstText(author["name"], item.Name, item.UID)
+	author["uid"] = firstText(author["uid"], item.UID)
+	author["avatar"] = firstText(author["avatar"], item.AvatarURL)
+	return author
 }
 
 func buildBilibiliFallback(data map[string]any) string {
@@ -169,9 +177,11 @@ func uidText(value string) string {
 func imageMaps(value any, limit int) []map[string]any {
 	if typed, ok := value.([]map[string]any); ok {
 		if len(typed) > limit {
-			return append([]map[string]any(nil), typed[:limit]...)
+			typed = typed[:limit]
 		}
-		return append([]map[string]any(nil), typed...)
+		result := make([]map[string]any, len(typed))
+		copy(result, typed)
+		return result
 	}
 	items := sliceValue(value)
 	result := make([]map[string]any, 0, len(items))
@@ -335,9 +345,14 @@ func buildMediaItems(images []map[string]any, duration, service string) []map[st
 		if itemDuration != "" {
 			classes = append(classes, "media-item--video")
 		}
+		fallback := "assets/grid.svg"
+		if service == "视频" || service == "直播" || service == "文章" {
+			fallback = "assets/cover.svg"
+		}
 		result = append(result, map[string]any{
 			"url": imageURL, "class": strings.Join(classes, " "), "label": strings.Join(labels, " · "),
 			"duration_text": itemDuration, "width": width, "height": height,
+			"fallback": fallback,
 		})
 	}
 	return result

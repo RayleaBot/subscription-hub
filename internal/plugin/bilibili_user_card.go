@@ -78,7 +78,7 @@ func inlineBilibiliCardAvatarWithTimeout(ctx context.Context, actions pluginActi
 			continue
 		}
 		seen[candidate] = struct{}{}
-		if dataURL, _, err := resolveAvatarDataURLWithTimeout(ctx, actions, candidate, timeoutSeconds); err == nil {
+		if dataURL, _, err := resolveAvatarDataURLLimited(ctx, actions, candidate, timeoutSeconds, maxUpdateCardAvatarBytes); err == nil {
 			return dataURL
 		}
 	}
@@ -104,6 +104,9 @@ func (cache *bilibiliAvatarCache) resolve(ctx context.Context, actions pluginAct
 		}
 	}
 	entry.value = inlineBilibiliCardAvatarWithTimeout(ctx, actions, sourceURL, bilibiliUpdateAvatarTimeoutSeconds)
+	if entry.value == "" {
+		cache.entries.Delete(strings.TrimSpace(sourceURL))
+	}
 	close(entry.ready)
 	return entry.value
 }
@@ -111,9 +114,13 @@ func (cache *bilibiliAvatarCache) resolve(ctx context.Context, actions pluginAct
 // inlineBilibiliUpdateAvatars 并发内联动态卡片中的作者、原作者与订阅人头像。
 // 内联失败时对应字段置空，模板回退到内置默认头像，避免远程图片与截图竞态。
 func inlineBilibiliUpdateAvatars(ctx context.Context, actions pluginActions, data map[string]any) {
+	inlineBilibiliUpdateAvatarsWithSharedCache(ctx, actions, data, &bilibiliAvatarCache{})
+}
+
+func inlineBilibiliUpdateAvatarsWithSharedCache(ctx context.Context, actions pluginActions, data map[string]any, cache *bilibiliAvatarCache) {
 	avatarCtx, cancel := context.WithTimeout(ctx, bilibiliUpdateAvatarTotalTimeout)
 	defer cancel()
-	inlineBilibiliUpdateAvatarsWithCache(avatarCtx, actions, data, &bilibiliAvatarCache{})
+	inlineBilibiliUpdateAvatarsWithCache(avatarCtx, actions, data, cache)
 }
 
 func inlineBilibiliUpdateAvatarsWithCache(ctx context.Context, actions pluginActions, data map[string]any, cache *bilibiliAvatarCache) {

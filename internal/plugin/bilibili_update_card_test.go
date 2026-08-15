@@ -104,6 +104,63 @@ func TestInlineBilibiliUpdateAvatarsSharesCacheAcrossCards(t *testing.T) {
 	}
 }
 
+func TestInlineBilibiliUpdateAvatarsGivesEachCardAFreshBudget(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.httpResponses = []rayleabot.ActionResult{avatarHTTPResult()}
+	cache := &bilibiliAvatarCache{}
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	first := map[string]any{"author": map[string]any{"avatar": "https://i0.hdslb.com/bfs/face/first.webp"}}
+	inlineBilibiliUpdateAvatarsWithSharedCache(expired, fake, first, cache)
+
+	second := map[string]any{"author": map[string]any{"avatar": "https://i0.hdslb.com/bfs/face/second.webp"}}
+	inlineBilibiliUpdateAvatarsWithSharedCache(context.Background(), fake, second, cache)
+
+	if got := stringScalar(nestedValue(second, "author", "avatar")); !strings.HasPrefix(got, "data:image/png;base64,") {
+		t.Fatalf("later card inherited an expired avatar budget: %q", got)
+	}
+	if len(fake.httpRequests) != 1 {
+		t.Fatalf("fresh card avatar requests = %#v", fake.httpRequests)
+	}
+}
+
+func TestInlineBilibiliUpdateAvatarsDoesNotCacheFailures(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.httpResponses = []rayleabot.ActionResult{
+		{"status_code": 403},
+		avatarHTTPResult(),
+	}
+	cache := &bilibiliAvatarCache{}
+	const sourceURL = "https://q1.qlogo.cn/g?b=qq&nk=2678980697&s=100"
+	first := map[string]any{"author": map[string]any{"avatar": sourceURL}}
+	inlineBilibiliUpdateAvatarsWithSharedCache(context.Background(), fake, first, cache)
+	if got := stringScalar(nestedValue(first, "author", "avatar")); got != "" {
+		t.Fatalf("failed avatar should use the template fallback: %q", got)
+	}
+
+	second := map[string]any{"author": map[string]any{"avatar": sourceURL}}
+	inlineBilibiliUpdateAvatarsWithSharedCache(context.Background(), fake, second, cache)
+	if got := stringScalar(nestedValue(second, "author", "avatar")); !strings.HasPrefix(got, "data:image/png;base64,") {
+		t.Fatalf("later card did not retry a transient avatar failure: %q", got)
+	}
+	if len(fake.httpRequests) != 2 {
+		t.Fatalf("avatar retry requests = %#v", fake.httpRequests)
+	}
+}
+
+func TestBilibiliRenderDataFillsPartialUpdateAuthorFromSubscription(t *testing.T) {
+	data := buildBilibiliRenderData(subscription{
+		UID: "123456", Name: "测试 UP", AvatarURL: "https://i0.hdslb.com/bfs/face/stored.webp",
+	}, map[string]any{
+		"service": "live", "title": "直播中",
+		"author": map[string]any{"name": "测试 UP"},
+	})
+	author := mapValue(data["author"])
+	if stringScalar(author["uid"]) != "123456" || stringScalar(author["avatar"]) != "https://i0.hdslb.com/bfs/face/stored.webp" {
+		t.Fatalf("partial author lost the subscription identity: %#v", author)
+	}
+}
+
 func TestInlineBilibiliUpdateAvatarsUsesShortTotalBudget(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.httpResponses = []rayleabot.ActionResult{avatarHTTPResult()}

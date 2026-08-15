@@ -51,6 +51,7 @@ type subscriber struct {
 	Nickname      string `json:"nickname"`
 	GroupNickname string `json:"group_nickname,omitempty"`
 	Title         string `json:"title,omitempty"`
+	BaseRole      string `json:"base_role,omitempty"`
 	Role          string `json:"role,omitempty"`
 	RoleLabel     string `json:"role_label,omitempty"`
 	AvatarURL     string `json:"avatar_url,omitempty"`
@@ -378,6 +379,7 @@ func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings,
 	}
 	current.DeliveryMaxAgeMinutes = normalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)
 	current.Subscriptions = normalizeSubscriptions(current.Subscriptions)
+	normalizeSubscriptionSubscribers(current.Subscriptions, event.SuperAdmins)
 	ensureScheduler(ctx, event)
 	return current, nil
 }
@@ -728,7 +730,10 @@ func mergeSubscriber(items []subscriber, event *rayleabot.EventContext) []subscr
 	if id == "" {
 		return items
 	}
-	role := firstText(event.Event.Actor.Role, sender["role"])
+	actorRole := strings.ToLower(strings.TrimSpace(event.Event.Actor.Role))
+	senderRole := strings.ToLower(strings.TrimSpace(stringScalar(sender["role"])))
+	baseRole := strongestSubscriberBaseRole(actorRole, senderRole)
+	role := strongestSubscriberRole(actorRole, senderRole)
 	for _, superAdmin := range event.SuperAdmins {
 		if strings.TrimSpace(superAdmin) == id {
 			role = "super_admin"
@@ -738,15 +743,92 @@ func mergeSubscriber(items []subscriber, event *rayleabot.EventContext) []subscr
 	next := subscriber{
 		ID: id, Nickname: firstText(event.Event.Actor.Nickname, sender["nickname"], id),
 		GroupNickname: stringScalar(sender["card"]), Title: stringScalar(sender["title"]),
-		Role: role, RoleLabel: subscriberRoleLabel(role), AvatarURL: qqAvatarURL(id),
+		BaseRole: baseRole, Role: role, RoleLabel: subscriberRoleLabel(role), AvatarURL: qqAvatarURL(id),
 	}
 	for index := range items {
 		if items[index].ID == id {
-			items[index] = next
+			items[index] = mergeSubscriberIdentity(items[index], next)
 			return items
 		}
 	}
 	return append(items, next)
+}
+
+func normalizeSubscriptionSubscribers(items []subscription, superAdmins []string) {
+	adminIDs := make(map[string]struct{}, len(superAdmins))
+	for _, id := range superAdmins {
+		if id = strings.TrimSpace(id); id != "" {
+			adminIDs[id] = struct{}{}
+		}
+	}
+	for itemIndex := range items {
+		for subscriberIndex := range items[itemIndex].Subscribers {
+			current := &items[itemIndex].Subscribers[subscriberIndex]
+			current.ID = strings.TrimSpace(current.ID)
+			current.Nickname = firstText(current.Nickname, current.ID)
+			current.GroupNickname = strings.TrimSpace(current.GroupNickname)
+			current.Title = strings.TrimSpace(current.Title)
+			current.BaseRole = strings.ToLower(strings.TrimSpace(current.BaseRole))
+			current.Role = strings.ToLower(strings.TrimSpace(current.Role))
+			if current.BaseRole == "super_admin" {
+				current.BaseRole = ""
+			}
+			if current.BaseRole == "" && current.Role != "super_admin" {
+				current.BaseRole = current.Role
+			}
+			if _, ok := adminIDs[current.ID]; ok {
+				current.Role = "super_admin"
+			} else if current.Role == "super_admin" {
+				current.Role = firstText(current.BaseRole, "member")
+			}
+			if label := subscriberRoleLabel(current.Role); label != "" {
+				current.RoleLabel = label
+			} else {
+				current.RoleLabel = strings.TrimSpace(current.RoleLabel)
+			}
+			if avatar := qqAvatarURL(current.ID); avatar != "" {
+				current.AvatarURL = avatar
+			} else {
+				current.AvatarURL = strings.TrimSpace(current.AvatarURL)
+			}
+		}
+	}
+}
+
+func mergeSubscriberIdentity(current, incoming subscriber) subscriber {
+	current.ID = firstText(incoming.ID, current.ID)
+	current.Nickname = firstText(incoming.Nickname, current.Nickname, current.ID)
+	current.GroupNickname = firstText(incoming.GroupNickname, current.GroupNickname)
+	current.Title = firstText(incoming.Title, current.Title)
+	current.BaseRole = firstText(incoming.BaseRole, current.BaseRole)
+	current.Role = firstText(incoming.Role, current.Role)
+	current.RoleLabel = firstText(subscriberRoleLabel(current.Role), incoming.RoleLabel, current.RoleLabel)
+	current.AvatarURL = firstText(qqAvatarURL(current.ID), incoming.AvatarURL, current.AvatarURL)
+	return current
+}
+
+func strongestSubscriberRole(values ...string) string {
+	ranks := map[string]int{"member": 1, "admin": 2, "owner": 3, "super_admin": 4}
+	strongest := ""
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if ranks[value] > ranks[strongest] {
+			strongest = value
+		}
+	}
+	return strongest
+}
+
+func strongestSubscriberBaseRole(values ...string) string {
+	ranks := map[string]int{"member": 1, "admin": 2, "owner": 3}
+	strongest := ""
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if ranks[value] > ranks[strongest] {
+			strongest = value
+		}
+	}
+	return strongest
 }
 
 func subscriptionID(platform, uid, targetType, targetID string) string {

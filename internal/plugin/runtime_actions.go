@@ -10,9 +10,8 @@ import (
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
-// pluginActions is the narrow host boundary used by the subscription source.
-// Keeping it local makes the source logic testable without introducing another
-// runtime or HTTP stack.
+// pluginActions is the narrow host boundary used by subscription checks and delivery.
+// Keeping it local makes the plugin testable without introducing another runtime or HTTP stack.
 type pluginActions interface {
 	HTTPRequest(context.Context, rayleabot.HTTPRequest) (rayleabot.ActionResult, error)
 	ThirdPartyAccountRead(context.Context, rayleabot.ThirdPartyAccountReadRequest) (rayleabot.ActionResult, error)
@@ -22,6 +21,7 @@ type pluginActions interface {
 	LoggerWrite(context.Context, rayleabot.LoggerWriteRequest) (rayleabot.ActionResult, error)
 	RenderImage(context.Context, rayleabot.RenderImageRequest) (rayleabot.ActionResult, error)
 	MessageSend(context.Context, rayleabot.MessageSendRequest) (rayleabot.ActionResult, error)
+	GroupMemberGet(context.Context, string, string) (rayleabot.ActionResult, error)
 }
 
 func mapValue(value any) map[string]any {

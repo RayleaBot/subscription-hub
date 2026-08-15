@@ -15,6 +15,7 @@ import (
 const (
 	maxAvatarResolveItems       = 4
 	maxAvatarBytes              = 512 << 10
+	maxUpdateCardAvatarBytes    = 48 << 10
 	maxAvatarBatchBytes         = 2 << 20
 	defaultAvatarTimeoutSeconds = 3
 )
@@ -73,9 +74,16 @@ func resolveAvatarDataURL(ctx context.Context, actions pluginActions, sourceURL 
 }
 
 func resolveAvatarDataURLWithTimeout(ctx context.Context, actions pluginActions, sourceURL string, timeoutSeconds int) (string, int, error) {
+	return resolveAvatarDataURLLimited(ctx, actions, sourceURL, timeoutSeconds, maxAvatarBytes)
+}
+
+func resolveAvatarDataURLLimited(ctx context.Context, actions pluginActions, sourceURL string, timeoutSeconds, maxBytes int) (string, int, error) {
 	parsed, referer, err := validateAvatarSourceURL(sourceURL)
 	if err != nil {
 		return "", 0, err
+	}
+	if maxBytes <= 0 {
+		maxBytes = maxAvatarBytes
 	}
 	result, err := actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
 		Method: "GET",
@@ -99,7 +107,7 @@ func resolveAvatarDataURLWithTimeout(ctx context.Context, actions pluginActions,
 	if err != nil {
 		return "", 0, err
 	}
-	if len(body) == 0 || len(body) > maxAvatarBytes {
+	if len(body) == 0 || len(body) > maxBytes {
 		return "", 0, fmt.Errorf("fetch avatar: invalid body size")
 	}
 	mimeType := avatarContentType(result, body)

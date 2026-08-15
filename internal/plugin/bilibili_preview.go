@@ -371,15 +371,9 @@ func sendBilibiliPreview(ctx context.Context, event *rayleabot.EventContext, upd
 	}
 	data := buildBilibiliRenderData(item, update)
 	inlineBilibiliUpdateAvatars(ctx, event.Actions(), data)
-	result, err := event.Actions().RenderImage(ctx, rayleabot.RenderImageRequest{
-		Template: "bilibili-update", Data: data, Theme: "default", Output: "png", FallbackText: buildBilibiliFallback(data),
-	})
+	imagePath, err := renderSubscriptionCardImage(ctx, event.Actions(), "bilibili-update", data, buildBilibiliFallback(data), previewRenderLogFields(update))
 	if err != nil {
-		return event.SendText("订阅卡片预览生成失败。")
-	}
-	imagePath := stringScalar(result["image_path"])
-	if imagePath == "" {
-		return event.SendText("订阅卡片预览生成失败。")
+		return event.SendText(previewCardFailureText(err))
 	}
 	return event.Send(event.Event.Target.Type, event.Event.Target.ID, rayleabot.Image(imagePath))
 }

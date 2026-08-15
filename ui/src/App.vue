@@ -506,16 +506,19 @@ async function saveSettings() {
       const avatars = new Map(subscriberAvatars.value)
       const identities = new Map(subscriberIdentities.value)
       resolved.items.forEach((item) => {
+        const key = identityKey(item.target_type, item.target_id, item.user_id)
+        const previous = identities.get(key)
         const subscriber: Subscriber = {
           id: item.user_id,
           nickname: item.nickname,
           group_nickname: item.group_nickname,
           title: item.title,
+          base_role: item.role && item.role !== 'super_admin' ? item.role : previous?.base_role,
           role: item.role,
           role_label: item.role_label,
           avatar_url: item.avatar_url,
         }
-        identities.set(identityKey(item.target_type, item.target_id, item.user_id), subscriber)
+        identities.set(key, subscriber)
         if (item.avatar_url) avatars.set(item.user_id, item.avatar_url)
       })
       subscriberAvatars.value = avatars

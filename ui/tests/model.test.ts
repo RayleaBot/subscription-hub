@@ -110,6 +110,7 @@ describe('subscription settings model', () => {
           id: '300',
           nickname: 'subscriber',
           group_nickname: 'group subscriber',
+          base_role: 'member',
           role: 'member',
           role_label: 'Member',
           avatar_url: 'https://q1.qlogo.cn/g?b=qq&nk=300&s=640',
@@ -122,6 +123,7 @@ describe('subscription settings model', () => {
       id: '300',
       nickname: 'subscriber',
       group_nickname: 'group subscriber',
+      base_role: 'member',
       role: 'member',
       role_label: 'Member',
     })
@@ -129,6 +131,7 @@ describe('subscription settings model', () => {
       id: '300',
       nickname: 'subscriber',
       group_nickname: 'group subscriber',
+      base_role: 'member',
       role: 'member',
       role_label: 'Member',
     })

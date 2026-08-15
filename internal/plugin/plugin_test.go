@@ -16,6 +16,61 @@ func TestNormalizeSubscriptionsRejectsInvalidAndDeduplicates(t *testing.T) {
 	}
 }
 
+func TestNormalizeSubscriptionSubscribersRepairsStoredIdentity(t *testing.T) {
+	items := []subscription{{Subscribers: []subscriber{{
+		ID: "2678980697", Nickname: "柒柒", Role: "member", RoleLabel: "成员",
+		AvatarURL: "https://q1.qlogo.cn/g?b=qq&nk=2678980697&s=640",
+	}}}}
+
+	normalizeSubscriptionSubscribers(items, []string{"2678980697"})
+
+	got := items[0].Subscribers[0]
+	if got.BaseRole != "member" || got.Role != "super_admin" || got.RoleLabel != "超级管理员" {
+		t.Fatalf("stored role was not repaired: %#v", got)
+	}
+	if got.AvatarURL != "https://q1.qlogo.cn/g?b=qq&nk=2678980697&s=100" {
+		t.Fatalf("stored oversized avatar was not normalized: %q", got.AvatarURL)
+	}
+}
+
+func TestMergeSubscriberUsesLatestRoleAndPreservesProfile(t *testing.T) {
+	items := []subscriber{{
+		ID: "2678980697", Nickname: "柒柒", GroupNickname: "银蝶", Title: "专属头衔",
+		BaseRole: "admin", Role: "super_admin", RoleLabel: "超级管理员",
+	}}
+	event := &rayleabot.EventContext{Event: rayleabot.Event{
+		Actor:  rayleabot.Actor{ID: "2678980697", Role: "member"},
+		Target: rayleabot.Target{Type: "group", ID: "100"},
+		Payload: map[string]any{"onebot": map[string]any{
+			"sender": map[string]any{"user_id": "2678980697", "nickname": "柒柒", "role": "member"},
+		}},
+	}}
+
+	got := mergeSubscriber(items, event)[0]
+	if got.BaseRole != "member" || got.Role != "member" || got.RoleLabel != "群员" {
+		t.Fatalf("subscriber role was not refreshed: %#v", got)
+	}
+	if got.GroupNickname != "银蝶" || got.Title != "专属头衔" {
+		t.Fatalf("richer stored identity was lost: %#v", got)
+	}
+	if got.AvatarURL != "https://q1.qlogo.cn/g?b=qq&nk=2678980697&s=100" {
+		t.Fatalf("subscriber avatar was not normalized: %q", got.AvatarURL)
+	}
+}
+
+func TestNormalizeSubscriptionSubscribersRestoresBaseRoleAfterSuperAdminRemoval(t *testing.T) {
+	items := []subscription{{Subscribers: []subscriber{{
+		ID: "2678980697", Nickname: "柒柒", BaseRole: "admin", Role: "super_admin", RoleLabel: "超级管理员",
+	}}}}
+
+	normalizeSubscriptionSubscribers(items, nil)
+
+	got := items[0].Subscribers[0]
+	if got.BaseRole != "admin" || got.Role != "admin" || got.RoleLabel != "管理员" {
+		t.Fatalf("removed super admin did not recover the current group role: %#v", got)
+	}
+}
+
 func TestCommandOperationCoversPlatformMutations(t *testing.T) {
 	if platform, operation := commandOperation("订阅b站推送"); platform != "bilibili" || operation != "add" {
 		t.Fatalf("unexpected operation: %q %q", platform, operation)
