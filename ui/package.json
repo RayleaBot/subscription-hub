@@ -3,7 +3,7 @@
   "version": "0.2.7",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.11.0",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
@@ -12,14 +12,14 @@
   "dependencies": {
     "@rayleabot/plugin-ui": "workspace:*",
     "ant-design-vue": "4.2.6",
-    "vue": "3.5.39"
+    "vue": "3.5.41"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "6.0.6",
-    "jsdom": "29.1.1",
-    "typescript": "5.9.2",
-    "vite": "8.1.4",
+    "@vitejs/plugin-vue": "6.0.8",
+    "jsdom": "30.0.1",
+    "typescript": "5.9.3",
+    "vite": "8.2.1",
     "vitest": "4.1.10",
-    "vue-tsc": "3.3.7"
+    "vue-tsc": "3.3.10"
   }
 }

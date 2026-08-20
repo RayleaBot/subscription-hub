@@ -19,8 +19,8 @@ allowBuilds:
   esbuild: true
 
 overrides:
-  esbuild: 0.28.1
-  glob: 10.5.0
+  esbuild: 0.28.2
+  glob: 13.0.6
   js-yaml: 4.2.0
-  picomatch: 4.0.4
-  postcss: 8.5.18
+  picomatch: 4.0.5
+  postcss: 8.5.26
