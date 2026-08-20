@@ -244,7 +244,8 @@ h1 {
 
 .media-grid--triple {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  max-width: 650px;
+  width: 100%;
+  max-width: none;
 }
 
 .media-item {
@@ -404,6 +405,12 @@ h1 {
 .repost-media.media-grid--double {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   max-width: 360px;
+}
+
+.repost-media.media-grid--triple,
+.repost-media.media-grid--single:has(> .media-item--wide) {
+  width: 100%;
+  max-width: none;
 }
 
 .repost-media .media-item {
