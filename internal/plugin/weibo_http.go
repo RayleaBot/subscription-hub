@@ -17,6 +17,7 @@ import (
 const (
 	weiboMobileContainerURL = "https://m.weibo.cn/api/container/getIndex"
 	weiboStatusShowURL      = "https://m.weibo.cn/statuses/show"
+	weiboLongTextURL        = "https://m.weibo.cn/statuses/extend"
 	weiboWebUserSearchURL   = "https://s.weibo.com/user"
 	weiboMobileReferer      = "https://m.weibo.cn/"
 	weiboWebSearchReferer   = "https://s.weibo.com/"
@@ -156,6 +157,12 @@ func weiboStatusShowEndpoint(id string) string {
 	values := url.Values{}
 	values.Set("id", strings.TrimSpace(id))
 	return weiboStatusShowURL + "?" + values.Encode()
+}
+
+func weiboLongTextEndpoint(id string) string {
+	values := url.Values{}
+	values.Set("id", strings.TrimSpace(id))
+	return weiboLongTextURL + "?" + values.Encode()
 }
 
 type weiboClient struct {

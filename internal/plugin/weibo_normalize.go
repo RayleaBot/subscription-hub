@@ -14,6 +14,8 @@ var (
 	weiboOrjSizePattern   = regexp.MustCompile(`(?i)/(orj\d+|large|bmiddle|mw\d+|thumbnail)/`)
 	weiboHTMLBreakPattern = regexp.MustCompile(`(?i)<br\s*/?>`)
 	weiboHTMLBlockPattern = regexp.MustCompile(`(?i)</?(?:p|div|li)(?:\s[^>]*)?>`)
+	weiboLongTextLink     = regexp.MustCompile(`(?is)>\s*全文\s*</a>\s*$`)
+	weiboLongTextSuffix   = regexp.MustCompile(`(?:\.{3}|…)[[:space:]]*全文[[:space:]]*$`)
 )
 
 func weiboFeedUpdates(document map[string]any) []map[string]any {
@@ -82,7 +84,7 @@ func normalizeWeiboMblog(mblog map[string]any, depth int) map[string]any {
 	author := mapValue(mblog["user"])
 	uid := firstText(author["id"], author["idstr"], author["uid"])
 	name := cleanWeiboSearchText(firstText(author["screen_name"], author["name"], author["nickname"]))
-	summary := weiboPlainText(mblog["text"])
+	summary, needsLongText := weiboMblogSummary(mblog)
 	service := weiboMblogService(mblog)
 	title := weiboDistinctTitle(nestedValue(mblog, "page_info", "page_title"), summary)
 	pubTS := weiboPubTS(mblog)
@@ -101,7 +103,8 @@ func normalizeWeiboMblog(mblog map[string]any, depth int) map[string]any {
 		"id": id, "platform": "weibo", "uid": uid, "service": service,
 		"category": weiboServiceCategory(service), "title": title,
 		"summary": summary, "summary_html": "",
-		"url": weiboStatusURL(uid, mblog, id), "pub_ts": pubTS,
+		"needs_long_text": needsLongText,
+		"url":             weiboStatusURL(uid, mblog, id), "pub_ts": pubTS,
 		"created_at":    formatBilibiliTime(pubTS, stringScalar(mblog["created_at"])),
 		"duration_text": weiboMblogDuration(mblog),
 		"author": map[string]any{
@@ -110,6 +113,31 @@ func normalizeWeiboMblog(mblog map[string]any, depth int) map[string]any {
 		},
 		"images": images, "original": original,
 	}
+}
+
+func weiboMblogSummary(mblog map[string]any) (string, bool) {
+	fullText := firstText(
+		nestedValue(mblog, "longText", "longTextContent"),
+		nestedValue(mblog, "long_text", "long_text_content"),
+		mblog["longTextContent"],
+		mblog["long_text_content"],
+	)
+	if summary := weiboPlainText(fullText); summary != "" {
+		return summary, false
+	}
+	rawText := stringScalar(mblog["text"])
+	summary := weiboPlainText(rawText)
+	needsLongText := boolScalar(mblog["isLongText"]) || boolScalar(mblog["is_long_text"]) || weiboLongTextLink.MatchString(rawText) || weiboLongTextSuffix.MatchString(summary)
+	return summary, needsLongText
+}
+
+func weiboIncompleteSummary(summary string) string {
+	summary = strings.TrimSpace(weiboLongTextSuffix.ReplaceAllString(strings.TrimSpace(summary), ""))
+	const notice = "正文获取不完整，请查看原微博链接。"
+	if summary == "" {
+		return notice
+	}
+	return summary + "\n\n" + notice
 }
 
 func weiboMblogService(mblog map[string]any) string {

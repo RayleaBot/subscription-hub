@@ -7,7 +7,7 @@ func buildWeiboRenderData(item subscription, update map[string]any) map[string]a
 	author := renderSubscriptionAuthor(item, update["author"])
 	rawSummary := stringScalar(update["summary"])
 	title := weiboDistinctTitle(update["title"], rawSummary)
-	summary := truncateRunes(rawSummary, 420)
+	summary := cleanText(rawSummary)
 	service := weiboServiceLabel(stringScalar(update["service"]))
 	category := firstText(update["category"], weiboServiceCategory(stringScalar(update["service"])))
 	images := imageMaps(update["images"], 9)
@@ -62,7 +62,7 @@ func renderWeiboOriginal(value any) map[string]any {
 		"title":   weiboDistinctTitle(original["title"], rawSummary),
 		"service": service, "category": firstText(original["category"], service), "author": author,
 		"author_uid_text": uidText(stringScalar(author["uid"])),
-		"summary":         truncateRunes(rawSummary, 260),
+		"summary":         cleanText(rawSummary),
 		"images":          imageMaps(images, 3),
 		"image_count":     len(mediaItems), "media_grid_class": mediaGridClass(len(mediaItems)), "media_items": mediaItems,
 		"duration_text": stringScalar(original["duration_text"]), "url": stringScalar(original["url"]), "created_at": stringScalar(original["created_at"]),

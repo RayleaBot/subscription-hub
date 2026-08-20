@@ -126,7 +126,9 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 	}
 
 	if len(weiboSubs) > 0 && ctx.Err() == nil {
-		sourceResult := newWeiboSource(actions).pollSinceWithStateContext(ctx, stateCtx, weiboSubs, now.Add(-deliveryMaxAge))
+		weiboSource := newWeiboSource(actions)
+		sourceResult := weiboSource.pollSinceWithStateContext(ctx, stateCtx, weiboSubs, now.Add(-deliveryMaxAge))
+		longTextResolver := newWeiboLongTextResolver(actions, sourceResult.accounts)
 		checked += sourceResult.Checked
 		source["weibo"] = map[string]any{
 			"accounts": sourceResult.AccountCount, "feed_ok": sourceResult.FeedOK,
@@ -160,7 +162,11 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 					logStaleWeiboMblog(ctx, actions, item, update, now)
 					continue
 				}
-				if sendWeiboUpdate(ctx, stateCtx, actions, item, update, avatarCache, mediaCache, identityCache, &failures) {
+				prepared, incompleteText := longTextResolver.prepare(ctx, update)
+				if incompleteText {
+					failures = append(failures, weiboLongTextFailureText)
+				}
+				if sendWeiboUpdate(ctx, stateCtx, actions, item, update, prepared, avatarCache, mediaCache, identityCache, &failures) {
 					sent++
 				}
 			}
@@ -382,9 +388,9 @@ func sendBilibiliUpdate(ctx, stateCtx context.Context, actions pluginActions, it
 	return true
 }
 
-func sendWeiboUpdate(ctx, stateCtx context.Context, actions pluginActions, item subscription, update map[string]any, avatarCache *bilibiliAvatarCache, mediaCache *weiboMediaCache, identityCache *subscriberIdentityCache, failures *[]string) bool {
+func sendWeiboUpdate(ctx, stateCtx context.Context, actions pluginActions, item subscription, update, prepared map[string]any, avatarCache *bilibiliAvatarCache, mediaCache *weiboMediaCache, identityCache *subscriberIdentityCache, failures *[]string) bool {
 	item = refreshSubscribersForDelivery(ctx, actions, item, identityCache, failures)
-	data := buildWeiboRenderData(item, update)
+	data := buildWeiboRenderData(item, prepared)
 	inlineBilibiliUpdateAvatarsWithSharedCache(ctx, actions, data, avatarCache)
 	resolvedMedia, failedMedia := inlineWeiboUpdateMedia(ctx, actions, data, mediaCache)
 	if failedMedia > 0 {

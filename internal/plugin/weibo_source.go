@@ -24,6 +24,7 @@ type weiboSourceResult struct {
 	AccountCount int
 	FeedOK       bool
 	ReadyUIDs    map[string]bool
+	accounts     []weiboAccount
 }
 
 type weiboSource struct {
@@ -58,6 +59,7 @@ func (source *weiboSource) pollSinceWithStateContext(ctx, stateCtx context.Conte
 		result.Errors = append(result.Errors, ensureSentence(err.Error()))
 		return result
 	}
+	result.accounts = append([]weiboAccount(nil), accounts...)
 	result.FeedOK = true
 	seenUpdates := map[string]bool{}
 	for _, uid := range uids {

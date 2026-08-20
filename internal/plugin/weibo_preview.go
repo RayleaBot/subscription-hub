@@ -122,7 +122,8 @@ func fetchWeiboPreview(ctx context.Context, actions pluginActions, ref *weiboPre
 	if url := strings.TrimSpace(ref.URL); url != "" {
 		update["url"] = url
 	}
-	return update, nil
+	prepared, _ := newWeiboLongTextResolver(actions, accounts).prepare(ctx, update)
+	return prepared, nil
 }
 
 func logWeiboPreviewFailure(ctx context.Context, actions pluginActions, message string, ref *weiboPreviewRef, err error, reason string) {

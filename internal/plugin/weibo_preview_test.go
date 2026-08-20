@@ -87,6 +87,40 @@ func TestFetchWeiboPreviewUsesMobileStatusAPI(t *testing.T) {
 	}
 }
 
+func TestFetchWeiboPreviewExpandsLongText(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.accounts = fixtureWeiboAccounts("primary")
+	mblog := weiboTextMblog(
+		"5000000000000001",
+		"6000000001",
+		`摘要…<a href="/status/5000000000000001">全文</a>`,
+		1700000000,
+	)
+	mblog["isLongText"] = true
+	fullText := strings.Repeat("预览完整正文", 80) + "<br>第二行"
+	fake.httpRoutes = []fakeHTTPRoute{
+		{
+			path:   "/statuses/show",
+			result: httpJSONResult(200, map[string]any{"ok": 1, "data": mblog}),
+		},
+		{
+			path:   "/statuses/extend",
+			result: httpJSONResult(200, map[string]any{"ok": 1, "data": map[string]any{"longTextContent": fullText}}),
+		},
+	}
+
+	update, err := fetchWeiboPreview(context.Background(), fake, parseWeiboPreviewURL("https://m.weibo.cn/status/5000000000000001"))
+	if err != nil {
+		t.Fatalf("fetchWeiboPreview() error = %v", err)
+	}
+	if got, want := stringScalar(update["summary"]), weiboPlainText(fullText); got != want {
+		t.Fatalf("preview long text = %q, want %q", got, want)
+	}
+	if got := countHTTPByPath(fake, "/statuses/extend"); got != 1 {
+		t.Fatalf("preview long-text requests = %d, want 1: %#v", got, requestURLs(fake))
+	}
+}
+
 func TestSampleWeiboUpdateCoversCatalogServices(t *testing.T) {
 	for _, service := range []string{"post", "image", "video", "repost"} {
 		update := sampleWeiboUpdate(service)
