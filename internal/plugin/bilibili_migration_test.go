@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -21,21 +22,22 @@ type fakeHTTPRoute struct {
 }
 
 type fakePluginActions struct {
-	mu            sync.Mutex
-	accounts      rayleabot.ActionResult
-	httpRoutes    []fakeHTTPRoute
-	httpResponses []rayleabot.ActionResult
-	httpErrors    []error
-	httpRequests  []rayleabot.HTTPRequest
-	kv            map[string]any
-	renders       []rayleabot.RenderImageRequest
-	renderErrors  []error
-	messages      []rayleabot.MessageSendRequest
-	messageErrors []error
-	logs          []rayleabot.LoggerWriteRequest
-	groupMembers  map[string]rayleabot.ActionResult
-	groupErrors   map[string]error
-	groupRequests []string
+	mu                 sync.Mutex
+	accounts           rayleabot.ActionResult
+	httpRoutes         []fakeHTTPRoute
+	httpResponses      []rayleabot.ActionResult
+	httpErrors         []error
+	httpRequests       []rayleabot.HTTPRequest
+	kv                 map[string]any
+	renders            []rayleabot.RenderImageRequest
+	renderErrors       []error
+	messages           []rayleabot.MessageSendRequest
+	messageErrors      []error
+	logs               []rayleabot.LoggerWriteRequest
+	groupMembers       map[string]rayleabot.ActionResult
+	groupErrors        map[string]error
+	groupRequests      []string
+	accountValidations []thirdPartyAccountValidateRequest
 }
 
 func newFakePluginActions() *fakePluginActions {
@@ -78,6 +80,23 @@ func (fake *fakePluginActions) ThirdPartyAccountRead(context.Context, rayleabot.
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
 	return fake.accounts, nil
+}
+
+func (fake *fakePluginActions) Call(_ context.Context, action string, input any, output any) error {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if action != "thirdparty.account.validate" {
+		return fmt.Errorf("unexpected generic local action %q", action)
+	}
+	request, ok := input.(thirdPartyAccountValidateRequest)
+	if !ok {
+		return fmt.Errorf("unexpected third-party validation input %T", input)
+	}
+	fake.accountValidations = append(fake.accountValidations, request)
+	if result, ok := output.(*rayleabot.ActionResult); ok {
+		*result = rayleabot.ActionResult{"accepted": true, "reason": "queued"}
+	}
+	return nil
 }
 
 func (fake *fakePluginActions) KVGet(_ context.Context, key string) (rayleabot.ActionResult, error) {

@@ -266,7 +266,7 @@ func (source *weiboSource) pollUserFeed(ctx, stateCtx context.Context, uid strin
 		if minutes < 1 {
 			minutes = 1
 		}
-		failures = append(failures, fmt.Sprintf("微博检查因平台风控暂停，剩余约 %d 分钟。", minutes))
+		failures = append(failures, fmt.Sprintf("微博检查因 H5 会话阻断、平台风控或限流暂停，剩余约 %d 分钟。", minutes))
 	}
 	return nil, dedupeStrings(failures), false, false
 }
@@ -364,11 +364,9 @@ func (source *weiboSource) clearCooldown(ctx context.Context, scope string, acco
 }
 
 func (source *weiboSource) recordError(ctx context.Context, scope string, account weiboAccount, err error, fields map[string]any) {
-	payload := map[string]any{"scope": scope, "account_id": account.key(), "error": diagnosticExcerpt(err.Error(), 600)}
-	var typed *weiboSourceError
-	if errors.As(err, &typed) {
-		payload["kind"] = typed.Kind
-		payload["http_status"] = typed.HTTPStatus
+	payload := map[string]any{"scope": scope, "account_id": account.key()}
+	for key, value := range weiboErrorLogFields(err) {
+		payload[key] = value
 	}
 	for key, value := range fields {
 		payload[key] = value
@@ -382,6 +380,8 @@ func (source *weiboSource) friendlyError(err error) string {
 		return "微博检查失败。"
 	}
 	switch typed.Kind {
+	case "session_blocked":
+		return "微博检查失败：H5 会话被拒绝（HTTP 432），可能是 CK 失效或平台风控；请在三方账号页检查 CK。"
 	case "risk_control":
 		return "微博检查被风控拦截，已切换账号或进入退避。"
 	case "rate_limit":
@@ -389,6 +389,9 @@ func (source *weiboSource) friendlyError(err error) string {
 	case "auth":
 		return "微博检查失败：账号 CK 已失效，请重新扫码。"
 	default:
-		return "微博检查失败。"
+		if typed.HTTPStatus > 0 {
+			return fmt.Sprintf("微博检查失败：上游请求异常（%s，HTTP %d）。", firstText(typed.Kind, "upstream"), typed.HTTPStatus)
+		}
+		return fmt.Sprintf("微博检查失败：上游请求异常（%s）。", firstText(typed.Kind, "upstream"))
 	}
 }

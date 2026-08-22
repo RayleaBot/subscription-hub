@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -212,6 +213,86 @@ func TestWeiboSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	}
 	if len(fake.logs) == 0 || fake.logs[0].Message != "微博订阅源检查失败" {
 		t.Fatalf("risk-control failure was not logged: %#v", fake.logs)
+	}
+}
+
+func TestWeiboSourceClassifiesHTTP432AndEntersCooldown(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.accounts = fixtureWeiboAccounts("primary")
+	fake.httpResponses = []rayleabot.ActionResult{{
+		"status_code": 432,
+		"body_text":   `{"ok":0,"msg":"fixture-upstream-body SUB=fixture-leak;"}`,
+	}}
+	now := time.Unix(1787274976, 0)
+	source := newWeiboSource(fake)
+	source.client.now = func() time.Time { return now }
+	item := subscription{ID: "weibo-432", Platform: "weibo", UID: "6000000001", Services: []string{"post"}, Enabled: true}
+
+	result := source.poll(context.Background(), []subscription{item})
+
+	if result.FeedOK || len(result.Errors) != 1 || result.Errors[0] != "微博检查失败：H5 会话被拒绝（HTTP 432），可能是 CK 失效或平台风控；请在三方账号页检查 CK。" {
+		t.Fatalf("HTTP 432 result = %#v", result)
+	}
+	if _, exists := fake.kv["source:weibo:cooldown:feed:primary"]; !exists {
+		t.Fatalf("HTTP 432 did not enter cooldown: %#v", fake.kv)
+	}
+	if len(fake.logs) != 1 {
+		t.Fatalf("HTTP 432 logs = %#v", fake.logs)
+	}
+	fields := fake.logs[0].Fields
+	if stringScalar(fields["kind"]) != "session_blocked" || intScalar(fields["http_status"]) != 432 || stringScalar(fields["uid"]) != item.UID || intScalar(fields["page"]) != 1 {
+		t.Fatalf("HTTP 432 log fields = %#v", fields)
+	}
+	if _, exists := fields["error"]; exists {
+		t.Fatalf("HTTP 432 log included a free-form error: %#v", fields)
+	}
+	if rendered := fmt.Sprint(fields); strings.Contains(rendered, "fixture-upstream-body") || strings.Contains(rendered, "fixture-leak") {
+		t.Fatalf("HTTP 432 log included upstream response content: %#v", fields)
+	}
+	if len(fake.accountValidations) != 1 {
+		t.Fatalf("HTTP 432 validation requests = %#v", fake.accountValidations)
+	}
+	validation := fake.accountValidations[0]
+	if validation.Platform != "weibo" || validation.AccountID != "primary" || validation.Observation != "session_blocked" || validation.HTTPStatus != 432 {
+		t.Fatalf("HTTP 432 validation request = %#v", validation)
+	}
+
+	second := source.poll(context.Background(), []subscription{item})
+	if len(fake.httpRequests) != 1 || second.FeedOK || len(second.Errors) != 1 || !strings.Contains(second.Errors[0], "H5 会话阻断") {
+		t.Fatalf("cooldown did not suppress the next request: result=%#v requests=%#v", second, fake.httpRequests)
+	}
+	if len(fake.accountValidations) != 1 {
+		t.Fatalf("cooldown emitted another validation request: %#v", fake.accountValidations)
+	}
+}
+
+func TestWeiboClientRequestsValidationForAuthenticationRejection(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.httpResponses = []rayleabot.ActionResult{{"status_code": 401, "body_text": ""}}
+	client := newWeiboClient(fake)
+
+	_, err := client.requestJSON(context.Background(), weiboUserFeedURL("6000000001", ""), weiboAccount{ID: "primary", Cookie: "SUB=fixture;"}, weiboMobileReferer)
+	var sourceErr *weiboSourceError
+	if !errors.As(err, &sourceErr) || sourceErr.Kind != "auth" {
+		t.Fatalf("authentication error = %#v", err)
+	}
+	if len(fake.accountValidations) != 1 {
+		t.Fatalf("authentication validation requests = %#v", fake.accountValidations)
+	}
+	validation := fake.accountValidations[0]
+	if validation.Platform != "weibo" || validation.AccountID != "primary" || validation.Observation != "auth_rejected" || validation.HTTPStatus != 401 {
+		t.Fatalf("authentication validation request = %#v", validation)
+	}
+}
+
+func TestWeiboSourceReportsStructuredUpstreamFailureInSummary(t *testing.T) {
+	source := newWeiboSource(newFakePluginActions())
+	message := source.friendlyError(&weiboSourceError{
+		Kind:       "upstream",
+		HTTPStatus: 500,
+	})
+	if message != "微博检查失败：上游请求异常（upstream，HTTP 500）。" {
+		t.Fatalf("upstream summary = %q", message)
 	}
 }
 

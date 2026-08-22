@@ -253,18 +253,24 @@ func TestWeiboSearchAvatarFromHTMLDecodesSignedQuery(t *testing.T) {
 	}
 }
 
-func TestWeiboDiagnosticsRedactCookies(t *testing.T) {
-	response := rayleabot.ActionResult{
+func TestWeiboDiagnosticsNeverIncludeUpstreamBody(t *testing.T) {
+	fake := newFakePluginActions()
+	fake.httpResponses = []rayleabot.ActionResult{{
 		"status_code": 403,
 		"body_text":   `{"ok":0,"msg":"blocked SUB=private-value; SUBP=masked-value"}`,
+	}}
+	client := newWeiboClient(fake)
+	_, err := client.requestJSON(context.Background(), weiboUserFeedURL("6000000001", ""), weiboAccount{ID: "primary", Cookie: "SUB=fixture;"}, weiboMobileReferer)
+	if err == nil {
+		t.Fatal("requestJSON error = nil")
 	}
-	message := weiboDiagnosticText(response, decodeBilibiliDocument(response))
-	for _, secret := range []string{"private-value", "masked-value"} {
+	message := err.Error() + " " + friendlyWeiboSourceError("微博检查失败", err)
+	for _, secret := range []string{"private-value", "masked-value", "SUB=", "SUBP="} {
 		if strings.Contains(message, secret) {
 			t.Fatalf("weibo diagnostic leaked %q: %s", secret, message)
 		}
 	}
-	if !strings.Contains(message, "SUB=[已隐藏]") || !strings.Contains(message, "SUBP=[已隐藏]") {
-		t.Fatalf("weibo diagnostic missing redaction markers: %s", message)
+	if !strings.Contains(message, "HTTP 403") || !strings.Contains(message, "CK 已失效") {
+		t.Fatalf("weibo diagnostic = %q", message)
 	}
 }

@@ -328,7 +328,7 @@ func searchWeiboWebUsers(ctx context.Context, actions pluginActions, accounts []
 		status := int(intScalar(response["status_code"]))
 		body, _ := response["body_text"].(string)
 		if status != 200 || body == "" {
-			lastError = &weiboSourceError{Kind: weiboErrorKind(status), Message: weiboDiagnosticText(response, nil), HTTPStatus: status}
+			lastError = &weiboSourceError{Kind: weiboErrorKind(status), HTTPStatus: status}
 			continue
 		}
 		if users := weiboUsersFromSearchPage(body); len(users) > 0 {

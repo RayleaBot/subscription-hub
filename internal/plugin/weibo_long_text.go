@@ -104,20 +104,8 @@ func (resolver *weiboLongTextResolver) logFailure(ctx context.Context, id string
 		return
 	}
 	fields := map[string]any{"update_id": strings.TrimSpace(id)}
-	for key, value := range actionErrorLogFields(err) {
+	for key, value := range weiboErrorLogFields(err) {
 		fields[key] = value
-	}
-	var sourceErr *weiboSourceError
-	if errors.As(err, &sourceErr) {
-		if sourceErr.Kind != "" {
-			fields["error_kind"] = sourceErr.Kind
-		}
-		if sourceErr.HTTPStatus != 0 {
-			fields["http_status"] = sourceErr.HTTPStatus
-		}
-		if sourceErr.Message != "" {
-			fields["diagnostic"] = weiboDiagnosticExcerpt(sourceErr.Message, 240)
-		}
 	}
 	_, _ = resolver.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 		Level: "warn", Message: "微博正文获取不完整", Fields: fields,

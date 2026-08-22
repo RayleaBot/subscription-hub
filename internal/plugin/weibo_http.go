@@ -47,19 +47,32 @@ func (account weiboAccount) key() string {
 
 type weiboSourceError struct {
 	Kind       string
-	Message    string
 	HTTPStatus int
+}
+
+type thirdPartyAccountValidateRequest struct {
+	Platform    string `json:"platform"`
+	AccountID   string `json:"account_id"`
+	Observation string `json:"observation"`
+	HTTPStatus  int    `json:"http_status,omitempty"`
 }
 
 func (err *weiboSourceError) Error() string {
 	if err == nil {
 		return ""
 	}
-	return strings.TrimSpace(err.Message)
+	kind := strings.TrimSpace(err.Kind)
+	if kind == "" {
+		kind = "upstream"
+	}
+	if err.HTTPStatus > 0 {
+		return fmt.Sprintf("微博上游请求失败（%s，HTTP %d）", kind, err.HTTPStatus)
+	}
+	return "微博上游请求失败（" + kind + "）"
 }
 
 func (err *weiboSourceError) cooldown() bool {
-	return err != nil && (err.Kind == "risk_control" || err.Kind == "rate_limit")
+	return err != nil && (err.Kind == "risk_control" || err.Kind == "rate_limit" || err.Kind == "session_blocked")
 }
 
 func readWeiboAccounts(ctx context.Context, actions pluginActions) ([]weiboAccount, error) {
@@ -188,12 +201,42 @@ func (client *weiboClient) requestJSON(ctx context.Context, rawURL string, accou
 		if status >= 200 && status < 300 {
 			kind = "invalid_response"
 		}
-		return nil, &weiboSourceError{Kind: kind, Message: weiboDiagnosticText(response, nil), HTTPStatus: status}
+		sourceErr := &weiboSourceError{Kind: kind, HTTPStatus: status}
+		client.requestCredentialValidation(ctx, account, sourceErr)
+		return nil, sourceErr
 	}
 	if status < 200 || status >= 300 || weiboDocumentRejected(document) {
-		return nil, &weiboSourceError{Kind: weiboClassifyError(status, document), Message: weiboDiagnosticText(response, document), HTTPStatus: status}
+		sourceErr := &weiboSourceError{Kind: weiboClassifyError(status, document), HTTPStatus: status}
+		client.requestCredentialValidation(ctx, account, sourceErr)
+		return nil, sourceErr
 	}
 	return document, nil
+}
+
+func (client *weiboClient) requestCredentialValidation(ctx context.Context, account weiboAccount, sourceErr *weiboSourceError) {
+	if client == nil || client.actions == nil || sourceErr == nil || strings.TrimSpace(account.ID) == "" {
+		return
+	}
+	caller, ok := client.actions.(genericLocalActionCaller)
+	if !ok {
+		return
+	}
+	observation := ""
+	switch sourceErr.Kind {
+	case "auth":
+		observation = "auth_rejected"
+	case "session_blocked":
+		observation = "session_blocked"
+	default:
+		return
+	}
+	var result rayleabot.ActionResult
+	_ = caller.Call(ctx, "thirdparty.account.validate", thirdPartyAccountValidateRequest{
+		Platform:    "weibo",
+		AccountID:   strings.TrimSpace(account.ID),
+		Observation: observation,
+		HTTPStatus:  sourceErr.HTTPStatus,
+	}, &result)
 }
 
 // weiboDocumentRejected 识别 m.weibo.cn 的 ok:0 业务失败响应；没有 ok 字段的文档按正常处理。
@@ -222,6 +265,8 @@ func weiboErrorKind(status int) string {
 	switch {
 	case status == 401 || status == 403:
 		return "auth"
+	case status == 432:
+		return "session_blocked"
 	case status == 412 || status == 418:
 		return "risk_control"
 	case status == 429:
@@ -235,7 +280,7 @@ func weiboErrorKind(status int) string {
 
 func weiboClassifyError(status int, document map[string]any) string {
 	kind := weiboErrorKind(status)
-	if kind == "auth" || kind == "risk_control" || kind == "rate_limit" {
+	if kind == "auth" || kind == "risk_control" || kind == "rate_limit" || kind == "session_blocked" {
 		return kind
 	}
 	if weiboDocumentLooksLikeAuth(document) {
@@ -279,22 +324,32 @@ func weiboDocumentLooksLikeRisk(document map[string]any) bool {
 	return false
 }
 
-func weiboDiagnosticText(response rayleabot.ActionResult, document map[string]any) string {
-	status := int(intScalar(response["status_code"]))
-	parts := []string{fmt.Sprintf("HTTP %d", status)}
-	if document != nil {
-		if message := weiboDiagnosticExcerpt(firstText(document["msg"], document["message"]), 240); message != "" {
-			parts = append(parts, "原始原因："+message)
+func weiboErrorLogFields(err error) map[string]any {
+	fields := map[string]any{}
+	var sourceErr *weiboSourceError
+	if errors.As(err, &sourceErr) {
+		fields["kind"] = firstText(sourceErr.Kind, "upstream")
+		if sourceErr.HTTPStatus > 0 {
+			fields["http_status"] = sourceErr.HTTPStatus
 		}
-	} else if body := weiboDiagnosticExcerpt(stringScalar(response["body_text"]), 240); body != "" {
-		parts = append(parts, "原始原因："+body)
+		return fields
 	}
-	return "诊断信息：" + strings.Join(parts, "；") + "。"
-}
-
-// weiboDiagnosticExcerpt 在通用脱敏之外额外隐藏微博 CK 字段。
-func weiboDiagnosticExcerpt(value string, limit int) string {
-	return weiboSecretPattern.ReplaceAllString(diagnosticExcerpt(value, limit), "${1}${2}${3}${4}[已隐藏]")
+	var actionErr *rayleabot.ActionError
+	if errors.As(err, &actionErr) {
+		fields["kind"] = "local_action"
+		if strings.TrimSpace(actionErr.Code) != "" {
+			fields["error_code"] = strings.TrimSpace(actionErr.Code)
+		}
+		return fields
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		fields["kind"] = "timeout"
+	} else if errors.Is(err, context.Canceled) {
+		fields["kind"] = "canceled"
+	} else if err != nil {
+		fields["kind"] = "request"
+	}
+	return fields
 }
 
 func friendlyWeiboSourceError(label string, err error) string {
@@ -309,14 +364,19 @@ func friendlyWeiboSourceError(label string, err error) string {
 		return label + "。"
 	}
 	switch sourceErr.Kind {
+	case "session_blocked":
+		return label + "：H5 会话被拒绝（HTTP 432），可能是 CK 失效或平台风控；请在三方账号页检查 CK。"
 	case "risk_control":
-		return label + "：微博请求被风控拦截，请稍后再试或重新扫码更新 CK。" + sourceErr.Message
+		return label + "：微博请求被风控拦截，请稍后再试或重新扫码更新 CK。"
 	case "rate_limit":
-		return label + "：微博请求过于频繁，请稍后再试。" + sourceErr.Message
+		return label + "：微博请求过于频繁，请稍后再试。"
 	case "auth":
-		return label + "：微博账号 CK 已失效，请重新扫码。" + sourceErr.Message
+		return label + "：微博账号 CK 已失效，请重新扫码。"
 	default:
-		return label + "：" + sourceErr.Message
+		if sourceErr.HTTPStatus > 0 {
+			return fmt.Sprintf("%s：微博上游请求异常（%s，HTTP %d）。", label, firstText(sourceErr.Kind, "upstream"), sourceErr.HTTPStatus)
+		}
+		return fmt.Sprintf("%s：微博上游请求异常（%s）。", label, firstText(sourceErr.Kind, "upstream"))
 	}
 }
 

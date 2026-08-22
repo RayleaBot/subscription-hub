@@ -134,20 +134,8 @@ func logWeiboPreviewFailure(ctx context.Context, actions pluginActions, message 
 	if ref != nil {
 		fields["weibo_id"] = ref.ID
 	}
-	for key, value := range actionErrorLogFields(err) {
+	for key, value := range weiboErrorLogFields(err) {
 		fields[key] = value
-	}
-	var sourceErr *weiboSourceError
-	if errors.As(err, &sourceErr) {
-		if sourceErr.Kind != "" {
-			fields["error_kind"] = sourceErr.Kind
-		}
-		if sourceErr.HTTPStatus != 0 {
-			fields["http_status"] = sourceErr.HTTPStatus
-		}
-		if sourceErr.Message != "" {
-			fields["diagnostic"] = weiboDiagnosticExcerpt(sourceErr.Message, 240)
-		}
 	}
 	if reason != "" {
 		fields["reason"] = reason
