@@ -50,6 +50,7 @@
     "http.request",
     "scheduler.create",
     "thirdparty.account.read",
+    "thirdparty.account.validate",
     "friend.list",
     "group.list",
     "user.info.get",

@@ -24,6 +24,10 @@ type pluginActions interface {
 	GroupMemberGet(context.Context, string, string) (rayleabot.ActionResult, error)
 }
 
+type genericLocalActionCaller interface {
+	Call(context.Context, string, any, any) error
+}
+
 func mapValue(value any) map[string]any {
 	if typed, ok := value.(map[string]any); ok {
 		return typed
