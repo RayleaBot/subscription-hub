@@ -30,6 +30,7 @@ type fakePluginActions struct {
 	httpRequests       []rayleabot.HTTPRequest
 	kv                 map[string]any
 	renders            []rayleabot.RenderImageRequest
+	resourceRenders    []pluginRenderImageRequest
 	renderErrors       []error
 	messages           []rayleabot.MessageSendRequest
 	messageErrors      []error
@@ -85,7 +86,29 @@ func (fake *fakePluginActions) ThirdPartyAccountRead(context.Context, rayleabot.
 func (fake *fakePluginActions) Call(_ context.Context, action string, input any, output any) error {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
-	if action != "thirdparty.account.validate" {
+	switch action {
+	case "render.image":
+		request, ok := input.(pluginRenderImageRequest)
+		if !ok {
+			return fmt.Errorf("unexpected render.image input %T", input)
+		}
+		fake.resourceRenders = append(fake.resourceRenders, request)
+		fake.renders = append(fake.renders, rayleabot.RenderImageRequest{
+			Template: request.Template, Data: request.Data, Theme: request.Theme, Output: request.Output, FallbackText: request.FallbackText,
+		})
+		if len(fake.renderErrors) > 0 {
+			err := fake.renderErrors[0]
+			fake.renderErrors = fake.renderErrors[1:]
+			if err != nil {
+				return err
+			}
+		}
+		if result, ok := output.(*rayleabot.ActionResult); ok {
+			*result = rayleabot.ActionResult{"image_path": "plugin-test.png"}
+		}
+		return nil
+	case "thirdparty.account.validate":
+	default:
 		return fmt.Errorf("unexpected generic local action %q", action)
 	}
 	request, ok := input.(thirdPartyAccountValidateRequest)

@@ -80,7 +80,6 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 	checked := 0
 	preparedCache := map[string]map[string]any{}
 	avatarCache := &bilibiliAvatarCache{}
-	mediaCache := &weiboMediaCache{}
 	identityCache := newSubscriberIdentityCache(ctx)
 
 	if len(bilibiliSubs) > 0 {
@@ -166,7 +165,7 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 				if incompleteText {
 					failures = append(failures, weiboLongTextFailureText)
 				}
-				if sendWeiboUpdate(ctx, stateCtx, actions, item, update, prepared, avatarCache, mediaCache, identityCache, &failures) {
+				if sendWeiboUpdate(ctx, stateCtx, actions, item, update, prepared, avatarCache, identityCache, &failures) {
 					sent++
 				}
 			}
@@ -388,25 +387,12 @@ func sendBilibiliUpdate(ctx, stateCtx context.Context, actions pluginActions, it
 	return true
 }
 
-func sendWeiboUpdate(ctx, stateCtx context.Context, actions pluginActions, item subscription, update, prepared map[string]any, avatarCache *bilibiliAvatarCache, mediaCache *weiboMediaCache, identityCache *subscriberIdentityCache, failures *[]string) bool {
+func sendWeiboUpdate(ctx, stateCtx context.Context, actions pluginActions, item subscription, update, prepared map[string]any, avatarCache *bilibiliAvatarCache, identityCache *subscriberIdentityCache, failures *[]string) bool {
 	item = refreshSubscribersForDelivery(ctx, actions, item, identityCache, failures)
 	data := buildWeiboRenderData(item, prepared)
 	inlineBilibiliUpdateAvatarsWithSharedCache(ctx, actions, data, avatarCache)
-	resolvedMedia, failedMedia := inlineWeiboUpdateMedia(ctx, actions, data, mediaCache)
-	if failedMedia > 0 {
-		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-			Level:   "warn",
-			Message: "微博订阅媒体读取不完整",
-			Fields: map[string]any{
-				"subscription_id": item.ID,
-				"update_id":       stringScalar(update["id"]),
-				"resolved":        resolvedMedia,
-				"failed":          failedMedia,
-			},
-		})
-		*failures = append(*failures, "部分微博媒体读取失败，卡片已使用占位图。")
-	}
-	imagePath, err := renderSubscriptionCardImage(ctx, actions, "weibo-update", data, buildWeiboFallback(data), map[string]any{
+	resources := prepareWeiboUpdateResources(data)
+	imagePath, err := renderSubscriptionCardImageWithResources(ctx, actions, "weibo-update", data, resources, buildWeiboFallback(data), map[string]any{
 		"subscription_id": item.ID, "target_type": item.TargetType, "target_id": item.TargetID,
 	})
 	if err != nil {

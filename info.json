@@ -1,9 +1,10 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅中心",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "manifest_version": "2",
   "plugin_protocol_version": "1",
+  "min_core_version": "0.3.2",
   "runtime": "go",
   "entry": "bin/subscription-hub",
   "platforms": ["windows-x64", "linux-x64", "macos-arm64"],

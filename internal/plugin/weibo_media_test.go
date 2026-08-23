@@ -1,104 +1,86 @@
 package plugin
 
 import (
-	"context"
-	"encoding/base64"
-	"strings"
 	"testing"
-
-	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
-func TestInlineWeiboUpdateMediaUsesRefererAndCompactCandidate(t *testing.T) {
-	fake := newFakePluginActions()
-	fake.httpRoutes = []fakeHTTPRoute{{
-		path:   "/mw690/cover.jpg",
-		result: avatarHTTPResult(),
-	}}
+func TestPrepareWeiboUpdateResourcesUsesOriginalQualityFirst(t *testing.T) {
+	t.Parallel()
+
 	data := map[string]any{
 		"media_items": []map[string]any{{
-			"url": "https://wx2.sinaimg.cn/orj360/cover.jpg", "class": "media-item", "fallback": "assets/cover.svg",
+			"url":      "https://wx2.sinaimg.cn/orj360/cover.jpg",
+			"fallback": "assets/cover.svg",
 		}},
 	}
-
-	resolved, failed := inlineWeiboUpdateMedia(context.Background(), fake, data, nil)
-
-	if resolved != 1 || failed != 0 {
-		t.Fatalf("media resolution = %d/%d, data=%#v", resolved, failed, data)
+	resources := prepareWeiboUpdateResources(data)
+	if len(resources) != 1 {
+		t.Fatalf("resources = %#v", resources)
 	}
-	items := mapSliceValue(data["media_items"])
-	if len(items) != 1 || !strings.HasPrefix(stringScalar(items[0]["url"]), "data:image/png;base64,") {
-		t.Fatalf("media was not inlined: %#v", items)
+	resource := resources[0]
+	if resource.ID != "weibo-media-0" || resource.URL != "https://wx2.sinaimg.cn/large/cover.jpg" || resource.Referer != "https://weibo.com/" {
+		t.Fatalf("resource = %#v", resource)
 	}
-	if len(fake.httpRequests) != 1 || fake.httpRequests[0].URL != "https://wx2.sinaimg.cn/mw690/cover.jpg" {
-		t.Fatalf("unexpected media requests: %#v", fake.httpRequests)
+	wantFallbacks := []string{
+		"https://wx2.sinaimg.cn/mw2000/cover.jpg",
+		"https://wx2.sinaimg.cn/mw1024/cover.jpg",
+		"https://wx2.sinaimg.cn/mw690/cover.jpg",
+		"https://wx2.sinaimg.cn/bmiddle/cover.jpg",
 	}
-	if fake.httpRequests[0].Headers["Referer"] != "https://weibo.com/" {
-		t.Fatalf("weibo media referer = %#v", fake.httpRequests[0].Headers)
+	if len(resource.FallbackURLs) != len(wantFallbacks) {
+		t.Fatalf("fallback URLs = %#v", resource.FallbackURLs)
+	}
+	for index, want := range wantFallbacks {
+		if resource.FallbackURLs[index] != want {
+			t.Fatalf("fallback URL %d = %q, want %q", index, resource.FallbackURLs[index], want)
+		}
+	}
+	item := mapSliceValue(data["media_items"])[0]
+	if stringScalar(item["resource_id"]) != "weibo-media-0" || stringScalar(item["url"]) != "assets/cover.svg" {
+		t.Fatalf("media item = %#v", item)
 	}
 }
 
-func TestInlineWeiboUpdateMediaKeepsFailedRemoteItemsAsPlaceholders(t *testing.T) {
-	fake := newFakePluginActions()
-	fake.httpRoutes = []fakeHTTPRoute{
-		{path: "/orj360/broken.jpg", result: rayleabot.ActionResult{"status_code": 403}},
-		{path: "/thumbnail/broken.jpg", result: rayleabot.ActionResult{"status_code": 403}},
-	}
+func TestPrepareWeiboUpdateResourcesCoversMainAndRepostMedia(t *testing.T) {
+	t.Parallel()
+
 	data := map[string]any{
-		"media_items": []map[string]any{{"url": "https://wx2.sinaimg.cn/orj360/broken.jpg"}},
+		"media_items": []map[string]any{
+			{"url": "https://wx1.sinaimg.cn/large/main-1.jpg"},
+			{"url": "assets/grid.svg"},
+		},
+		"original": map[string]any{
+			"media_items": []map[string]any{{"url": "https://wx2.sinaimg.cn/large/repost-1.jpg"}},
+		},
 	}
-
-	resolved, failed := inlineWeiboUpdateMedia(context.Background(), fake, data, nil)
-
-	items := mapSliceValue(data["media_items"])
-	if resolved != 0 || failed != 1 || len(items) != 1 || stringScalar(items[0]["url"]) != "assets/grid.svg" {
-		t.Fatalf("failed remote media did not use a placeholder: resolved=%d failed=%d data=%#v", resolved, failed, data)
+	resources := prepareWeiboUpdateResources(data)
+	if len(resources) != 2 || resources[0].ID != "weibo-media-0" || resources[1].ID != "weibo-media-1" {
+		t.Fatalf("resources = %#v", resources)
 	}
-	if intScalar(data["image_count"]) != 1 || stringScalar(data["media_grid_class"]) != "media-grid--single" {
-		t.Fatalf("media layout metadata was not repaired: %#v", data)
+	mainItems := mapSliceValue(data["media_items"])
+	if stringScalar(mainItems[0]["resource_id"]) != "weibo-media-0" || stringScalar(mainItems[1]["resource_id"]) != "" {
+		t.Fatalf("main media items = %#v", mainItems)
 	}
-}
-
-func TestInlineWeiboUpdateMediaFallsBackToFitWholeBatch(t *testing.T) {
-	fake := newFakePluginActions()
-	large := weiboMediaHTTPResult(120 << 10)
-	compact := weiboMediaHTTPResult(16 << 10)
-	fake.httpRoutes = []fakeHTTPRoute{
-		{path: "/orj360/one.jpg", result: large}, {path: "/thumbnail/one.jpg", result: compact},
-		{path: "/orj360/two.jpg", result: large}, {path: "/thumbnail/two.jpg", result: compact},
-		{path: "/orj360/three.jpg", result: large}, {path: "/thumbnail/three.jpg", result: compact},
-	}
-	data := map[string]any{"media_items": []map[string]any{
-		{"url": "https://wx2.sinaimg.cn/orj360/one.jpg"},
-		{"url": "https://wx2.sinaimg.cn/orj360/two.jpg"},
-		{"url": "https://wx2.sinaimg.cn/orj360/three.jpg"},
-	}}
-
-	resolved, failed := inlineWeiboUpdateMedia(context.Background(), fake, data, nil)
-
-	if resolved != 3 || failed != 0 || len(mapSliceValue(data["media_items"])) != 3 {
-		t.Fatalf("whole media batch was not retained: resolved=%d failed=%d data=%#v", resolved, failed, data)
-	}
-	for _, name := range []string{"one", "two", "three"} {
-		found := false
-		for _, request := range fake.httpRequests {
-			if strings.Contains(request.URL, "/thumbnail/"+name+".jpg") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("compact fallback was not requested for %s: %#v", name, fake.httpRequests)
-		}
+	originalItems := mapSliceValue(mapValue(data["original"])["media_items"])
+	if stringScalar(originalItems[0]["resource_id"]) != "weibo-media-1" {
+		t.Fatalf("repost media items = %#v", originalItems)
 	}
 }
 
-func weiboMediaHTTPResult(size int) rayleabot.ActionResult {
-	body := make([]byte, size)
-	copy(body, []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
-	return rayleabot.ActionResult{
-		"status_code": 200,
-		"headers":     map[string]any{"Content-Type": "image/png"},
-		"body_base64": base64.StdEncoding.EncodeToString(body),
+func TestPrepareWeiboUpdateResourcesDoesNotExposeUnsupportedRemoteURL(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]any{
+		"media_items": []map[string]any{{
+			"url":      "https://n.sinaimg.cn/private.jpg",
+			"fallback": "assets/grid.svg",
+		}},
+	}
+	if resources := prepareWeiboUpdateResources(data); len(resources) != 0 {
+		t.Fatalf("resources = %#v", resources)
+	}
+	item := mapSliceValue(data["media_items"])[0]
+	if stringScalar(item["url"]) != "assets/grid.svg" || stringScalar(item["resource_id"]) != "" {
+		t.Fatalf("media item = %#v", item)
 	}
 }

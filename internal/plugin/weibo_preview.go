@@ -185,10 +185,11 @@ func sendWeiboPreview(ctx context.Context, event *rayleabot.EventContext, update
 	}
 	data := buildWeiboRenderData(item, update)
 	inlineBilibiliUpdateAvatars(ctx, event.Actions(), data)
+	var resources []pluginRenderImageResource
 	if realPreview {
-		inlineWeiboUpdateMedia(ctx, event.Actions(), data, nil)
+		resources = prepareWeiboUpdateResources(data)
 	}
-	imagePath, err := renderSubscriptionCardImage(ctx, event.Actions(), "weibo-update", data, buildWeiboFallback(data), previewRenderLogFields(update))
+	imagePath, err := renderSubscriptionCardImageWithResources(ctx, event.Actions(), "weibo-update", data, resources, buildWeiboFallback(data), previewRenderLogFields(update))
 	if err != nil {
 		return event.SendText(previewCardFailureText(err))
 	}

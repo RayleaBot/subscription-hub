@@ -518,7 +518,7 @@ func TestWeiboSubscriptionCheckFiltersByService(t *testing.T) {
 	}
 }
 
-func TestWeiboSubscriptionCheckUsesPlaceholdersWhenAllMediaFail(t *testing.T) {
+func TestWeiboSubscriptionCheckDelegatesMediaPrefetchToHost(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.accounts = fixtureWeiboAccounts("primary")
 	now := time.Now().Truncate(time.Second)
@@ -530,32 +530,31 @@ func TestWeiboSubscriptionCheckUsesPlaceholdersWhenAllMediaFail(t *testing.T) {
 	fake.httpRoutes = []fakeHTTPRoute{
 		{path: "/api/container/getIndex", result: weiboFeedResult(weiboImageMblog("retry-image", item.UID, "图片微博", now.Unix()))},
 		{path: "/face.jpg", result: avatarHTTPResult()},
-		{path: "/mw690/ok.jpg", result: rayleabot.ActionResult{"status_code": 403}},
-		{path: "/orj360/ok.jpg", result: rayleabot.ActionResult{"status_code": 403}},
-		{path: "/thumbnail/ok.jpg", result: rayleabot.ActionResult{"status_code": 403}},
-		{path: "/large/ok.jpg", result: rayleabot.ActionResult{"status_code": 403}},
 	}
 
 	result := checkSubscriptionsWithActionsAt(context.Background(), fake, settings{
 		Enabled: true, Subscriptions: []subscription{item},
 	}, now)
 
-	if intScalar(result["sent"]) != 1 || !boolScalar(result["degraded"]) {
-		t.Fatalf("failed media should degrade the delivered card: %#v", result)
+	if intScalar(result["sent"]) != 1 || boolScalar(result["degraded"]) {
+		t.Fatalf("host-prefetched media should keep the plugin delivery healthy: %#v", result)
 	}
 	if len(fake.renders) != 1 || len(fake.messages) != 1 {
-		t.Fatalf("failed media did not deliver a placeholder card: renders=%d messages=%d", len(fake.renders), len(fake.messages))
+		t.Fatalf("media render was not delivered: renders=%d messages=%d", len(fake.renders), len(fake.messages))
 	}
 	media := mapSliceValue(fake.renders[0].Data["media_items"])
-	if len(media) != 1 || stringScalar(media[0]["url"]) != "assets/grid.svg" {
-		t.Fatalf("failed media did not use placeholder: %#v", media)
+	if len(media) != 1 || stringScalar(media[0]["url"]) != "assets/grid.svg" || stringScalar(media[0]["resource_id"]) != "weibo-media-0" {
+		t.Fatalf("media resource mapping = %#v", media)
+	}
+	if len(fake.resourceRenders) != 1 || len(fake.resourceRenders[0].Resources) != 1 || fake.resourceRenders[0].Resources[0].URL != "https://tvax2.sinaimg.cn/large/ok.jpg" {
+		t.Fatalf("render resources = %#v", fake.resourceRenders)
 	}
 	if _, exists := fake.kv["seen:retry-weibo-media:image:retry-image"]; !exists {
 		t.Fatalf("delivered placeholder card was not marked seen: %#v", fake.kv)
 	}
 }
 
-func TestWeiboSubscriptionCheckKeepsAvailableMediaWhenOneFails(t *testing.T) {
+func TestWeiboSubscriptionCheckPassesMultipleMediaResources(t *testing.T) {
 	fake := newFakePluginActions()
 	fake.accounts = fixtureWeiboAccounts("primary")
 	now := time.Now().Truncate(time.Second)
@@ -572,24 +571,24 @@ func TestWeiboSubscriptionCheckKeepsAvailableMediaWhenOneFails(t *testing.T) {
 	fake.httpRoutes = []fakeHTTPRoute{
 		{path: "/api/container/getIndex", result: weiboFeedResult(mblog)},
 		{path: "/face.jpg", result: avatarHTTPResult()},
-		{path: "/orj360/good.jpg", result: avatarHTTPResult()},
-		{path: "/orj360/broken.jpg", result: rayleabot.ActionResult{"status_code": 403}},
-		{path: "/thumbnail/broken.jpg", result: rayleabot.ActionResult{"status_code": 403}},
 	}
 
 	result := checkSubscriptionsWithActionsAt(context.Background(), fake, settings{
 		Enabled: true, Subscriptions: []subscription{item},
 	}, now)
 
-	if intScalar(result["sent"]) != 1 || !boolScalar(result["degraded"]) {
-		t.Fatalf("partial media failure should degrade the delivered card: %#v", result)
+	if intScalar(result["sent"]) != 1 || boolScalar(result["degraded"]) {
+		t.Fatalf("host-prefetched media should keep the plugin delivery healthy: %#v", result)
 	}
 	if len(fake.renders) != 1 || len(fake.messages) != 1 {
 		t.Fatalf("partial media failure did not deliver a card: renders=%d messages=%d", len(fake.renders), len(fake.messages))
 	}
 	media := mapSliceValue(fake.renders[0].Data["media_items"])
-	if len(media) != 2 || !strings.HasPrefix(stringScalar(media[0]["url"]), "data:image/png;base64,") || stringScalar(media[1]["url"]) != "assets/grid.svg" {
-		t.Fatalf("partial media fallback = %#v", media)
+	if len(media) != 2 || stringScalar(media[0]["resource_id"]) != "weibo-media-0" || stringScalar(media[1]["resource_id"]) != "weibo-media-1" {
+		t.Fatalf("media resource mapping = %#v", media)
+	}
+	if len(fake.resourceRenders) != 1 || len(fake.resourceRenders[0].Resources) != 2 || fake.resourceRenders[0].Resources[0].URL != "https://wx2.sinaimg.cn/large/good.jpg" || fake.resourceRenders[0].Resources[1].URL != "https://wx2.sinaimg.cn/large/broken.jpg" {
+		t.Fatalf("render resources = %#v", fake.resourceRenders)
 	}
 	if _, exists := fake.kv["seen:retry-partial-weibo-media:image:partial-image"]; !exists {
 		t.Fatalf("delivered card was not marked seen: %#v", fake.kv)
@@ -660,7 +659,7 @@ func TestWeiboNormalizationClassifiesServicesAndSkipsAds(t *testing.T) {
 	}
 }
 
-func TestWeiboNormalizationPrefersCompactImageAndFormatsDecimalDuration(t *testing.T) {
+func TestWeiboNormalizationPrefersLargeImageAndFormatsDecimalDuration(t *testing.T) {
 	mblog := weiboVideoMblog("video-real", "6000000001", "视频微博", 1700000000)
 	mblog["pics"] = []any{map[string]any{
 		"url":   "https://wx2.sinaimg.cn/orj360/compact.jpg",
@@ -671,8 +670,8 @@ func TestWeiboNormalizationPrefersCompactImageAndFormatsDecimalDuration(t *testi
 
 	update := normalizeWeiboMblog(mblog, 0)
 	images := imageMaps(update["images"], 9)
-	if len(images) != 1 || stringScalar(images[0]["url"]) != "https://wx2.sinaimg.cn/orj360/compact.jpg" {
-		t.Fatalf("compact image was not preferred: %#v", images)
+	if len(images) != 1 || stringScalar(images[0]["url"]) != "https://wx2.sinaimg.cn/mw2000/huge.jpg" {
+		t.Fatalf("large image was not preferred: %#v", images)
 	}
 	if got := stringScalar(update["duration_text"]); got != "4:39" {
 		t.Fatalf("decimal video duration = %q, want 4:39", got)

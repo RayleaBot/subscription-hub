@@ -10,20 +10,58 @@ import (
 )
 
 const (
-	// 宿主 render 输入上限为 1MB。头像 data URL 必须明显低于该值，否则真实微博预览会在
-	// 内联 avatar_hd 后触发 platform.render_input_too_large，插件侧只能看到 render.image failed。
-	maxPluginRenderDataBytes = 768 << 10
+	maxPluginRenderRequestBytes   = 1 << 20
+	pluginRenderDataHeadroomBytes = 64 << 10
+	// Render request data is capped at 1 MiB. Reserve 64 KiB for host-added
+	// fields and JSON overhead; oversized cards discard inlined avatars.
+	maxPluginRenderDataBytes = maxPluginRenderRequestBytes - pluginRenderDataHeadroomBytes
 )
 
 func renderSubscriptionCardImage(ctx context.Context, actions pluginActions, template string, data map[string]any, fallback string, extra map[string]any) (string, error) {
+	return renderSubscriptionCardImageWithResources(ctx, actions, template, data, nil, fallback, extra)
+}
+
+type pluginRenderImageResource struct {
+	ID           string   `json:"id"`
+	URL          string   `json:"url"`
+	FallbackURLs []string `json:"fallback_urls,omitempty"`
+	Referer      string   `json:"referer,omitempty"`
+}
+
+type pluginRenderImageRequest struct {
+	Template     string                      `json:"template"`
+	Data         map[string]any              `json:"data"`
+	Theme        string                      `json:"theme,omitempty"`
+	Output       string                      `json:"output,omitempty"`
+	FallbackText string                      `json:"fallback_text,omitempty"`
+	Resources    []pluginRenderImageResource `json:"resources,omitempty"`
+}
+
+func renderSubscriptionCardImageWithResources(ctx context.Context, actions pluginActions, template string, data map[string]any, resources []pluginRenderImageResource, fallback string, extra map[string]any) (string, error) {
 	fitPluginRenderData(data)
-	request := rayleabot.RenderImageRequest{
-		Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallback,
+	render := func() (rayleabot.ActionResult, error) {
+		if len(resources) == 0 {
+			return actions.RenderImage(ctx, rayleabot.RenderImageRequest{
+				Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallback,
+			})
+		}
+		caller, ok := actions.(genericLocalActionCaller)
+		if !ok {
+			return nil, errors.New("渲染资源调用不可用")
+		}
+		request := pluginRenderImageRequest{
+			Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallback, Resources: resources,
+		}
+		result := rayleabot.ActionResult{}
+		if err := caller.Call(ctx, "render.image", request, &result); err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
-	result, err := actions.RenderImage(ctx, request)
+	result, err := render()
 	imagePath := stringScalar(result["image_path"])
 	if err != nil && cardRenderRetryable(ctx, err) {
-		result, err = actions.RenderImage(ctx, request)
+		result, err = render()
 		imagePath = stringScalar(result["image_path"])
 	}
 	if err != nil || imagePath == "" {

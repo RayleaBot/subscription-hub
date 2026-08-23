@@ -183,7 +183,7 @@ func weiboMblogImages(mblog map[string]any, service string) []map[string]any {
 	for _, raw := range sliceValue(mblog["pics"]) {
 		pic := mapValue(raw)
 		imageURL := firstWeiboImageURL(
-			pic["url"], nestedValue(pic, "large", "url"), nestedValue(pic, "geo", "url"),
+			nestedValue(pic, "large", "url"), pic["url"], nestedValue(pic, "geo", "url"),
 		)
 		if imageURL == "" {
 			continue

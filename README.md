@@ -16,7 +16,7 @@ RayleaBot 官方插件 · `raylea.subscription-hub`
 
 ## 安装
 
-本插件独立发布，不随 RayleaBot 主程序打包。安装后默认停用，需要在插件列表里**启用**才会工作。推送卡片依赖 RayleaBot 的图片渲染环境。
+本插件独立发布，不随 RayleaBot 主程序打包。当前版本要求 RayleaBot `0.3.2` 或更高版本。安装后默认停用，需要在插件列表里**启用**才会工作。推送卡片依赖 RayleaBot 的图片渲染环境。
 
 ### 插件商店
 

@@ -54,7 +54,7 @@
         <section class="media-grid {{ .media_grid_class }}" aria-label="微博图片">
           {{ range .media_items }}
           <figure class="{{ .class }}">
-            <img src="assets/grid.svg"{{ if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
+            <img src="{{ if and .resource_id .url }}{{ .url }}{{ else }}assets/grid.svg{{ end }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ else if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
             {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
             {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}
           </figure>
@@ -86,7 +86,7 @@
           <div class="repost-media {{ .media_grid_class }}">
             {{ range .media_items }}
             <figure class="{{ .class }}">
-              <img src="assets/grid.svg"{{ if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
+              <img src="{{ if and .resource_id .url }}{{ .url }}{{ else }}assets/grid.svg{{ end }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ else if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
               {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
               {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}
             </figure>
