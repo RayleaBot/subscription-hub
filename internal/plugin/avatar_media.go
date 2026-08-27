@@ -12,13 +12,15 @@ import (
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
-const (
-	maxAvatarResolveItems       = 4
-	maxAvatarBytes              = 512 << 10
-	maxUpdateCardAvatarBytes    = 48 << 10
-	maxAvatarBatchBytes         = 2 << 20
-	defaultAvatarTimeoutSeconds = 3
-)
+const maxAvatarResolveItems = 4
+
+const maxAvatarBytes = 512 << 10
+
+const MaxUpdateCardAvatarBytes = 48 << 10
+
+const maxAvatarBatchBytes = 2 << 20
+
+const defaultAvatarTimeoutSeconds = 3
 
 var errUnsupportedAvatarURL = errors.New("unsupported avatar url")
 
@@ -27,13 +29,13 @@ type resolvedAvatar struct {
 	DataURL   string `json:"data_url"`
 }
 
-func resolveAvatarDataURLs(ctx context.Context, actions pluginActions, payload map[string]any) map[string]any {
+func (handler *Handler) ResolveAvatarDataURLs(ctx context.Context, actions SourceActions, payload map[string]any) map[string]any {
 	urls := avatarURLsFromPayload(payload)
 	items := make([]resolvedAvatar, 0, len(urls))
 	issues := make([]map[string]any, 0)
 	totalBytes := 0
 	for _, sourceURL := range urls {
-		dataURL, size, err := resolveAvatarDataURL(ctx, actions, sourceURL)
+		dataURL, size, err := resolveAvatarDataURL(ctx, actions, sourceURL, handler.avatarPolicies()...)
 		if err != nil {
 			issues = append(issues, map[string]any{"source_url": sourceURL, "message": friendlyAvatarError(err)})
 			continue
@@ -49,11 +51,11 @@ func resolveAvatarDataURLs(ctx context.Context, actions pluginActions, payload m
 }
 
 func avatarURLsFromPayload(payload map[string]any) []string {
-	values := sliceValue(payload["urls"])
+	values := SliceValue(payload["urls"])
 	result := make([]string, 0, min(len(values), maxAvatarResolveItems))
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		sourceURL := strings.TrimSpace(stringScalar(value))
+		sourceURL := strings.TrimSpace(StringScalar(value))
 		if sourceURL == "" {
 			continue
 		}
@@ -69,16 +71,16 @@ func avatarURLsFromPayload(payload map[string]any) []string {
 	return result
 }
 
-func resolveAvatarDataURL(ctx context.Context, actions pluginActions, sourceURL string) (string, int, error) {
-	return resolveAvatarDataURLWithTimeout(ctx, actions, sourceURL, defaultAvatarTimeoutSeconds)
+func resolveAvatarDataURL(ctx context.Context, actions SourceActions, sourceURL string, policies ...AvatarPolicy) (string, int, error) {
+	return ResolveAvatarDataURLWithTimeout(ctx, actions, sourceURL, defaultAvatarTimeoutSeconds, policies...)
 }
 
-func resolveAvatarDataURLWithTimeout(ctx context.Context, actions pluginActions, sourceURL string, timeoutSeconds int) (string, int, error) {
-	return resolveAvatarDataURLLimited(ctx, actions, sourceURL, timeoutSeconds, maxAvatarBytes)
+func ResolveAvatarDataURLWithTimeout(ctx context.Context, actions SourceActions, sourceURL string, timeoutSeconds int, policies ...AvatarPolicy) (string, int, error) {
+	return ResolveAvatarDataURLLimited(ctx, actions, sourceURL, timeoutSeconds, maxAvatarBytes, policies...)
 }
 
-func resolveAvatarDataURLLimited(ctx context.Context, actions pluginActions, sourceURL string, timeoutSeconds, maxBytes int) (string, int, error) {
-	parsed, referer, err := validateAvatarSourceURL(sourceURL)
+func ResolveAvatarDataURLLimited(ctx context.Context, actions SourceActions, sourceURL string, timeoutSeconds, maxBytes int, policies ...AvatarPolicy) (string, int, error) {
+	parsed, referer, err := ValidateAvatarSourceURL(sourceURL, policies...)
 	if err != nil {
 		return "", 0, err
 	}
@@ -93,15 +95,15 @@ func resolveAvatarDataURLLimited(ctx context.Context, actions pluginActions, sou
 			"Cache-Control": "no-cache",
 			"Pragma":        "no-cache",
 			"Referer":       referer,
-			"User-Agent":    bilibiliUserAgent,
+			"User-Agent":    BrowserUserAgent,
 		},
 		TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
 		return "", 0, fmt.Errorf("fetch avatar: %w", err)
 	}
-	if intScalar(result["status_code"]) != http.StatusOK {
-		return "", 0, fmt.Errorf("fetch avatar: upstream status %d", intScalar(result["status_code"]))
+	if IntScalar(result["status_code"]) != http.StatusOK {
+		return "", 0, fmt.Errorf("fetch avatar: upstream status %d", IntScalar(result["status_code"]))
 	}
 	body, err := avatarResponseBody(result)
 	if err != nil {
@@ -117,22 +119,16 @@ func resolveAvatarDataURLLimited(ctx context.Context, actions pluginActions, sou
 	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(body), len(body), nil
 }
 
-func validateAvatarSourceURL(sourceURL string) (*url.URL, string, error) {
+func ValidateAvatarSourceURL(sourceURL string, policies ...AvatarPolicy) (*url.URL, string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(sourceURL))
 	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Fragment != "" || parsed.Host == "" || parsed.Port() != "" {
 		return nil, "", errUnsupportedAvatarURL
 	}
 	host := strings.ToLower(parsed.Hostname())
 	switch host {
-	case "i0.hdslb.com", "i1.hdslb.com", "i2.hdslb.com":
-		path := parsed.EscapedPath()
-		if parsed.RawQuery != "" || (!strings.HasPrefix(path, "/bfs/face/") && !strings.HasPrefix(path, "/bfs/garb/")) {
-			return nil, "", errUnsupportedAvatarURL
-		}
-		return parsed, "https://www.bilibili.com/", nil
 	case "q1.qlogo.cn":
 		query := parsed.Query()
-		if parsed.EscapedPath() != "/g" || query.Get("b") != "qq" || digits(query.Get("nk")) == "" || !avatarSizeAllowed(query.Get("s")) {
+		if parsed.EscapedPath() != "/g" || query.Get("b") != "qq" || Digits(query.Get("nk")) == "" || !avatarSizeAllowed(query.Get("s")) {
 			return nil, "", errUnsupportedAvatarURL
 		}
 		for key := range query {
@@ -143,21 +139,19 @@ func validateAvatarSourceURL(sourceURL string) (*url.URL, string, error) {
 		return parsed, "https://qzone.qq.com/", nil
 	case "p.qlogo.cn":
 		parts := strings.Split(strings.Trim(parsed.EscapedPath(), "/"), "/")
-		if parsed.RawQuery != "" || len(parts) != 4 || parts[0] != "gh" || digits(parts[1]) == "" || parts[1] != parts[2] || !avatarSizeAllowed(parts[3]) {
+		if parsed.RawQuery != "" || len(parts) != 4 || parts[0] != "gh" || Digits(parts[1]) == "" || parts[1] != parts[2] || !avatarSizeAllowed(parts[3]) {
 			return nil, "", errUnsupportedAvatarURL
 		}
 		return parsed, "https://qun.qq.com/", nil
-	case "tva1.sinaimg.cn", "tva2.sinaimg.cn", "tva3.sinaimg.cn", "tva4.sinaimg.cn",
-		"tvax1.sinaimg.cn", "tvax2.sinaimg.cn", "tvax3.sinaimg.cn", "tvax4.sinaimg.cn",
-		"wx1.sinaimg.cn", "wx2.sinaimg.cn", "wx3.sinaimg.cn", "wx4.sinaimg.cn":
-		return parsed, "https://weibo.com/", nil
-	default:
-		// 抖音头像与作品媒体使用 douyinpic.com 系列 CDN，链接带签名查询参数。
-		if host == "douyinpic.com" || strings.HasSuffix(host, ".douyinpic.com") {
-			return parsed, douyinRenderResourceReferer, nil
-		}
-		return nil, "", errUnsupportedAvatarURL
 	}
+	for _, policy := range policies {
+		if policy.Validate != nil {
+			if referer, allowed := policy.Validate(parsed); allowed {
+				return parsed, referer, nil
+			}
+		}
+	}
+	return nil, "", errUnsupportedAvatarURL
 }
 
 func avatarSizeAllowed(value string) bool {
@@ -170,7 +164,7 @@ func avatarSizeAllowed(value string) bool {
 }
 
 func avatarResponseBody(result rayleabot.ActionResult) ([]byte, error) {
-	if encoded := stringScalar(result["body_base64"]); encoded != "" {
+	if encoded := StringScalar(result["body_base64"]); encoded != "" {
 		body, err := base64.StdEncoding.DecodeString(encoded)
 		if err != nil {
 			return nil, fmt.Errorf("fetch avatar: invalid base64 body")
@@ -184,10 +178,10 @@ func avatarResponseBody(result rayleabot.ActionResult) ([]byte, error) {
 }
 
 func avatarContentType(result rayleabot.ActionResult, body []byte) string {
-	headers := mapValue(result["headers"])
+	headers := MapValue(result["headers"])
 	for key, value := range headers {
 		if strings.EqualFold(key, "Content-Type") {
-			return strings.ToLower(strings.TrimSpace(strings.Split(stringScalar(value), ";")[0]))
+			return strings.ToLower(strings.TrimSpace(strings.Split(StringScalar(value), ";")[0]))
 		}
 	}
 	return strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(body), ";")[0]))
@@ -207,4 +201,40 @@ func friendlyAvatarError(err error) string {
 		return "头像地址不受支持"
 	}
 	return "头像读取失败"
+}
+
+func (handler *Handler) avatarPolicies() []AvatarPolicy {
+	policies := make([]AvatarPolicy, 0, len(handler.platforms))
+	for _, platform := range handler.platforms {
+		policies = append(policies, platform.Avatar)
+	}
+	return policies
+}
+
+func InlineAvatar(ctx context.Context, actions SourceActions, sourceURL string, timeoutSeconds, maxBytes int, policies ...AvatarPolicy) string {
+	parsed, _, err := ValidateAvatarSourceURL(sourceURL, policies...)
+	if err != nil || ctx.Err() != nil {
+		return ""
+	}
+	candidates := []string{parsed.String()}
+	for _, policy := range policies {
+		if policy.Validate == nil || policy.Candidates == nil {
+			continue
+		}
+		if _, ok := policy.Validate(parsed); ok {
+			candidates = policy.Candidates(parsed)
+			break
+		}
+	}
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if seen[candidate] || ctx.Err() != nil {
+			continue
+		}
+		seen[candidate] = true
+		if value, _, err := ResolveAvatarDataURLLimited(ctx, actions, candidate, timeoutSeconds, maxBytes, policies...); err == nil {
+			return value
+		}
+	}
+	return ""
 }

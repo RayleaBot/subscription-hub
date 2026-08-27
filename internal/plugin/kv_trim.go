@@ -6,12 +6,10 @@ import (
 	"strings"
 )
 
-// maxSeenKeysPerSubscription 是单个订阅投递去重记录（seen: 前缀）的保留上限。
-// 超出后按写入时间删除最旧的记录，防止 KV 无限增长。
 const maxSeenKeysPerSubscription = 300
 
 // trimSeenKeys 裁剪所有订阅的 seen 去重记录。
-func trimSeenKeys(ctx context.Context, actions pluginActions, items []subscription) {
+func trimSeenKeys(ctx context.Context, actions HostActions, items []Subscription) {
 	if actions == nil {
 		return
 	}
@@ -20,7 +18,7 @@ func trimSeenKeys(ctx context.Context, actions pluginActions, items []subscripti
 	}
 }
 
-func trimSubscriptionSeenKeys(ctx context.Context, actions pluginActions, item subscription) {
+func trimSubscriptionSeenKeys(ctx context.Context, actions HostActions, item Subscription) {
 	prefix := "seen:" + strings.TrimSpace(item.ID) + ":"
 	if prefix == "seen::" {
 		return
@@ -30,8 +28,8 @@ func trimSubscriptionSeenKeys(ctx context.Context, actions pluginActions, item s
 		return
 	}
 	keys := make([]string, 0)
-	for _, raw := range sliceValue(result["keys"]) {
-		if key := stringScalar(raw); key != "" {
+	for _, raw := range SliceValue(result["keys"]) {
+		if key := StringScalar(raw); key != "" {
 			keys = append(keys, key)
 		}
 	}
@@ -46,8 +44,8 @@ func trimSubscriptionSeenKeys(ctx context.Context, actions pluginActions, item s
 	for _, key := range keys {
 		ts := int64(0)
 		if value, err := actions.KVGet(ctx, key); err == nil {
-			if stored, ok := actionStoredValue(value); ok {
-				ts = intScalar(nestedValue(stored, "ts"))
+			if stored, ok := ActionStoredValue(value); ok {
+				ts = IntScalar(NestedValue(stored, "ts"))
 			}
 		}
 		entries = append(entries, entry{key: key, ts: ts})
@@ -62,7 +60,7 @@ func trimSubscriptionSeenKeys(ctx context.Context, actions pluginActions, item s
 // cleanupRemovedSubscriptionKV 清理已删除订阅（或已移除服务）的 KV 记录：
 // seen 去重、直播状态、零作品负缓存与解析缓存，避免订阅删除后残留累积。
 // services 为本次移除的服务列表；为空表示删除整个订阅。
-func cleanupRemovedSubscriptionKV(ctx context.Context, actions pluginActions, current *settings, removed *subscription, services []string) {
+func (handler *Handler) cleanupRemovedSubscriptionKV(ctx context.Context, actions HostActions, current *Settings, removed *Subscription, services []string) {
 	if actions == nil || removed == nil {
 		return
 	}
@@ -81,23 +79,26 @@ func cleanupRemovedSubscriptionKV(ctx context.Context, actions pluginActions, cu
 		return
 	}
 	deleteKVPrefix(ctx, actions, prefix)
-	deleteKVPrefix(ctx, actions, "source:douyin:resolved_uid:"+strings.TrimSpace(removed.UID))
-	deleteKVPrefix(ctx, actions, "source:douyin:live:"+strings.TrimSpace(removed.UID))
-	deleteKVPrefix(ctx, actions, "source:douyin:zero_posts:"+strings.TrimSpace(removed.UID))
-	// B 站自动关注状态按账号:uid 记录，删除订阅时一并清理。
-	if removed.Platform == "bilibili" {
-		if result, err := actions.KVList(ctx, "source:bilibili:follow:"); err == nil {
-			for _, raw := range sliceValue(result["keys"]) {
-				key := stringScalar(raw)
-				if key != "" && strings.HasSuffix(key, ":"+strings.TrimSpace(removed.UID)) {
-					_, _ = actions.KVDelete(ctx, key)
-				}
+	definition := handler.byID[removed.Platform]
+	if definition.Cleanup == nil {
+		return
+	}
+	for _, selector := range definition.Cleanup(*removed) {
+		result, err := actions.KVList(ctx, selector.Prefix)
+		if err != nil {
+			continue
+		}
+		for _, raw := range SliceValue(result["keys"]) {
+			key := StringScalar(raw)
+			if key != "" && strings.HasPrefix(key, selector.Prefix) && (selector.Suffix == "" || strings.HasSuffix(key, selector.Suffix)) {
+				_, _ = actions.KVDelete(ctx, key)
 			}
 		}
 	}
+
 }
 
-func deleteKVPrefix(ctx context.Context, actions pluginActions, prefix string) {
+func deleteKVPrefix(ctx context.Context, actions HostActions, prefix string) {
 	if actions == nil || strings.TrimSpace(prefix) == "" {
 		return
 	}
@@ -105,8 +106,8 @@ func deleteKVPrefix(ctx context.Context, actions pluginActions, prefix string) {
 	if err != nil {
 		return
 	}
-	for _, raw := range sliceValue(result["keys"]) {
-		if key := stringScalar(raw); key != "" {
+	for _, raw := range SliceValue(result["keys"]) {
+		if key := StringScalar(raw); key != "" {
 			_, _ = actions.KVDelete(ctx, key)
 		}
 	}

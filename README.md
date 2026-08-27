@@ -149,6 +149,7 @@ Bilibili 的「图文」也可写成「动态」，「文章」也可写成「�
 
 - 约每分钟检查一次；也可在管理页或聊天里立即检查。
 - 某条订阅第一次成功连上源时，只记下当前进度，**不会**把历史内容一次性刷进群里。Bilibili / 抖音直播开播仍会推送。
+- Bilibili 动态首轮检查中断或历史状态写入失败时，下轮继续建立基线，不推送历史动态。
 - 超过投递时效的非直播内容会被跳过，避免补发过旧内容。
 - Bilibili / 微博检查和搜索、抖音昵称搜索与更新检查需要有效 Cookie；没有可用账号时会提示先到三方账号页保存。
 - Bilibili 动态检查会自动为订阅的 up 主补关注：账号 CK 含 `bili_jct` 时，未关注的订阅对象会被自动关注，此后每 6 小时复核一次关注状态；删除订阅后停止维护。该行为没有独立开关。
@@ -175,7 +176,9 @@ Bilibili 的「图文」也可写成「动态」，「文章」也可写成「�
 ```text
 plugin-subscription-hub/
   cmd/subscription-hub/              进程入口
-  internal/plugin/                   订阅命令、平台请求、调度、渲染和测试
+  internal/plugin/                   订阅命令、检查流程、调度与公共渲染
+  internal/platforms/                各平台的请求、内容解析与卡片适配
+  internal/testkit/                  共享测试替身与 fixtures 工具
   internal/assets/default_config.json 默认开关与投递时效
   ui/                                Vue 管理页
   templates/                         推送与资料卡片模板

@@ -7,96 +7,18 @@ import (
 	"testing"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
 )
 
-func TestResolveAvatarDataURLInlinesSupportedImage(t *testing.T) {
-	fake := newFakePluginActions()
-	body := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
-	fake.httpResponses = []rayleabot.ActionResult{{
-		"status_code": 200,
-		"headers":     map[string]any{"Content-Type": "image/png"},
-		"body_base64": base64.StdEncoding.EncodeToString(body),
-	}}
-
-	dataURL, size, err := resolveAvatarDataURL(context.Background(), fake, "https://i2.hdslb.com/bfs/face/fixture.webp")
-	if err != nil {
-		t.Fatalf("resolveAvatarDataURL() error = %v", err)
-	}
-	if size != len(body) || dataURL != "data:image/png;base64,"+base64.StdEncoding.EncodeToString(body) {
-		t.Fatalf("unexpected resolved avatar: size=%d data=%q", size, dataURL)
-	}
-	if len(fake.httpRequests) != 1 || fake.httpRequests[0].Headers["Referer"] != "https://www.bilibili.com/" || fake.httpRequests[0].Headers["Cache-Control"] != "no-cache" || fake.httpRequests[0].Headers["Pragma"] != "no-cache" {
-		t.Fatalf("unexpected avatar request: %#v", fake.httpRequests)
-	}
-}
-
-func TestResolveAvatarDataURLRejectsUndeclaredShapesBeforeRequest(t *testing.T) {
-	fake := newFakePluginActions()
-	for _, sourceURL := range []string{
-		"http://i2.hdslb.com/bfs/face/fixture.webp",
-		"https://i2.hdslb.com/bfs/archive/fixture.webp",
-		"https://i2.hdslb.com:8443/bfs/face/fixture.webp",
-		"https://q1.qlogo.cn/g?b=qq&nk=fixture&s=100",
-		"https://p.qlogo.cn/gh/100/200/100",
-		"https://static.hdslb.com/images/member/noface.gif",
-		"https://static.hdslb.com/images/member/noface.gif?variant=1",
-		"https://static.hdslb.com/images/member/other.gif",
-		"https://example.test/avatar.png",
-	} {
-		if _, _, err := resolveAvatarDataURL(context.Background(), fake, sourceURL); err == nil {
-			t.Fatalf("resolveAvatarDataURL(%q) accepted unsupported URL", sourceURL)
-		}
-	}
-	if len(fake.httpRequests) != 0 {
-		t.Fatalf("unsupported avatars reached http.request: %#v", fake.httpRequests)
-	}
-}
-
-func TestResolveAvatarDataURLSupportsWeiboAvatarHosts(t *testing.T) {
-	fake := newFakePluginActions()
-	body := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
-	fake.httpResponses = []rayleabot.ActionResult{{
-		"status_code": 200,
-		"headers":     map[string]any{"Content-Type": "image/png"},
-		"body_base64": base64.StdEncoding.EncodeToString(body),
-	}}
-
-	dataURL, _, err := resolveAvatarDataURL(context.Background(), fake, "https://tva1.sinaimg.cn/crop.0.0.640.640.180/face.jpg")
-	if err != nil || !strings.HasPrefix(dataURL, "data:image/png;base64,") {
-		t.Fatalf("sinaimg avatar was not resolved: data=%q err=%v", dataURL, err)
-	}
-	if len(fake.httpRequests) != 1 || fake.httpRequests[0].Headers["Referer"] != "https://weibo.com/" {
-		t.Fatalf("unexpected weibo avatar request: %#v", fake.httpRequests)
-	}
-	for _, host := range []string{"tva1", "tva4", "tvax1", "tvax4", "wx1", "wx4"} {
-		if _, _, err := validateAvatarSourceURL("https://" + host + ".sinaimg.cn/orj480/face.jpg"); err != nil {
-			t.Fatalf("validateAvatarSourceURL(%s.sinaimg.cn) rejected a declared weibo host", host)
-		}
-	}
-
-	for _, sourceURL := range []string{
-		"http://tva1.sinaimg.cn/crop.0.0.640.640.180/face.jpg",
-		"https://tva5.sinaimg.cn/crop.0.0.640.640.180/face.jpg",
-		"https://n.sinaimg.cn/face.jpg",
-	} {
-		if _, _, err := resolveAvatarDataURL(context.Background(), fake, sourceURL); err == nil {
-			t.Fatalf("resolveAvatarDataURL(%q) accepted undeclared weibo host shape", sourceURL)
-		}
-	}
-	if len(fake.httpRequests) != 1 {
-		t.Fatalf("undeclared weibo avatars reached http.request: %#v", fake.httpRequests)
-	}
-}
-
 func TestResolveAvatarDataURLsDeduplicatesBatchAndReportsFailures(t *testing.T) {
-	fake := newFakePluginActions()
-	fake.httpResponses = []rayleabot.ActionResult{{
+	fake := testkit.NewActions()
+	fake.HTTPResponses = []rayleabot.ActionResult{{
 		"status_code": 200,
 		"headers":     map[string]any{"content-type": "image/webp; charset=binary"},
 		"body_base64": base64.StdEncoding.EncodeToString([]byte("fixture-webp")),
 	}}
 	sourceURL := "https://q1.qlogo.cn/g?b=qq&nk=10000&s=100"
-	result := resolveAvatarDataURLs(context.Background(), fake, map[string]any{
+	result := newWorkflowHandler(t).ResolveAvatarDataURLs(context.Background(), fake, map[string]any{
 		"urls": []any{sourceURL, sourceURL, "https://example.test/avatar.png"},
 	})
 	items, ok := result["items"].([]resolvedAvatar)
@@ -107,22 +29,7 @@ func TestResolveAvatarDataURLsDeduplicatesBatchAndReportsFailures(t *testing.T) 
 	if !ok || len(issues) != 1 || issues[0]["message"] != "头像地址不受支持" {
 		t.Fatalf("unexpected resolved batch issues: %#v", result["issues"])
 	}
-	if len(fake.httpRequests) != 1 {
-		t.Fatalf("duplicate avatar generated %d requests", len(fake.httpRequests))
-	}
-}
-
-func TestInlineUpdateCardAvatarRejectsOversizedBody(t *testing.T) {
-	fake := newFakePluginActions()
-	body := make([]byte, maxUpdateCardAvatarBytes+8)
-	copy(body, []byte{0xff, 0xd8, 0xff, 0xe0})
-	fake.httpResponses = []rayleabot.ActionResult{{
-		"status_code": 200,
-		"headers":     map[string]any{"Content-Type": "image/jpeg"},
-		"body_base64": base64.StdEncoding.EncodeToString(body),
-	}}
-	got := inlineBilibiliCardAvatarWithTimeout(context.Background(), fake, "https://wx4.sinaimg.cn/orj480/face.jpg", 3)
-	if got != "" {
-		t.Fatalf("oversized weibo avatar was inlined: %q", got)
+	if len(fake.HTTPRequests) != 1 {
+		t.Fatalf("duplicate avatar generated %d requests", len(fake.HTTPRequests))
 	}
 }
