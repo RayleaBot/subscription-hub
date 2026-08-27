@@ -84,7 +84,9 @@ func (err *bilibiliSourceError) Error() string {
 }
 
 func (err *bilibiliSourceError) cooldown() bool {
-	return err != nil && (err.Kind == "risk_control" || err.Kind == "rate_limit")
+	// auth（CK 失效）同样进冷却：失效会话继续探测会累积平台拦截，
+	// 等待账号校验把凭据标记 invalid 后再恢复。
+	return err != nil && (err.Kind == "auth" || err.Kind == "risk_control" || err.Kind == "rate_limit")
 }
 
 type bilibiliClient struct {

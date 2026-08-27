@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -82,6 +83,15 @@ func handleEvent(ctx context.Context, event *rayleabot.EventContext) error {
 		}
 		if action != "" && action != "check_subscriptions" {
 			return event.Result(map[string]any{"handled": false})
+		}
+		// cron 固定整分钟触发，无 jitter 时所有订阅检查在同一秒发起
+		// 上游请求；随机延迟摊平尖峰。
+		if delay := schedulerJitterDelay(); delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 		checkEventCtx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)
 		defer cancel()
@@ -411,6 +421,12 @@ func ensureScheduler(ctx context.Context, event *rayleabot.EventContext) bool {
 		Fields: map[string]any{"task_id": schedulerTaskID, "cron": schedulerCron, "log_label": "订阅检查"},
 	})
 	return true
+}
+
+// schedulerJitterDelay 返回 0-20s 的调度抖动。cron 触发是整分钟对齐的，
+// 所有实例/插件在同一秒内开始检查；随机延迟把上游请求摊开。
+func schedulerJitterDelay() time.Duration {
+	return time.Duration(rand.IntN(21)) * time.Second
 }
 
 func saveSettings(ctx context.Context, event *rayleabot.EventContext, current settings) error {
