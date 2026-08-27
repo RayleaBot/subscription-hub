@@ -396,7 +396,7 @@
         "items": [
           {
             "title": "Bilibili / 微博账号",
-            "description": "平台 Cookie 在 Web 三方账号页面配置。微博检查按订阅 UID 读取博主微博列表，不需要关注订阅博主。",
+            "description": "平台 Cookie 在 Web 三方账号页面配置。Bilibili 动态检查会自动关注订阅的 up 主（每 6 小时复核一次关注状态），删除订阅后停止维护，该行为没有独立开关。微博检查按订阅 UID 读取博主微博列表，不需要关注订阅博主。",
             "permission": "super_admin"
           },
           {
