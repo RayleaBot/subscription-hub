@@ -678,6 +678,7 @@ function errorMessage(error: unknown, fallback: string): string {
         <button type="button" class="button" :disabled="checking || saving" @click="checkNow">{{ checking ? '检查中…' : '立即检查' }}</button>
         <button type="button" class="button" @click="openPreview('bilibili-update')">打开 Bilibili 卡片预览</button>
         <button type="button" class="button" @click="openPreview('weibo-update')">打开微博卡片预览</button>
+        <button type="button" class="button" @click="openPreview('douyin-update')">打开抖音卡片预览</button>
         <button type="button" class="button button--primary" :disabled="!loaded || errors.length > 0 || saving" @click="saveSettings">{{ saving ? '保存中…' : '保存设置' }}</button>
       </div>
     </footer>

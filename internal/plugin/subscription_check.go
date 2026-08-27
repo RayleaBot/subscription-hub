@@ -58,6 +58,7 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 	}
 	bilibiliSubs := make([]subscription, 0)
 	weiboSubs := make([]subscription, 0)
+	douyinSubs := make([]subscription, 0)
 	for _, item := range current.Subscriptions {
 		if !item.Enabled {
 			continue
@@ -67,9 +68,11 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 			bilibiliSubs = append(bilibiliSubs, item)
 		case "weibo":
 			weiboSubs = append(weiboSubs, item)
+		case "douyin":
+			douyinSubs = append(douyinSubs, item)
 		}
 	}
-	if len(bilibiliSubs) == 0 && len(weiboSubs) == 0 {
+	if len(bilibiliSubs) == 0 && len(weiboSubs) == 0 && len(douyinSubs) == 0 {
 		result["skipped"] = "no_checkable_subscriptions"
 		return result
 	}
@@ -149,7 +152,7 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 					markUpdateSeen(ctx, actions, item, update)
 					continue
 				}
-				if weiboUpdateAtOrBeforeBaseline(update, baselineAt) {
+				if updateAtOrBeforeBaseline(update, baselineAt) {
 					markUpdateSeen(ctx, actions, item, update)
 					continue
 				}
@@ -171,6 +174,53 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 			}
 			if sourceResult.ReadyUIDs[strings.TrimSpace(item.UID)] && !initialized {
 				rememberWeiboFeedBaseline(stateCtx, actions, item, now)
+			}
+		}
+	}
+
+	if len(douyinSubs) > 0 && ctx.Err() == nil {
+		douyinSource := newDouyinSource(actions)
+		sourceResult := douyinSource.pollSinceWithStateContext(ctx, stateCtx, douyinSubs, now.Add(-deliveryMaxAge))
+		checked += sourceResult.Checked
+		source["douyin"] = map[string]any{
+			"accounts": sourceResult.AccountCount, "feed_ok": sourceResult.FeedOK,
+		}
+		failures = append(failures, sourceResult.Errors...)
+		for _, item := range douyinSubs {
+			if ctx.Err() != nil {
+				break
+			}
+			initialized, baselineAt := douyinFeedState(ctx, actions, item)
+			for _, update := range sourceResult.Updates {
+				if ctx.Err() != nil {
+					break
+				}
+				if !subscriptionMatchesUpdate(item, update) {
+					continue
+				}
+				if stringScalar(update["service"]) != "live" && !initialized {
+					// 直播更新有自己的会话基线（liveTransition 首次观测不推送），不参与作品基线。
+					markUpdateSeen(ctx, actions, item, update)
+					continue
+				}
+				if stringScalar(update["service"]) != "live" && updateAtOrBeforeBaseline(update, baselineAt) {
+					markUpdateSeen(ctx, actions, item, update)
+					continue
+				}
+				if updateSeen(ctx, actions, item, update) {
+					continue
+				}
+				if staleSubscriptionUpdate(update, now, deliveryMaxAge) {
+					markUpdateSeen(ctx, actions, item, update)
+					logStaleDouyinAweme(ctx, actions, item, update, now)
+					continue
+				}
+				if sendDouyinUpdate(ctx, stateCtx, actions, item, update, avatarCache, identityCache, &failures) {
+					sent++
+				}
+			}
+			if sourceResult.ReadyUIDs[strings.TrimSpace(item.UID)] && !initialized {
+				rememberDouyinFeedBaseline(stateCtx, actions, item, now)
 			}
 		}
 	}
@@ -228,6 +278,21 @@ func logStaleWeiboMblog(ctx context.Context, actions pluginActions, item subscri
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 		Level:   "info",
 		Message: "微博过期博文已跳过",
+		Fields: map[string]any{
+			"subscription_id": item.ID,
+			"update_id":       stringScalar(update["id"]),
+			"service":         stringScalar(update["service"]),
+			"published_at":    publishedAt.UTC().Format(time.RFC3339),
+			"age_seconds":     int(now.Sub(publishedAt).Seconds()),
+		},
+	})
+}
+
+func logStaleDouyinAweme(ctx context.Context, actions pluginActions, item subscription, update map[string]any, now time.Time) {
+	publishedAt := time.Unix(int64(intScalar(update["pub_ts"])), 0)
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+		Level:   "info",
+		Message: "抖音过期作品已跳过",
 		Fields: map[string]any{
 			"subscription_id": item.ID,
 			"update_id":       stringScalar(update["id"]),
@@ -304,7 +369,40 @@ func rememberWeiboFeedBaseline(ctx context.Context, actions pluginActions, item 
 	})
 }
 
-func weiboUpdateAtOrBeforeBaseline(update map[string]any, baselineAt time.Time) bool {
+func douyinFeedSourceKey(item subscription) string {
+	return "source:douyin:feed:initialized:" + item.ID
+}
+
+func douyinFeedInitialized(ctx context.Context, actions pluginActions, item subscription) bool {
+	initialized, _ := douyinFeedState(ctx, actions, item)
+	return initialized
+}
+
+func douyinFeedState(ctx context.Context, actions pluginActions, item subscription) (bool, time.Time) {
+	result, _ := actions.KVGet(ctx, douyinFeedSourceKey(item))
+	value, exists := actionStoredValue(result)
+	if !exists {
+		return false, time.Time{}
+	}
+	state := mapValue(value)
+	if state == nil {
+		return boolScalar(value), time.Time{}
+	}
+	baselineAt := time.Time{}
+	if timestamp := intScalar(state["baseline_at"]); timestamp > 0 {
+		baselineAt = time.Unix(timestamp, 0)
+	}
+	return boolScalar(state["initialized"]), baselineAt
+}
+
+func rememberDouyinFeedBaseline(ctx context.Context, actions pluginActions, item subscription, baselineAt time.Time) {
+	_, _ = actions.KVSet(ctx, douyinFeedSourceKey(item), map[string]any{
+		"initialized": true,
+		"baseline_at": baselineAt.Unix(),
+	})
+}
+
+func updateAtOrBeforeBaseline(update map[string]any, baselineAt time.Time) bool {
 	if baselineAt.IsZero() {
 		return false
 	}
@@ -412,6 +510,31 @@ func sendWeiboUpdate(ctx, stateCtx context.Context, actions pluginActions, item 
 	if err != nil {
 		*failures = append(*failures, "微博订阅推送失败。")
 		logSubscriptionFailure(ctx, actions, "微博订阅推送失败", item, err)
+		return false
+	}
+	markUpdateSeen(stateCtx, actions, item, update)
+	return true
+}
+
+func sendDouyinUpdate(ctx, stateCtx context.Context, actions pluginActions, item subscription, update map[string]any, avatarCache *bilibiliAvatarCache, identityCache *subscriberIdentityCache, failures *[]string) bool {
+	item = refreshSubscribersForDelivery(ctx, actions, item, identityCache, failures)
+	data := buildDouyinRenderData(item, update)
+	inlineBilibiliUpdateAvatarsWithSharedCache(ctx, actions, data, avatarCache)
+	resources := prepareDouyinUpdateResources(data)
+	imagePath, err := renderSubscriptionCardImageWithResources(ctx, actions, "douyin-update", data, resources, buildDouyinFallback(data), map[string]any{
+		"subscription_id": item.ID, "target_type": item.TargetType, "target_id": item.TargetID,
+	})
+	if err != nil {
+		*failures = append(*failures, "抖音订阅图片生成失败。")
+		return false
+	}
+	_, err = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
+		TargetType: item.TargetType, TargetID: item.TargetID,
+		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Image(imagePath)}},
+	})
+	if err != nil {
+		*failures = append(*failures, "抖音订阅推送失败。")
+		logSubscriptionFailure(ctx, actions, "抖音订阅推送失败", item, err)
 		return false
 	}
 	markUpdateSeen(stateCtx, actions, item, update)

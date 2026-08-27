@@ -152,6 +152,10 @@ func validateAvatarSourceURL(sourceURL string) (*url.URL, string, error) {
 		"wx1.sinaimg.cn", "wx2.sinaimg.cn", "wx3.sinaimg.cn", "wx4.sinaimg.cn":
 		return parsed, "https://weibo.com/", nil
 	default:
+		// 抖音头像与作品媒体使用 douyinpic.com 系列 CDN，链接带签名查询参数。
+		if host == "douyinpic.com" || strings.HasSuffix(host, ".douyinpic.com") {
+			return parsed, douyinRenderResourceReferer, nil
+		}
 		return nil, "", errUnsupportedAvatarURL
 	}
 }

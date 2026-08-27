@@ -1,0 +1,19 @@
+{
+  "action": "subscribed",
+  "action_label": "订阅成功",
+  "subtitle": "抖音 · 订阅中心",
+  "platform": "抖音",
+  "user": {
+    "name": "RayleaBot 示例用户",
+    "uid": "MS4wLjABAAAApreview",
+    "avatar": "",
+    "sign": "这个简介用于检查资料卡片的长文本截断效果，简介区域最多展示两行，超出部分会被收起，头像、昵称、抖音号和粉丝数保持稳定布局。"
+  },
+  "uid_text": "rayleabot_demo",
+  "fans_text": "粉丝 128.6万",
+  "verify_text": "抖音认证：知名科技博主",
+  "verify_org": false,
+  "services_text": "视频、图文",
+  "service_labels": ["视频", "图文"],
+  "target_text": "订阅到：RayleaBot 测试群"
+}

@@ -38,6 +38,15 @@
     },
     {
       "path": "templates/weibo-update"
+    },
+    {
+      "path": "templates/douyin-search-results"
+    },
+    {
+      "path": "templates/douyin-user-card"
+    },
+    {
+      "path": "templates/douyin-update"
     }
   ],
   "capabilities": [
@@ -52,6 +61,7 @@
     "scheduler.create",
     "thirdparty.account.read",
     "thirdparty.account.validate",
+    "thirdparty.resolve",
     "friend.list",
     "group.list",
     "user.info.get",
@@ -79,7 +89,14 @@
       "wx1.sinaimg.cn",
       "wx2.sinaimg.cn",
       "wx3.sinaimg.cn",
-      "wx4.sinaimg.cn"
+      "wx4.sinaimg.cn",
+      "douyin.com",
+      "douyinpic.com",
+      "iesdouyin.com",
+      "amemv.com",
+      "ttwid.bytedance.com",
+      "mcs.zijieapi.com",
+      "mssdk.bytedance.com"
     ],
     "third_party_account_platforms": [
       "bilibili",
@@ -121,14 +138,14 @@
     },
     {
       "name": "订阅抖音推送",
-      "description": "订阅当前群聊或私聊的指定抖音账号更新，类型可选，不填表示全部类型",
-      "usage": "/订阅抖音推送 [视频|图文|直播] 抖音号或主页标识",
+      "description": "订阅当前群聊或私聊的指定抖音账号更新，类型可选，不填表示全部类型，支持昵称、主页链接、抖音号或完整 sec_uid",
+      "usage": "/订阅抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
       "permission": "super_admin"
     },
     {
       "name": "取消抖音推送",
-      "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型",
-      "usage": "/取消抖音推送 [视频|图文|直播] 抖音号或主页标识",
+      "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型，支持昵称、主页链接、抖音号或完整 sec_uid",
+      "usage": "/取消抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
       "permission": "super_admin"
     },
     {
@@ -154,6 +171,12 @@
       "name": "微博搜索博主",
       "description": "按昵称关键词搜索微博博主并以图片展示候选账号资料与 UID",
       "usage": "/微博搜索博主 昵称关键词",
+      "permission": "everyone"
+    },
+    {
+      "name": "抖音搜索用户",
+      "description": "尝试按昵称关键词搜索抖音用户；平台要求安全验证时使用主页链接订阅",
+      "usage": "/抖音搜索用户 昵称关键词",
       "permission": "everyone"
     },
     {
@@ -224,8 +247,8 @@
     },
     {
       "name": "预览订阅卡片",
-      "description": "使用示例类型或 Bilibili / 微博链接预览订阅推送卡片",
-      "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|图片|Bilibili或微博链接]",
+      "description": "使用示例类型或 Bilibili / 微博 / 抖音链接预览订阅推送卡片",
+      "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|抖音|图片|Bilibili、微博或抖音链接]",
       "permission": "super_admin"
     }
   ],
@@ -256,8 +279,8 @@
           },
           {
             "title": "订阅抖音",
-            "description": "为当前群聊或私聊订阅指定抖音账号的更新，类型可选，不填表示全部类型。",
-            "usage": "/订阅抖音推送 [视频|图文|直播] 抖音号或主页标识",
+            "description": "为当前群聊或私聊订阅指定抖音账号的更新，类型可选，不填表示全部类型。支持昵称、主页链接、抖音号或完整 sec_uid；昵称搜索受平台安全验证限制时优先使用主页链接。",
+            "usage": "/订阅抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
             "command": "订阅抖音推送"
           },
           {
@@ -277,6 +300,12 @@
             "description": "按昵称关键词搜索微博博主，以图片展示候选账号的资料与 UID。",
             "usage": "/微博搜索博主 昵称关键词",
             "command": "微博搜索博主"
+          },
+          {
+            "title": "搜索抖音用户",
+            "description": "尝试按昵称关键词搜索抖音用户，以图片展示候选账号的资料与来源标识。平台要求安全验证时使用主页链接订阅。",
+            "usage": "/抖音搜索用户 昵称关键词",
+            "command": "抖音搜索用户"
           }
         ]
       },
@@ -297,8 +326,8 @@
           },
           {
             "title": "取消抖音",
-            "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型。",
-            "usage": "/取消抖音推送 [视频|图文|直播] 抖音号或主页标识",
+            "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型。支持昵称、主页链接、抖音号或完整 sec_uid。",
+            "usage": "/取消抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
             "command": "取消抖音推送"
           },
           {
@@ -385,8 +414,8 @@
           },
           {
             "title": "预览订阅卡片",
-            "description": "使用内置示例类型，或使用 Bilibili / 微博链接生成订阅推送图片。微博的视频和转发写成「微博 视频」「微博 转发」。",
-            "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|图片|Bilibili或微博链接]",
+            "description": "使用内置示例类型，或使用 Bilibili / 微博 / 抖音链接生成订阅推送图片。微博的视频和转发写成「微博 视频」「微博 转发」，抖音的直播和图文写成「抖音 直播」「抖音 图文」。",
+            "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|抖音|图片|Bilibili、微博或抖音链接]",
             "command": "预览订阅卡片"
           }
         ]
@@ -395,8 +424,8 @@
         "title": "配置说明",
         "items": [
           {
-            "title": "Bilibili / 微博账号",
-            "description": "平台 Cookie 在 Web 三方账号页面配置。Bilibili 动态检查会自动关注订阅的 up 主（每 6 小时复核一次关注状态），删除订阅后停止维护，该行为没有独立开关。微博检查按订阅 UID 读取博主微博列表，不需要关注订阅博主。",
+            "title": "Bilibili / 微博 / 抖音账号",
+            "description": "平台 Cookie 在 Web 三方账号页面配置。Bilibili 动态检查会自动关注订阅的 up 主（每 6 小时复核一次关注状态），删除订阅后停止维护，该行为没有独立开关。微博与抖音检查按订阅账号读取最新作品列表，不需要关注订阅对象。",
             "permission": "super_admin"
           },
           {

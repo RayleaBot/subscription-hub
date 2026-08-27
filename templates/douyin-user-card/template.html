@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>{{ .Stylesheet }}</style>
+  </head>
+  <body class="theme-{{ .Theme }}">
+    <main class="user-shell">
+      {{ $action := .action }}
+      {{ $actionLabel := "订阅成功" }}
+      {{ if eq $action "updated" }}{{ $actionLabel = "已更新订阅" }}{{ end }}
+      {{ if eq $action "unsubscribed" }}{{ $actionLabel = "已取消订阅" }}{{ end }}
+      {{ with .action_label }}{{ $actionLabel = printf "%v" . }}{{ end }}
+      {{ $userName := "抖音用户" }}
+      {{ $userAvatar := "" }}
+      {{ $userUID := .uid_text }}
+      {{ $userSign := "" }}
+      {{ with .user }}
+        {{ with .name }}{{ $userName = printf "%v" . }}{{ end }}
+        {{ with .avatar }}{{ $userAvatar = printf "%v" . }}{{ end }}
+        {{ if not $userUID }}{{ with .uid }}{{ $userUID = printf "UID %v" . }}{{ end }}{{ end }}
+        {{ with .sign }}{{ $userSign = printf "%v" . }}{{ end }}
+      {{ end }}
+
+      <article class="user-card">
+        <header class="status-banner status-banner--{{ $action }}">
+          <div class="status-icon" aria-hidden="true">
+            {{ if eq $action "unsubscribed" }}
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2"/><path d="M8.5 12h7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+            {{ else if eq $action "updated" }}
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 11a8 8 0 1 0-2.3 6.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M20 5v6h-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {{ else }}
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {{ end }}
+          </div>
+          <div class="status-text">
+            <strong>{{ $actionLabel }}</strong>
+            <span>{{ if .subtitle }}{{ .subtitle }}{{ else }}抖音 · 订阅中心{{ end }}</span>
+          </div>
+          <span class="brand">抖音</span>
+        </header>
+
+        <section class="profile">
+          <div class="avatar-wrap">
+            <img class="avatar" src="assets/douyin-default-avatar.svg"{{ if $userAvatar }} data-avatar="{{ $userAvatar }}"{{ end }} alt="" />
+            {{ if .verify_text }}<span class="v-badge{{ if .verify_org }} v-badge--org{{ end }}" title="{{ .verify_text }}">V</span>{{ end }}
+          </div>
+          <div class="profile-text">
+            <div class="name-row">
+              <strong>{{ $userName }}</strong>
+              {{ if .verify_text }}
+              <span class="verify-chip{{ if .verify_org }} verify-chip--org{{ end }}">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.5 14.5 5h3.5v3.5L20.5 11 18 13.5V17h-3.5L12 19.5 9.5 17H6v-3.5L3.5 11 6 8.5V5h3.5L12 2.5Z" fill="currentColor" opacity="0.18"/><path d="m8.8 11.4 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                {{ .verify_text }}
+              </span>
+              {{ end }}
+            </div>
+            <div class="meta-row">
+              {{ if $userUID }}<em class="uid-badge">{{ $userUID }}</em>{{ end }}
+              {{ if .fans_text }}<span class="meta-chip">{{ .fans_text }}</span>{{ end }}
+            </div>
+            {{ if $userSign }}<p class="sign">{{ $userSign }}</p>{{ end }}
+          </div>
+        </section>
+
+        <footer class="card-footer">
+          {{ if .service_labels }}
+          <div class="service-chips" aria-label="订阅类型">
+            {{ range .service_labels }}<span class="service-chip">{{ . }}</span>{{ end }}
+          </div>
+          {{ end }}
+          {{ if .target_text }}<span class="target-text">{{ .target_text }}</span>{{ end }}
+        </footer>
+      </article>
+    </main>
+    <script>
+      for (const image of document.querySelectorAll("img[data-avatar]")) {
+        const source = image.dataset.avatar;
+        if (!source) continue;
+        image.addEventListener("error", () => {
+          image.removeAttribute("data-avatar");
+          image.src = "assets/douyin-default-avatar.svg";
+        }, { once: true });
+        image.src = source;
+      }
+    </script>
+  </body>
+</html>

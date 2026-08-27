@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["action", "platform", "user", "services_text"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["subscribed", "updated", "unsubscribed"]
+    },
+    "action_label": {
+      "type": "string"
+    },
+    "subtitle": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "user": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "uid_text": {
+      "type": "string"
+    },
+    "fans_text": {
+      "type": "string"
+    },
+    "verify_text": {
+      "type": "string"
+    },
+    "verify_org": {
+      "type": "boolean"
+    },
+    "services_text": {
+      "type": "string"
+    },
+    "service_labels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "target_text": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

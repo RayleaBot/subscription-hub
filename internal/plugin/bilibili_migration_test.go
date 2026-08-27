@@ -40,6 +40,8 @@ type fakePluginActions struct {
 	groupErrors        map[string]error
 	groupRequests      []string
 	accountValidations []thirdPartyAccountValidateRequest
+	resolveRequests    []thirdPartyResolveRequest
+	resolveResults     []rayleabot.ActionResult
 }
 
 func newFakePluginActions() *fakePluginActions {
@@ -62,6 +64,12 @@ func (fake *fakePluginActions) HTTPRequest(_ context.Context, request rayleabot.
 				}
 			}
 		}
+	}
+	if parsed, parseErr := url.Parse(request.URL); parseErr == nil && parsed.Host == "mssdk.bytedance.com" {
+		// mssdk 引导端点默认不返回 msToken，让会话回退 CK 或随机令牌；
+		// 不消耗 httpResponses 序列，避免打乱现有测试的响应顺序。
+		// 需要断言 msToken 获取的测试用显式 httpRoutes 覆盖。
+		return httpJSONResult(200, map[string]any{}), nil
 	}
 	if len(fake.httpErrors) > 0 {
 		err := fake.httpErrors[0]
@@ -109,18 +117,33 @@ func (fake *fakePluginActions) Call(_ context.Context, action string, input any,
 		}
 		return nil
 	case "thirdparty.account.validate":
+		request, ok := input.(thirdPartyAccountValidateRequest)
+		if !ok {
+			return fmt.Errorf("unexpected third-party validation input %T", input)
+		}
+		fake.accountValidations = append(fake.accountValidations, request)
+		if result, ok := output.(*rayleabot.ActionResult); ok {
+			*result = rayleabot.ActionResult{"accepted": true, "reason": "queued"}
+		}
+		return nil
+	case "thirdparty.resolve":
+		request, ok := input.(thirdPartyResolveRequest)
+		if !ok {
+			return fmt.Errorf("unexpected third-party resolve input %T", input)
+		}
+		fake.resolveRequests = append(fake.resolveRequests, request)
+		if result, ok := output.(*rayleabot.ActionResult); ok {
+			if len(fake.resolveResults) > 0 {
+				*result = fake.resolveResults[0]
+				fake.resolveResults = fake.resolveResults[1:]
+			} else {
+				*result = rayleabot.ActionResult{"platform": "douyin", "profiles": []any{}, "exact": false}
+			}
+		}
+		return nil
 	default:
 		return fmt.Errorf("unexpected generic local action %q", action)
 	}
-	request, ok := input.(thirdPartyAccountValidateRequest)
-	if !ok {
-		return fmt.Errorf("unexpected third-party validation input %T", input)
-	}
-	fake.accountValidations = append(fake.accountValidations, request)
-	if result, ok := output.(*rayleabot.ActionResult); ok {
-		*result = rayleabot.ActionResult{"accepted": true, "reason": "queued"}
-	}
-	return nil
 }
 
 func (fake *fakePluginActions) KVGet(_ context.Context, key string) (rayleabot.ActionResult, error) {

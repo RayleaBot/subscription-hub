@@ -37,6 +37,9 @@ type subscription struct {
 	ID          string       `json:"id"`
 	Platform    string       `json:"platform"`
 	UID         string       `json:"uid"`
+	// UniqueID 是平台可修改的用户可见标识（抖音号），仅用于展示；订阅
+	// 绑定仍以 UID（sec_uid）为准，抖音号变更后由订阅检查刷新。
+	UniqueID    string       `json:"unique_id,omitempty"`
 	Name        string       `json:"name"`
 	AvatarURL   string       `json:"avatar_url,omitempty"`
 	TargetType  string       `json:"target_type"`
@@ -129,10 +132,14 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 
 	if operation == "search" {
 		query := strings.Join(event.Event.Args(), " ")
-		if platform == "weibo" {
+		switch platform {
+		case "weibo":
 			return replyWeiboUserSearch(commandCtx, event, query)
+		case "douyin":
+			return replyDouyinUserSearch(commandCtx, event, query)
+		default:
+			return replyBilibiliUserSearch(commandCtx, event, query)
 		}
-		return replyBilibiliUserSearch(commandCtx, event, query)
 	}
 	if operation == "preview" {
 		return previewSubscriptionCard(commandCtx, event, strings.Join(event.Event.Args(), " "))
@@ -209,6 +216,14 @@ func replySubscriptionOutcome(ctx context.Context, event *rayleabot.EventContext
 		user.AvatarURL = inlineWeiboCardAvatar(ctx, event.Actions(), firstText(user.AvatarURL, item.AvatarURL))
 		data := buildWeiboUserCardData(outcome.Action, item, user, outcome.Services)
 		return sendRenderedCard(ctx, event, weiboUserCardTemplate, data, outcome.Message)
+	case "douyin":
+		user := douyinUser{UID: item.UID, Name: item.Name, AvatarURL: item.AvatarURL}
+		if outcome.DouyinUser != nil {
+			user = *outcome.DouyinUser
+		}
+		user.AvatarURL = inlineDouyinCardAvatar(ctx, event.Actions(), firstText(user.AvatarURL, item.AvatarURL))
+		data := buildDouyinUserCardData(outcome.Action, item, user, outcome.Services)
+		return sendRenderedCard(ctx, event, douyinUserCardTemplate, data, outcome.Message)
 	}
 	return event.SendText(outcome.Message)
 }
@@ -238,6 +253,12 @@ func replySubscriptionCandidates(ctx context.Context, event *rayleabot.EventCont
 			renderUsers := prepareWeiboSearchAvatars(ctx, event.Actions(), outcome.WeiboCandidates)
 			data = buildWeiboSearchCardData(outcome.CandidatesQuery, renderUsers, event.CommandPrefixes)
 			template = weiboSearchResultsTemplate
+		}
+	case "douyin":
+		if len(outcome.DouyinCandidates) > 0 {
+			renderUsers := prepareDouyinSearchAvatars(ctx, event.Actions(), outcome.DouyinCandidates)
+			data = buildDouyinSearchCardData(outcome.CandidatesQuery, renderUsers, event.CommandPrefixes)
+			template = douyinSearchResultsTemplate
 		}
 	}
 	if template == "" {
@@ -274,6 +295,8 @@ func commandOperation(command string) (string, string) {
 		return "bilibili", "search"
 	case "微博搜索博主":
 		return "weibo", "search"
+	case "抖音搜索用户":
+		return "douyin", "search"
 	case "订阅列表":
 		return "", "list"
 	case "b站订阅列表":
@@ -340,6 +363,16 @@ func handleManagementAction(ctx context.Context, event *rayleabot.EventContext) 
 			}
 			return event.Result(weiboManagementResolution(query, users))
 		}
+		if platform == "douyin" {
+			if user := douyinSubscriptionSourceFromInput(&current, query); user != nil {
+				return event.Result(douyinManagementResolution(query, []douyinUser{*user}))
+			}
+			users, resolveErr := resolveDouyinUsers(ctx, event, query)
+			if resolveErr != nil || len(users) == 0 {
+				return event.Result(map[string]any{"platform": platform, "query": query, "exact": false, "candidates": []any{}, "message": friendlyDouyinError(resolveErr)})
+			}
+			return event.Result(douyinManagementResolution(query, users))
+		}
 		uid := subjectIDFromInput(platform, query)
 		if uid == "" {
 			uid = safeSubjectID(query)
@@ -371,6 +404,63 @@ func weiboManagementResolution(query string, users []weiboUser) map[string]any {
 		result["user"] = *matched
 	}
 	return result
+}
+
+func douyinManagementResolution(query string, users []douyinUser) map[string]any {
+	result := map[string]any{"platform": "douyin", "query": query, "exact": false, "candidates": users}
+	if matched := matchDouyinUserByQuery(users, query); matched != nil {
+		result["exact"] = true
+		result["user"] = *matched
+	}
+	return result
+}
+
+// resolvedDouyinUserUniqueID 提取订阅解析结果的抖音号（展示用）；未解析或
+// 非抖音平台时为空，订阅仍以 sec_uid 绑定。
+func resolvedDouyinUserUniqueID(user *douyinUser) string {
+	if user == nil {
+		return ""
+	}
+	return strings.TrimSpace(user.UniqueID)
+}
+
+// douyinSubscriptionSourceFromInput resolves only identities already present
+// in plugin state or explicitly carried by a profile URL/sec_uid. These inputs
+// are sufficient to bind a subscription and do not need a nickname-search
+// request.
+func douyinSubscriptionSourceFromInput(current *settings, query string) *douyinUser {
+	explicitUID := douyinSecUIDFromInput(query)
+	normalized := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(query), "@"))
+	var matched *douyinUser
+	if current != nil {
+		for _, item := range current.Subscriptions {
+			if item.Platform != "douyin" {
+				continue
+			}
+			matches := explicitUID != "" && item.UID == explicitUID
+			if explicitUID == "" {
+				matches = strings.EqualFold(strings.TrimSpace(item.UID), normalized) || strings.EqualFold(strings.TrimSpace(item.Name), normalized)
+			}
+			if !matches {
+				continue
+			}
+			if matched != nil && matched.UID != item.UID {
+				return nil
+			}
+			candidate := douyinUser{UID: item.UID, Name: firstText(item.Name, item.UID), AvatarURL: item.AvatarURL}
+			if matched == nil || (matched.Name == matched.UID && candidate.Name != candidate.UID) {
+				copy := candidate
+				matched = &copy
+			}
+		}
+	}
+	if matched != nil {
+		return matched
+	}
+	if explicitUID != "" {
+		return &douyinUser{UID: explicitUID, Name: explicitUID}
+	}
+	return nil
 }
 
 func loadSettings(ctx context.Context, event *rayleabot.EventContext) (settings, error) {
@@ -456,10 +546,12 @@ type subscriptionOutcome struct {
 	Item               *subscription
 	User               *bilibiliUser
 	WeiboUser          *weiboUser
+	DouyinUser         *douyinUser
 	Services           []string
 	CandidatesQuery    string
 	BilibiliCandidates []bilibiliUser
 	WeiboCandidates    []weiboUser
+	DouyinCandidates   []douyinUser
 }
 
 func addSubscription(ctx context.Context, current *settings, event *rayleabot.EventContext, platform string) subscriptionOutcome {
@@ -476,6 +568,7 @@ func addSubscriptionWithActions(ctx context.Context, actions pluginActions, curr
 	avatarURL := ""
 	var resolvedUser *bilibiliUser
 	var resolvedWeiboUser *weiboUser
+	var resolvedDouyinUser *douyinUser
 	if platform == "bilibili" {
 		users, err := resolveBilibiliUsersWithActions(ctx, actions, query)
 		if err != nil || len(users) == 0 {
@@ -512,6 +605,25 @@ func addSubscriptionWithActions(ctx context.Context, actions pluginActions, curr
 		} else {
 			return subscriptionOutcome{Message: friendlyWeiboError(err)}
 		}
+	} else if platform == "douyin" {
+		if known := douyinSubscriptionSourceFromInput(current, query); known != nil {
+			uid, name, avatarURL = known.UID, known.Name, known.AvatarURL
+			resolvedDouyinUser = known
+		} else if users, err := resolveDouyinUsersWithActions(ctx, actions, query); err == nil && len(users) > 0 {
+			matched := matchDouyinUserByQuery(users, query)
+			if matched == nil {
+				return subscriptionOutcome{
+					Message:          "没有找到昵称或来源标识与「" + query + "」完全一致的抖音用户。可以参考下面的搜索结果，或直接使用用户主页链接或完整 sec_uid 订阅。",
+					Action:           "candidates",
+					CandidatesQuery:  query,
+					DouyinCandidates: users,
+				}
+			}
+			uid, name, avatarURL = matched.UID, matched.Name, matched.AvatarURL
+			resolvedDouyinUser = matched
+		} else {
+			return subscriptionOutcome{Message: friendlyDouyinError(err)}
+		}
 	} else {
 		if uid == "" {
 			uid = safeSubjectID(query)
@@ -538,33 +650,38 @@ func addSubscriptionWithActions(ctx context.Context, actions pluginActions, curr
 		if avatarURL != "" {
 			item.AvatarURL = avatarURL
 		}
+		if uniqueID := strings.TrimSpace(resolvedDouyinUserUniqueID(resolvedDouyinUser)); uniqueID != "" {
+			item.UniqueID = uniqueID
+		}
 		if targetName := currentTargetName(event); targetName != "" {
 			item.TargetName = targetName
 		}
 		item.Services = mergeServices(item.Services, services, platform)
 		item.Subscribers = mergeSubscriber(item.Subscribers, event)
 		return subscriptionOutcome{
-			Message:   "已更新订阅：" + platformName(platform) + " " + item.Name + "（" + servicesText(item.Services, platform) + "）",
-			Changed:   true,
-			Action:    "updated",
-			Item:      item,
-			User:      resolvedUser,
-			WeiboUser: resolvedWeiboUser,
-			Services:  item.Services,
+			Message:    "已更新订阅：" + platformName(platform) + " " + item.Name + "（" + servicesText(item.Services, platform) + "）",
+			Changed:    true,
+			Action:     "updated",
+			Item:       item,
+			User:       resolvedUser,
+			WeiboUser:  resolvedWeiboUser,
+			DouyinUser: resolvedDouyinUser,
+			Services:   item.Services,
 		}
 	}
 	current.Subscriptions = append(current.Subscriptions, subscription{
-		ID: id, Platform: platform, UID: uid, Name: name, AvatarURL: avatarURL, TargetType: targetType, TargetID: event.Event.Target.ID,
+		ID: id, Platform: platform, UID: uid, UniqueID: resolvedDouyinUserUniqueID(resolvedDouyinUser), Name: name, AvatarURL: avatarURL, TargetType: targetType, TargetID: event.Event.Target.ID,
 		TargetName: currentTargetName(event), Services: services, Subscribers: mergeSubscriber(nil, event), Enabled: true,
 	})
 	return subscriptionOutcome{
-		Message:   "已订阅：" + platformName(platform) + " " + name + "（" + servicesText(services, platform) + "）",
-		Changed:   true,
-		Action:    "subscribed",
-		Item:      &current.Subscriptions[len(current.Subscriptions)-1],
-		User:      resolvedUser,
-		WeiboUser: resolvedWeiboUser,
-		Services:  services,
+		Message:    "已订阅：" + platformName(platform) + " " + name + "（" + servicesText(services, platform) + "）",
+		Changed:    true,
+		Action:     "subscribed",
+		Item:       &current.Subscriptions[len(current.Subscriptions)-1],
+		User:       resolvedUser,
+		WeiboUser:  resolvedWeiboUser,
+		DouyinUser: resolvedDouyinUser,
+		Services:   services,
 	}
 }
 
@@ -701,7 +818,7 @@ func subscriptionSubjectText(item subscription) string {
 	if name == "" || name == uid {
 		return firstText(uid, name)
 	}
-	label := map[string]string{"bilibili": "UID", "weibo": "UID", "douyin": "抖音号", "netease_music": "ID"}[item.Platform]
+	label := map[string]string{"bilibili": "UID", "weibo": "UID", "douyin": "sec_uid", "netease_music": "ID"}[item.Platform]
 	return fmt.Sprintf("%s（%s %s）", name, label, uid)
 }
 
