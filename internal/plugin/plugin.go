@@ -156,6 +156,7 @@ func handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 	case "remove":
 		outcome := removeSubscription(&current, event, platform)
 		if outcome.Changed {
+			cleanupRemovedSubscriptionKV(commandCtx, event.Actions(), &current, outcome.Item, outcome.Services)
 			if err := saveSettings(commandCtx, event, current); err != nil {
 				return err
 			}

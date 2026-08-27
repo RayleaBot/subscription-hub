@@ -18,6 +18,7 @@ type pluginActions interface {
 	KVGet(context.Context, string) (rayleabot.ActionResult, error)
 	KVSet(context.Context, string, any) (rayleabot.ActionResult, error)
 	KVDelete(context.Context, string) (rayleabot.ActionResult, error)
+	KVList(context.Context, string) (rayleabot.ActionResult, error)
 	LoggerWrite(context.Context, rayleabot.LoggerWriteRequest) (rayleabot.ActionResult, error)
 	RenderImage(context.Context, rayleabot.RenderImageRequest) (rayleabot.ActionResult, error)
 	MessageSend(context.Context, rayleabot.MessageSendRequest) (rayleabot.ActionResult, error)

@@ -175,6 +175,11 @@ func checkSubscriptionsWithActionsAtUsingStateContext(ctx, stateCtx context.Cont
 		}
 	}
 
+	if ctx.Err() == nil {
+		// 裁剪 seen 去重记录：每个订阅最多保留 maxSeenKeysPerSubscription 条，
+		// 按写入时间删除最旧的，防止 KV 无限增长。
+		trimSeenKeys(stateCtx, actions, current.Subscriptions)
+	}
 	if ctx.Err() != nil {
 		failures = append(failures, subscriptionCheckIncompleteMessage)
 	}
@@ -309,12 +314,13 @@ func weiboUpdateAtOrBeforeBaseline(update map[string]any, baselineAt time.Time) 
 
 func updateSeen(ctx context.Context, actions pluginActions, item subscription, update map[string]any) bool {
 	result, _ := actions.KVGet(ctx, subscriptionUpdateKey(item, update))
-	value, exists := actionStoredValue(result)
-	return exists && boolScalar(value)
+	_, exists := actionStoredValue(result)
+	return exists
 }
 
 func markUpdateSeen(ctx context.Context, actions pluginActions, item subscription, update map[string]any) {
-	_, _ = actions.KVSet(ctx, subscriptionUpdateKey(item, update), true)
+	// 值携带写入时间戳，供 seen 裁剪按新旧排序。
+	_, _ = actions.KVSet(ctx, subscriptionUpdateKey(item, update), map[string]any{"ts": time.Now().Unix()})
 }
 
 func prepareBilibiliUpdate(ctx context.Context, actions pluginActions, update map[string]any, cache map[string]map[string]any) map[string]any {

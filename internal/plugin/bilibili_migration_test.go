@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -144,6 +145,23 @@ func (fake *fakePluginActions) KVDelete(_ context.Context, key string) (rayleabo
 	defer fake.mu.Unlock()
 	delete(fake.kv, key)
 	return rayleabot.ActionResult{"ok": true}, nil
+}
+
+func (fake *fakePluginActions) KVList(_ context.Context, prefix string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	matched := make([]string, 0)
+	for key := range fake.kv {
+		if strings.HasPrefix(key, prefix) {
+			matched = append(matched, key)
+		}
+	}
+	sort.Strings(matched)
+	keys := make([]any, 0, len(matched))
+	for _, key := range matched {
+		keys = append(keys, key)
+	}
+	return rayleabot.ActionResult{"prefix": prefix, "keys": keys}, nil
 }
 
 func (fake *fakePluginActions) LoggerWrite(_ context.Context, request rayleabot.LoggerWriteRequest) (rayleabot.ActionResult, error) {
