@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -67,7 +68,7 @@ func RenderSubscriptionCardImageWithResources(ctx context.Context, actions HostA
 		imagePath = StringScalar(result["image_path"])
 	}
 	if err != nil || imagePath == "" {
-		logCardRenderFailure(ctx, actions, "订阅卡片图片生成失败", template, data, err, result, extra)
+		logCardRenderFailure(ctx, actions, template, data, err, result, extra)
 		if err != nil {
 			return "", err
 		}
@@ -117,7 +118,7 @@ func clearAvatarIfDataURL(object map[string]any, key string) {
 	}
 }
 
-func logCardRenderFailure(ctx context.Context, actions HostActions, message, template string, data map[string]any, err error, result rayleabot.ActionResult, extra map[string]any) {
+func logCardRenderFailure(ctx context.Context, actions HostActions, template string, data map[string]any, err error, result rayleabot.ActionResult, extra map[string]any) {
 	if actions == nil {
 		return
 	}
@@ -139,6 +140,11 @@ func logCardRenderFailure(ctx context.Context, actions HostActions, message, tem
 		}
 		fields[key] = value
 	}
+	reason := cardRenderFailureReason(err)
+	if reason == "" {
+		reason = "渲染结果没有图片路径"
+	}
+	message := fmt.Sprintf("订阅卡片模板 %s 生成图片失败；本次卡片不会发送。原因：%s。", strings.TrimSpace(template), reason)
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: fields})
 }
 

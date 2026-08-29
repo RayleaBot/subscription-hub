@@ -3,6 +3,7 @@ package weibo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -141,7 +142,17 @@ func logWeiboPreviewFailure(ctx context.Context, actions plugin.SourceActions, m
 	if reason != "" {
 		fields["reason"] = reason
 	}
-	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: fields})
+	weiboID := "未知内容"
+	if ref != nil && strings.TrimSpace(ref.ID) != "" {
+		weiboID = strings.TrimSpace(ref.ID)
+	}
+	completeMessage := fmt.Sprintf("%s：微博 %s；本次无法生成预览。", message, weiboID)
+	if err != nil {
+		completeMessage += strings.TrimSpace(friendlyWeiboSourceError("原因", err))
+	} else if strings.TrimSpace(reason) != "" {
+		completeMessage += "原因：" + strings.TrimSpace(reason) + "。"
+	}
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: completeMessage, Fields: fields})
 }
 
 func weiboMblogFromShowDocument(document map[string]any) map[string]any {

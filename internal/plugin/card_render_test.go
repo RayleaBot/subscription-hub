@@ -25,7 +25,7 @@ func TestRenderSubscriptionCardImageLogsFailureReason(t *testing.T) {
 	if got := PreviewCardFailureText(err); got != "订阅卡片预览生成失败：图片渲染失败。" {
 		t.Fatalf("previewCardFailureText() = %q", got)
 	}
-	if len(fake.Logs) != 1 || fake.Logs[0].Message != "订阅卡片图片生成失败" {
+	if len(fake.Logs) != 1 || !strings.Contains(fake.Logs[0].Message, "weibo-update") || !strings.Contains(fake.Logs[0].Message, "本次卡片不会发送") {
 		t.Fatalf("render failure was not logged: %#v", fake.Logs)
 	}
 	if len(fake.Renders) != 2 {

@@ -371,7 +371,8 @@ func (source *douyinSource) recordError(ctx context.Context, scope string, accou
 	for key, value := range fields {
 		payload[key] = value
 	}
-	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: "抖音订阅源检查失败", Fields: payload})
+	message := fmt.Sprintf("抖音账号 %s 的订阅源检查未完成；本轮不会使用该来源更新。%s", account.key(), strings.TrimSpace(source.friendlyError(err)))
+	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: payload})
 }
 
 func (source *douyinSource) friendlyError(err error) string {
@@ -383,5 +384,6 @@ func logDouyinFailure(ctx context.Context, actions plugin.SourceActions, message
 	if actions == nil || err == nil {
 		return
 	}
-	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: douyinErrorLogFields(err)})
+	completeMessage := friendlyDouyinSourceError(message, err)
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: completeMessage, Fields: douyinErrorLogFields(err)})
 }

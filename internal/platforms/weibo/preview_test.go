@@ -205,7 +205,7 @@ func TestFetchWeiboPreviewLogsWhenStatusCannotBeNormalized(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "没有找到这条微博") {
 		t.Fatalf("incomplete status error = %v", err)
 	}
-	if len(fake.Logs) == 0 || fake.Logs[0].Message != "微博预览解析失败" {
+	if len(fake.Logs) == 0 || !strings.Contains(fake.Logs[0].Message, "微博预览解析失败") || !strings.Contains(fake.Logs[0].Message, "本次无法生成预览") {
 		t.Fatalf("normalize failure was not logged: %#v", fake.Logs)
 	}
 	if plugin.StringScalar(fake.Logs[0].Fields["reason"]) == "" || plugin.StringScalar(fake.Logs[0].Fields["weibo_id"]) != "5331543666721397" {

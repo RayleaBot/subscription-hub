@@ -22,13 +22,13 @@ func (handler *Handler) ensureScheduler(ctx context.Context, event *rayleabot.Ev
 	})
 	if err != nil {
 		_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-			Level: "warn", Message: "订阅检查任务注册失败", Fields: map[string]any{"error": err.Error()},
+			Level: "warn", Message: "订阅检查定时任务注册失败；自动检查不会按计划运行，请修复后重启插件。原因：" + err.Error(), Fields: map[string]any{"error": err.Error(), "task_id": schedulerTaskID, "cron": schedulerCron},
 		})
 		return false
 	}
 	handler.schedulerRegistered.Store(true)
 	_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-		Level: "info", Message: fmt.Sprintf("订阅中心插件创建定时任务订阅检查（%s）", schedulerCron),
+		Level: "info", Message: fmt.Sprintf("订阅检查定时任务已注册，计划 %s 运行；插件将按计划检查并推送更新。", schedulerCron),
 		Fields: map[string]any{"task_id": schedulerTaskID, "cron": schedulerCron, "log_label": "订阅检查"},
 	})
 	return true

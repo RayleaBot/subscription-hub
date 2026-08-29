@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -197,9 +198,10 @@ func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions Hos
 
 func logStaleUpdate(ctx context.Context, actions SourceActions, item Subscription, update Update, now time.Time) {
 	publishedAt := time.Unix(IntScalar(update["pub_ts"]), 0)
-	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "info", Message: "过期订阅更新已跳过", Fields: map[string]any{
+	age := now.Sub(publishedAt)
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "info", Message: fmt.Sprintf("平台 %s 的订阅 %s 更新 %s 已发布 %s，超过投递时限；本次已跳过并标记为已处理，不会补发。", item.Platform, item.ID, StringScalar(update["id"]), age.Round(time.Second)), Fields: map[string]any{
 		"platform": item.Platform, "subscription_id": item.ID, "update_id": StringScalar(update["id"]), "service": StringScalar(update["service"]),
-		"published_at": publishedAt.UTC().Format(time.RFC3339), "age_seconds": int(now.Sub(publishedAt).Seconds()),
+		"published_at": publishedAt.UTC().Format(time.RFC3339), "age_seconds": int(age.Seconds()),
 	}})
 }
 

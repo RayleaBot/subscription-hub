@@ -213,7 +213,7 @@ func TestWeiboSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	if _, exists := fake.KV["source:weibo:cooldown:feed:primary"]; !exists {
 		t.Fatalf("risk-controlled account did not enter cooldown: %#v", fake.KV)
 	}
-	if len(fake.Logs) == 0 || fake.Logs[0].Message != "微博订阅源检查失败" {
+	if len(fake.Logs) == 0 || !strings.Contains(fake.Logs[0].Message, "订阅源检查未完成") || !strings.Contains(fake.Logs[0].Message, "风控拦截") {
 		t.Fatalf("risk-control failure was not logged: %#v", fake.Logs)
 	}
 }
@@ -232,7 +232,7 @@ func TestWeiboSourceClassifiesHTTP432AndEntersCooldown(t *testing.T) {
 
 	result := source.poll(context.Background(), []plugin.Subscription{item})
 
-	if result.FeedOK || len(result.Errors) != 1 || result.Errors[0] != "微博检查失败：H5 会话被拒绝（HTTP 432），可能是 CK 失效或平台风控；请在三方账号页检查 CK。" {
+	if result.FeedOK || len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "当前无法确认 CK 状态") || strings.Contains(result.Errors[0], "CK 已失效") {
 		t.Fatalf("HTTP 432 result = %#v", result)
 	}
 	if _, exists := fake.KV["source:weibo:cooldown:feed:primary"]; !exists {

@@ -370,7 +370,13 @@ func (source *bilibiliSource) recordError(ctx context.Context, scope string, acc
 	for key, value := range fields {
 		payload[key] = value
 	}
-	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: "Bilibili 订阅源检查失败", Fields: payload})
+	label := map[string]string{"dynamic": "动态", "live": "直播", "auto_follow": "关注状态"}[scope]
+	if label == "" {
+		label = scope
+	}
+	reason := strings.TrimSpace(source.friendlyError(label, err))
+	message := fmt.Sprintf("Bilibili 账号 %s 的%s订阅源检查未完成；本轮不会使用该来源更新。%s", account.key(), label, reason)
+	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: payload})
 }
 
 func (source *bilibiliSource) friendlyError(label string, err error) string {

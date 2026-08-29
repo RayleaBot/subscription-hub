@@ -876,7 +876,7 @@ func friendlyDouyinSourceError(label string, err error) string {
 	case "search_unavailable":
 		return label + "：抖音没有返回可用的用户结果。为避免继续触发安全验证，请直接使用用户主页链接或完整 sec_uid 订阅；此结果不能说明 CK 已失效。"
 	case "session_blocked":
-		return label + "：会话被拒绝（HTTP 432），可能是 CK 失效或平台风控；请在三方账号页检查 CK。"
+		return label + "：会话被拒绝（HTTP 432），当前无法确认 CK 状态；已进入退避，请稍后重试或在三方账号页手动检查。"
 	case "risk_control":
 		if strings.Contains(label, "搜索") {
 			return label + "：抖音要求安全验证，本次已停止继续探测。请在浏览器中打开抖音完成一次搜索（按提示通过验证）后，重新获取 Cookie 更新到账号页；也可以直接使用用户主页链接或完整 sec_uid 订阅（该路径不受影响）；此结果不能说明 CK 已失效。"

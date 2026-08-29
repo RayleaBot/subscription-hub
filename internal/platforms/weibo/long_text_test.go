@@ -197,7 +197,7 @@ func TestWeiboSubscriptionCheckFallsBackToSummaryAndLink(t *testing.T) {
 	}
 	foundLog := false
 	for _, entry := range fake.Logs {
-		if entry.Message == "微博正文获取不完整" && plugin.StringScalar(entry.Fields["update_id"]) == "long-failed" {
+		if strings.Contains(entry.Message, "微博更新 long-failed") && strings.Contains(entry.Message, "使用列表中的摘要正文") && plugin.StringScalar(entry.Fields["update_id"]) == "long-failed" {
 			foundLog = true
 			break
 		}

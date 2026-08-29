@@ -3,6 +3,7 @@ package weibo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -107,7 +108,9 @@ func (resolver *weiboLongTextResolver) logFailure(ctx context.Context, id string
 	for key, value := range weiboErrorLogFields(err) {
 		fields[key] = value
 	}
+	reason := strings.TrimSpace(friendlyWeiboSourceError("微博正文获取失败", err))
+	message := fmt.Sprintf("微博更新 %s 的长正文获取失败；本次将使用列表中的摘要正文继续生成卡片。%s", strings.TrimSpace(id), reason)
 	_, _ = resolver.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-		Level: "warn", Message: "微博正文获取不完整", Fields: fields,
+		Level: "warn", Message: message, Fields: fields,
 	})
 }

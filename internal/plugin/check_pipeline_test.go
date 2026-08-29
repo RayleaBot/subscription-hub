@@ -418,6 +418,29 @@ func TestCheckReportsSummaryPersistenceFailure(t *testing.T) {
 	}
 }
 
+func TestSubscriptionCheckLogKeepsCompleteFailuresAndReadableSummary(t *testing.T) {
+	actions := testkit.NewActions()
+	failures := []string{
+		"[douyin/source] 抖音检查因平台风控暂停，剩余约 1 分钟。",
+		"[weibo/source] 微博检查触发频率限制。",
+		"[bilibili/state] Bilibili 状态保存失败。",
+		"[subscription/timeout] 订阅检查未在本轮完成。",
+	}
+	logSubscriptionCheck(t.Context(), actions, map[string]any{"checked": 12, "sent": 2, "errors": failures})
+	if len(actions.Logs) != 1 {
+		t.Fatalf("log count = %d, want 1", len(actions.Logs))
+	}
+	entry := actions.Logs[0]
+	for _, expected := range []string{"检查 12 个订阅源", "推送 2 条更新", "发现 4 类异常", "抖音检查因平台风控暂停", "另有 1 类异常"} {
+		if !strings.Contains(entry.Message, expected) {
+			t.Fatalf("message %q does not contain %q", entry.Message, expected)
+		}
+	}
+	if IntScalar(entry.Fields["failure_count"]) != int64(len(failures)) || len(stringSlice(entry.Fields["errors"])) != len(failures) {
+		t.Fatalf("structured failures were truncated: %#v", entry.Fields)
+	}
+}
+
 func TestRemovedSubscriptionKeepsOtherPlatformState(t *testing.T) {
 	actions := testkit.NewActions()
 	removed := workflowSubscription("one", "alpha")

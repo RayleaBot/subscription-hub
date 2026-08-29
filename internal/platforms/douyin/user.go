@@ -3,6 +3,7 @@ package douyin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -358,13 +359,20 @@ func logDouyinEmptySearchResult(ctx context.Context, actions plugin.SourceAction
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	endpointPath := douyinEndpointPath(endpoint)
+	statusCode := plugin.IntScalar(document["status_code"])
+	statusMessage := plugin.DiagnosticExcerpt(douyinDocumentMessage(document), 120)
+	message := fmt.Sprintf("抖音搜索接口 %s 返回成功响应，但没有匹配用户；状态码 %d，本次不会据此判断 CK 失效，建议改用用户主页链接或完整 sec_uid。", endpointPath, statusCode)
+	if statusMessage != "" {
+		message = fmt.Sprintf("抖音搜索接口 %s 返回成功响应，但没有匹配用户；状态码 %d，平台信息：%s。本次不会据此判断 CK 失效，建议改用用户主页链接或完整 sec_uid。", endpointPath, statusCode, statusMessage)
+	}
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 		Level:   "info",
-		Message: "抖音搜索返回空结果",
+		Message: message,
 		Fields: map[string]any{
-			"endpoint":    douyinEndpointPath(endpoint),
-			"status_code": plugin.IntScalar(document["status_code"]),
-			"status_msg":  plugin.DiagnosticExcerpt(douyinDocumentMessage(document), 120),
+			"endpoint":    endpointPath,
+			"status_code": statusCode,
+			"status_msg":  statusMessage,
 			"top_keys":    strings.Join(keys, ","),
 			"data_items":  len(plugin.SliceValue(document["data"])),
 			"user_items":  len(plugin.SliceValue(document["user_list"])),

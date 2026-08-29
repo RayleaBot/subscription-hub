@@ -361,7 +361,7 @@ func friendlyWeiboSourceError(label string, err error) string {
 	}
 	switch sourceErr.Kind {
 	case "session_blocked":
-		return label + "：H5 会话被拒绝（HTTP 432），可能是 CK 失效或平台风控；请在三方账号页检查 CK。"
+		return label + "：H5 会话被拒绝（HTTP 432），当前无法确认 CK 状态；已进入退避，请稍后重试或在三方账号页手动检查。"
 	case "risk_control":
 		return label + "：微博请求被风控拦截，请稍后再试或重新扫码更新 CK。"
 	case "rate_limit":

@@ -372,7 +372,8 @@ func (source *weiboSource) recordError(ctx context.Context, scope string, accoun
 	for key, value := range fields {
 		payload[key] = value
 	}
-	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: "微博订阅源检查失败", Fields: payload})
+	message := fmt.Sprintf("微博账号 %s 的订阅源检查未完成；本轮不会使用该来源更新。%s", account.key(), strings.TrimSpace(source.friendlyError(err)))
+	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: payload})
 }
 
 func (source *weiboSource) friendlyError(err error) string {
@@ -382,7 +383,7 @@ func (source *weiboSource) friendlyError(err error) string {
 	}
 	switch typed.Kind {
 	case "session_blocked":
-		return "微博检查失败：H5 会话被拒绝（HTTP 432），可能是 CK 失效或平台风控；请在三方账号页检查 CK。"
+		return "微博检查未完成：H5 会话被拒绝（HTTP 432），当前无法确认 CK 状态；已进入退避，请稍后重试或在三方账号页手动检查。"
 	case "risk_control":
 		return "微博检查被风控拦截，已切换账号或进入退避。"
 	case "rate_limit":

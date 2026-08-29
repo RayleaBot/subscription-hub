@@ -167,7 +167,7 @@ func TestBilibiliSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	if _, exists := fake.KV["source:bilibili:cooldown:dynamic:primary"]; !exists {
 		t.Fatalf("risk-controlled account did not enter cooldown: %#v", fake.KV)
 	}
-	if len(fake.Logs) == 0 || fake.Logs[0].Message != "Bilibili 订阅源检查失败" {
+	if len(fake.Logs) == 0 || !strings.Contains(fake.Logs[0].Message, "订阅源检查未完成") || !strings.Contains(fake.Logs[0].Message, "本轮不会使用该来源更新") {
 		t.Fatalf("risk-control failure was not logged: %#v", fake.Logs)
 	}
 }
