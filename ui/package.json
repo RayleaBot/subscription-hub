@@ -10,7 +10,7 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@rayleabot/plugin-ui": "workspace:*",
+    "@rayleabot/plugin-ui": "link:../.rayleabot/sdk/vue",
     "ant-design-vue": "4.2.6",
     "vue": "3.5.41"
   },

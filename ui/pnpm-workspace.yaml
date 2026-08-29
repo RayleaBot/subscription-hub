@@ -1,6 +1,5 @@
 packages:
   - "."
-  - "../.rayleabot/sdk/vue"
 
 supportedArchitectures:
   os:
