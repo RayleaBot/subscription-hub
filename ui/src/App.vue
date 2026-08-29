@@ -95,16 +95,17 @@ const dirtyStateText = computed(() => {
 })
 
 void host.ready
-  .then((init) => {
-    applySettings(init.config, true)
+  .then(async (init) => {
+    await applySettings(init.config, true)
     setStatus('设置已载入')
     void reloadTargets(false)
+    void refreshStaleDouyinAvatars()
   })
   .catch((error: unknown) => {
     setStatus(errorMessage(error, '插件页面连接失败'), true)
   })
 
-function applySettings(value: Record<string, unknown>, markSaved: boolean) {
+function applySettings(value: Record<string, unknown>, markSaved: boolean): Promise<void> {
   const normalized = normalizeSettings(value)
   settings.value = normalized
   rows.value = buildRowsFromSettings(normalized)
@@ -112,7 +113,7 @@ function applySettings(value: Record<string, unknown>, markSaved: boolean) {
   subscriberIdentities.value = collectSubscriberIdentities(normalized)
   loaded.value = true
   if (markSaved) savedSnapshot.value = signature(normalized, rows.value)
-  revalidateAvatarURLs()
+  return revalidateAvatarURLs()
 }
 
 function signature(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): string {
@@ -137,7 +138,7 @@ function rowVisible(row: SubscriptionRow): boolean {
       target.target_name,
       context.value.targetMap.get(target.key)?.label ?? '',
     ])
-    const text = [row.uid, row.name, row.query, ...targetText, ...row.subscriber_ids, platformLabel(row.platform)].join(' ').toLowerCase()
+    const text = [row.uid, row.unique_id, row.name, row.query, ...targetText, ...row.subscriber_ids, platformLabel(row.platform)].join(' ').toLowerCase()
     if (!text.includes(query)) return false
   }
   if (statusFilter.value === 'enabled' && !row.enabled) return false
@@ -231,6 +232,7 @@ function changePlatform(row: SubscriptionRow, platformValue: Platform) {
   clearResolveTimer(row.row_id)
   row.platform = normalizePlatform(platformValue)
   row.uid = ''
+  row.unique_id = ''
   row.name = ''
   row.avatar_url = ''
   row.query = ''
@@ -303,6 +305,7 @@ async function resolveUser(row: SubscriptionRow) {
 
 function applyCandidate(row: SubscriptionRow, candidate: ResolveCandidate) {
   row.uid = candidate.uid.trim()
+  row.unique_id = candidate.unique_id?.trim() || ''
   row.name = candidate.name.trim()
   row.avatar_url = candidate.avatar_url?.trim() || ''
   row.query = row.name || row.uid
@@ -412,7 +415,7 @@ function hydrateAvatarURLs(force = false) {
   void resolveAvatarURLs(currentAvatarURLs(), force)
 }
 
-function revalidateAvatarURLs() {
+function revalidateAvatarURLs(): Promise<void> {
   avatarGeneration += 1
   const sources = currentAvatarURLs()
   const activeSources = new Set(sources)
@@ -421,7 +424,7 @@ function revalidateAvatarURLs() {
     if (activeSources.has(source)) next.set(source, dataURL)
   }
   avatarDataURLs.value = next
-  void resolveAvatarURLs(sources, true)
+  return resolveAvatarURLs(sources, true)
 }
 
 function clearAvatarURLs() {
@@ -441,7 +444,14 @@ async function resolveAvatarURLs(sources: string[], force = false) {
   try {
     for (let offset = 0; offset < pending.length; offset += 4) {
       const batch = pending.slice(offset, offset + 4)
-      const result = await host.client.invokeAction('subscription.resolve_avatars', { urls: batch }) as AvatarResolveResponse
+      let result: AvatarResolveResponse
+      try {
+        result = await host.client.invokeAction('subscription.resolve_avatars', { urls: batch }) as AvatarResolveResponse
+      } catch {
+        // A failed upstream batch must not prevent later cards from loading their avatars.
+        if (generation !== avatarGeneration) return
+        continue
+      }
       if (generation !== avatarGeneration) return
       const next = new Map(avatarDataURLs.value)
       const refreshed = new Map<string, string>()
@@ -458,8 +468,6 @@ async function resolveAvatarURLs(sources: string[], force = false) {
         storeAvatarDataURLs(refreshed)
       }
     }
-  } catch {
-    // Initials remain available when an upstream avatar host is unavailable.
   } finally {
     pending.forEach((source) => {
       if (resolvingAvatarURLs.get(source) === generation) resolvingAvatarURLs.delete(source)
@@ -467,12 +475,49 @@ async function resolveAvatarURLs(sources: string[], force = false) {
   }
 }
 
+const staleAvatarRefreshPending = ref(false)
+
+// refreshStaleDouyinAvatars 页面载入时只修复缺失的抖音号，以及缺失或无法拉取的
+// 头像地址。用稳定的 sec_uid 重新解析用户资料；现有资料可用时不重复访问平台，
+// 也不因头像签名轮换反复产生未保存改动。每轮载入只执行一次。
+async function refreshStaleDouyinAvatars() {
+  if (staleAvatarRefreshPending.value) return
+  staleAvatarRefreshPending.value = true
+  try {
+    for (const row of rows.value) {
+      if (row.platform !== 'douyin' || !row.uid || !row.resolved) continue
+      const uid = row.uid
+      const avatarURL = row.avatar_url
+      const identityMissing = !row.unique_id
+      const avatarStale = !avatarURL || !avatarDataURLs.value.has(avatarURL)
+      if (!identityMissing && !avatarStale) continue
+      try {
+        const result = await host.client.invokeAction('subscription.resolve_user', { platform: 'douyin', query: uid })
+        if (row.platform !== 'douyin' || row.uid !== uid) continue
+        const candidate = isCandidate(result.user) ? result.user : null
+        if (!candidate) continue
+        if (identityMissing && !row.unique_id && candidate.unique_id) row.unique_id = candidate.unique_id.trim()
+        const refreshedAvatar = candidate.avatar_url?.trim() || ''
+        if (avatarStale && row.avatar_url === avatarURL && refreshedAvatar && refreshedAvatar !== avatarURL) {
+          row.avatar_url = refreshedAvatar
+          void resolveAvatarURLs([refreshedAvatar])
+        }
+      } catch {
+        // 解析失败保留现有资料，下轮载入再试。
+      }
+    }
+  } finally {
+    staleAvatarRefreshPending.value = false
+  }
+}
+
 async function reloadSettings() {
   setStatus('正在重新载入设置…')
   try {
     const response = await host.client.reloadSettings()
-    applySettings(response.config, true)
+    await applySettings(response.config, true)
     setStatus('设置已同步')
+    void refreshStaleDouyinAvatars()
   } catch (error) {
     setStatus(errorMessage(error, '重新载入设置失败'), true)
   }

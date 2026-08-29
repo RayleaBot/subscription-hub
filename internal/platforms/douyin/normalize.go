@@ -58,10 +58,14 @@ func normalizeDouyinLive(live map[string]any, secUID string) map[string]any {
 		images = append(images, map[string]any{"url": cover})
 	}
 	pubTS := time.Now().Unix()
+	liveURL := plugin.FirstText(live["url"], "https://live.douyin.com/"+url.PathEscape(id))
+	if cleaned, ok := cleanDouyinShareURL(liveURL); ok {
+		liveURL = cleaned
+	}
 	return map[string]any{
 		"id": "live:" + id, "platform": "douyin", "uid": uid, "service": "live",
 		"category": douyinServiceCategory("live"), "title": title,
-		"summary": title, "url": plugin.FirstText(live["url"], "https://live.douyin.com/"+url.PathEscape(id)),
+		"summary": title, "url": liveURL,
 		"pub_ts": pubTS, "created_at": plugin.FormatTime(pubTS, ""),
 		"author": map[string]any{
 			"name": plugin.FirstText(name, uid), "uid": uid,
@@ -132,7 +136,9 @@ func douyinPubTS(aweme map[string]any) int64 {
 
 func douyinAwemeURL(aweme map[string]any, id, service string) string {
 	if share := plugin.FirstText(aweme["share_url"], plugin.NestedValue(aweme, "share_info", "share_url")); share != "" {
-		return share
+		if cleaned, ok := cleanDouyinShareURL(share); ok {
+			return cleaned
+		}
 	}
 	if service == "image_text" {
 		return "https://www.douyin.com/note/" + url.PathEscape(id)
@@ -140,32 +146,80 @@ func douyinAwemeURL(aweme map[string]any, id, service string) string {
 	return "https://www.douyin.com/video/" + url.PathEscape(id)
 }
 
+// cleanDouyinShareURL 去掉抖音分享链接的站内追踪参数（share_uid、tt_from、
+// utm_source 等）：作品/直播标识都在路径里，查询串只是渠道标记，直接丢弃。
+// 非抖音主机返回 ok=false，交由调用方回退到规范链接。
+func cleanDouyinShareURL(raw string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return "", false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	isDouyinHost := host == "douyin.com" || host == "v.douyin.com" || host == "live.douyin.com" ||
+		host == "iesdouyin.com" || strings.HasSuffix(host, ".douyin.com") || strings.HasSuffix(host, ".iesdouyin.com")
+	if !isDouyinHost {
+		return "", false
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), true
+}
+
 func douyinAwemeImages(aweme map[string]any, service string) []map[string]any {
 	images := make([]map[string]any, 0)
-	appendURL := func(raw any) {
-		text := douyinURLFromImage(raw)
-		if text == "" {
+	appendMirrors := func(raw any) {
+		mirrors := douyinImageMirrors(raw)
+		if len(mirrors) == 0 {
 			return
 		}
-		images = append(images, map[string]any{"url": text})
+		images = append(images, map[string]any{"url": mirrors[0], "candidates": mirrors})
 	}
 	if service == "image_text" {
 		for _, item := range plugin.SliceValue(aweme["images"]) {
-			appendURL(item)
+			appendMirrors(item)
 		}
 		for _, item := range plugin.SliceValue(plugin.NestedValue(aweme, "image_post_info", "images")) {
 			object := plugin.MapValue(item)
-			appendURL(plugin.FirstNonNil(object["display_image"], object["origin_image"], item))
+			appendMirrors(plugin.FirstNonNil(object["display_image"], object["origin_image"], item))
 		}
 	}
 	if len(images) == 0 {
+		// 优先静态封面；动态封面（dynamic_cover）是动图 webp，体积大且偶发取图失败，放最后。
 		video := plugin.MapValue(aweme["video"])
-		appendURL(plugin.FirstNonNil(video["origin_cover"], video["cover"], video["dynamic_cover"], aweme["cover"], aweme["video_cover"]))
+		appendMirrors(plugin.FirstNonNil(video["origin_cover"], video["cover"], aweme["cover"], aweme["video_cover"], video["dynamic_cover"]))
 	}
 	if len(images) > 9 {
 		images = images[:9]
 	}
 	return images
+}
+
+// douyinImageMirrors 收集图片/封面对象里的镜像地址（url_list），最多 4 个。
+// 抖音 CDN 按区域主机（p3/p6/p9/p26…）存放同一张图，url_list 即各区域镜像，
+// 签名与主机无关，任意一个成功即可，用列表整体作为取图重试候选。
+func douyinImageMirrors(raw any) []string {
+	mirrors := make([]string, 0, 4)
+	seen := make(map[string]bool, 4)
+	add := func(value any) {
+		text := douyinURLFromImage(value)
+		if text == "" || !strings.HasPrefix(text, "https://") || seen[text] {
+			return
+		}
+		seen[text] = true
+		mirrors = append(mirrors, text)
+	}
+	if object := plugin.MapValue(raw); object != nil {
+		for _, item := range plugin.SliceValue(object["url_list"]) {
+			add(item)
+			if len(mirrors) == 4 {
+				return mirrors
+			}
+		}
+	}
+	if len(mirrors) == 0 {
+		add(raw)
+	}
+	return mirrors
 }
 
 func douyinAwemeDuration(aweme map[string]any) string {

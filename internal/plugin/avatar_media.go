@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
@@ -20,7 +22,9 @@ const MaxUpdateCardAvatarBytes = 48 << 10
 
 const maxAvatarBatchBytes = 2 << 20
 
-const defaultAvatarTimeoutSeconds = 3
+const managementAvatarTimeoutSeconds = 8
+
+const managementAvatarTotalTimeout = 10 * time.Second
 
 var errUnsupportedAvatarURL = errors.New("unsupported avatar url")
 
@@ -31,21 +35,47 @@ type resolvedAvatar struct {
 
 func (handler *Handler) ResolveAvatarDataURLs(ctx context.Context, actions SourceActions, payload map[string]any) map[string]any {
 	urls := avatarURLsFromPayload(payload)
+	type avatarResult struct {
+		item  *resolvedAvatar
+		size  int
+		issue map[string]any
+	}
+	results := make([]avatarResult, len(urls))
+	resolveCtx, cancel := context.WithTimeout(ctx, managementAvatarTotalTimeout)
+	defer cancel()
+	var wait sync.WaitGroup
+	for index, sourceURL := range urls {
+		wait.Add(1)
+		go func(index int, sourceURL string) {
+			defer wait.Done()
+			dataURL, size, err := resolveAvatarDataURL(resolveCtx, actions, sourceURL, handler.avatarPolicies()...)
+			if err != nil {
+				results[index].issue = map[string]any{"source_url": sourceURL, "message": friendlyAvatarError(err)}
+				return
+			}
+			results[index].item = &resolvedAvatar{SourceURL: sourceURL, DataURL: dataURL}
+			results[index].size = size
+		}(index, sourceURL)
+	}
+	wait.Wait()
+
 	items := make([]resolvedAvatar, 0, len(urls))
 	issues := make([]map[string]any, 0)
 	totalBytes := 0
-	for _, sourceURL := range urls {
-		dataURL, size, err := resolveAvatarDataURL(ctx, actions, sourceURL, handler.avatarPolicies()...)
-		if err != nil {
-			issues = append(issues, map[string]any{"source_url": sourceURL, "message": friendlyAvatarError(err)})
+	for _, result := range results {
+		if result.issue != nil {
+			issues = append(issues, result.issue)
 			continue
 		}
-		if totalBytes+size > maxAvatarBatchBytes {
-			issues = append(issues, map[string]any{"source_url": sourceURL, "message": "头像批次超过大小限制"})
+		if result.item == nil {
 			continue
 		}
-		totalBytes += size
-		items = append(items, resolvedAvatar{SourceURL: sourceURL, DataURL: dataURL})
+		if totalBytes+result.size > maxAvatarBatchBytes {
+			issues = append(issues, map[string]any{"source_url": result.item.SourceURL, "message": "头像批次超过大小限制"})
+			continue
+		}
+		totalBytes += result.size
+		items = append(items, *result.item)
 	}
 	return map[string]any{"items": items, "issues": issues}
 }
@@ -72,7 +102,49 @@ func avatarURLsFromPayload(payload map[string]any) []string {
 }
 
 func resolveAvatarDataURL(ctx context.Context, actions SourceActions, sourceURL string, policies ...AvatarPolicy) (string, int, error) {
-	return ResolveAvatarDataURLWithTimeout(ctx, actions, sourceURL, defaultAvatarTimeoutSeconds, policies...)
+	return resolveAvatarDataURLWithCandidates(ctx, actions, sourceURL, managementAvatarTimeoutSeconds, maxAvatarBytes, policies...)
+}
+
+// resolveAvatarDataURLWithCandidates 先按策略校验，再依次尝试策略提供的镜像候选
+// （如 douyin 的区域 CDN 主机），任一成功即返回，避免单区域偶发失败导致头像缺失。
+func resolveAvatarDataURLWithCandidates(ctx context.Context, actions SourceActions, sourceURL string, timeoutSeconds, maxBytes int, policies ...AvatarPolicy) (string, int, error) {
+	parsed, _, err := ValidateAvatarSourceURL(sourceURL, policies...)
+	if err != nil {
+		return "", 0, err
+	}
+	candidates := []string{parsed.String()}
+	for _, policy := range policies {
+		if policy.Validate == nil || policy.Candidates == nil {
+			continue
+		}
+		if _, ok := policy.Validate(parsed); ok {
+			if policyCandidates := policy.Candidates(parsed); len(policyCandidates) > 0 {
+				candidates = policyCandidates
+			}
+			break
+		}
+	}
+	var lastError error
+	seen := make(map[string]bool, len(candidates))
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || seen[candidate] || ctx.Err() != nil {
+			continue
+		}
+		seen[candidate] = true
+		dataURL, size, err := ResolveAvatarDataURLLimited(ctx, actions, candidate, timeoutSeconds, maxBytes, policies...)
+		if err == nil {
+			return dataURL, size, nil
+		}
+		lastError = err
+	}
+	if lastError == nil {
+		lastError = context.Cause(ctx)
+	}
+	if lastError == nil {
+		lastError = errUnsupportedAvatarURL
+	}
+	return "", 0, lastError
 }
 
 func ResolveAvatarDataURLWithTimeout(ctx context.Context, actions SourceActions, sourceURL string, timeoutSeconds int, policies ...AvatarPolicy) (string, int, error) {

@@ -10,6 +10,7 @@ import {
   displayAvatarURL,
   emptyTargets,
   identityKey,
+  identityValue,
   normalizeSettings,
   normalizeTargets,
   targetMap,
@@ -74,6 +75,28 @@ describe('subscription settings model', () => {
       ],
     }))
     expect(rows.map((row) => row.platform)).toEqual(['bilibili', 'weibo'])
+  })
+
+  it('prefers douyin unique_id as the display identity and persists it', () => {
+    const settings = normalizeSettings({
+      subscriptions: [{
+        platform: 'douyin', uid: 'MS4wLjABAAAAone', unique_id: 'douyin_id', name: '测试用户', target_type: 'group', target_id: '200',
+      }],
+    })
+    const [row] = buildRowsFromSettings(settings)
+    expect(row?.unique_id).toBe('douyin_id')
+    expect(identityValue(row!)).toBe('douyin_id')
+    const payload = buildSettingsPayload(settings, [row!], new Map())
+    expect(payload.subscriptions[0]?.unique_id).toBe('douyin_id')
+  })
+
+  it('falls back to sec_uid when douyin unique_id is absent', () => {
+    const settings = normalizeSettings({
+      subscriptions: [{ platform: 'douyin', uid: 'MS4wLjABAAAAone', name: '测试用户', target_type: 'group', target_id: '200' }],
+    })
+    const [row] = buildRowsFromSettings(settings)
+    expect(row?.unique_id).toBe('')
+    expect(identityValue(row!)).toBe('MS4wLjABAAAAone')
   })
 
   it('keeps saved targets usable when the live protocol target list is unavailable', () => {

@@ -20,7 +20,7 @@
         <header class="dynamic-header">
           <div class="author">
             <div class="avatar-wrap">
-              <img class="avatar" src="assets/douyin-default-avatar.svg"{{ if $authorAvatar }} data-avatar="{{ $authorAvatar }}"{{ end }} alt="" />
+              <img class="avatar" src="assets/douyin-default-avatar.svg"{{ if $authorAvatar }} data-avatar="{{ $authorAvatar }}" data-fallback="assets/douyin-default-avatar.svg"{{ end }} alt="" />
             </div>
             <div class="author-text">
               <strong>{{ $authorName }}{{ if $authorUID }}<em>（{{ $authorUID }}）</em>{{ end }}</strong>

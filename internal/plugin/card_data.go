@@ -14,7 +14,12 @@ func RenderSubscriptionAuthor(item Subscription, value any) map[string]any {
 	}
 	author["name"] = FirstText(author["name"], item.Name, item.UID)
 	author["uid"] = FirstText(author["uid"], item.UID)
-	author["avatar"] = FirstText(author["avatar"], item.AvatarURL)
+	avatar := StringScalar(author["avatar"])
+	if !strings.HasPrefix(avatar, "https://") && !strings.HasPrefix(avatar, "http://") {
+		// feed 里偶发只有相对 uri，不是可拉取地址；回退到订阅时校验过的存储头像。
+		avatar = ""
+	}
+	author["avatar"] = FirstText(avatar, item.AvatarURL)
 	return author
 }
 
@@ -255,8 +260,21 @@ func BuildMediaItems(images []map[string]any, duration, service string) []map[st
 		result = append(result, map[string]any{
 			"url": imageURL, "class": strings.Join(classes, " "), "label": strings.Join(labels, " · "),
 			"duration_text": itemDuration, "width": width, "height": height,
-			"fallback": fallback,
+			"candidates": MediaItemCandidates(image["candidates"]),
+			"fallback":   fallback,
 		})
+	}
+	return result
+}
+
+// MediaItemCandidates 提取单条媒体数据的镜像候选地址（渲染资源取图重试用）。
+func MediaItemCandidates(value any) []string {
+	values := SliceValue(value)
+	result := make([]string, 0, len(values))
+	for _, raw := range values {
+		if text := strings.TrimSpace(StringScalar(raw)); text != "" {
+			result = append(result, text)
+		}
 	}
 	return result
 }

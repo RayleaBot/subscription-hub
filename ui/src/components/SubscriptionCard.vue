@@ -5,6 +5,7 @@ import AvatarBadge from './AvatarBadge.vue'
 import {
   currentTargetsForMode,
   displayAvatarURL,
+  identityValue,
   inputPlaceholder,
   isNumericID,
   PLATFORM_OPTIONS,
@@ -55,7 +56,7 @@ const emit = defineEmits<{
 const subscriberInput = ref('')
 const title = computed(() => props.row.name || props.row.uid || `未设置${platformLabel(props.row.platform)}对象`)
 const subtitle = computed(() => props.row.uid
-  ? `${platformLabel(props.row.platform)} · ${subjectLabel(props.row.platform)} ${props.row.uid}`
+  ? `${platformLabel(props.row.platform)} · ${subjectLabel(props.row.platform)} ${identityValue(props.row)}`
   : inputPlaceholder(props.row.platform))
 const errors = computed(() => validateRow(props.row, props.context))
 const availableTargets = computed(() => currentTargetsForMode(props.context.targets, props.row.target_mode))
@@ -103,7 +104,7 @@ function avatarURL(source: string): string {
         <small :title="subtitle">
           <template v-if="row.uid">
             <span>{{ platformLabel(row.platform) }} · {{ subjectLabel(row.platform) }}</span>
-            <span class="sub-card__identity-value">{{ row.uid }}</span>
+            <span class="sub-card__identity-value">{{ identityValue(row) }}</span>
           </template>
           <template v-else>{{ subtitle }}</template>
         </small>

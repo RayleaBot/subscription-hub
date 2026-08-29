@@ -9,7 +9,7 @@ export const MAX_DELIVERY_MAX_AGE_MINUTES = 24 * 60
 export const PLATFORM_OPTIONS = [
   { value: 'bilibili', label: 'Bilibili', subjectLabel: 'UID', inputPlaceholder: 'UID 或 Bilibili 用户名' },
   { value: 'weibo', label: '微博', subjectLabel: 'UID', inputPlaceholder: 'UID 或微博昵称' },
-  { value: 'douyin', label: '抖音', subjectLabel: '抖音来源', inputPlaceholder: '用户主页链接或完整 sec_uid' },
+  { value: 'douyin', label: '抖音', subjectLabel: '抖音号', inputPlaceholder: '用户主页链接、抖音号、昵称或完整 sec_uid' },
   { value: 'netease_music', label: '网易云音乐', subjectLabel: 'ID', inputPlaceholder: '歌曲、歌单、专辑或音乐人 ID' },
 ] as const satisfies ReadonlyArray<{
   value: Platform
@@ -40,6 +40,7 @@ export interface Subscription {
   id: string
   platform: Platform
   uid: string
+  unique_id?: string
   name: string
   avatar_url?: string
   target_type: TargetType
@@ -67,6 +68,7 @@ export interface RowTarget {
 
 export interface ResolveCandidate {
   uid: string
+  unique_id?: string
   name: string
   avatar_url?: string
 }
@@ -75,6 +77,7 @@ export interface SubscriptionRow {
   row_id: string
   platform: Platform
   uid: string
+  unique_id: string
   name: string
   avatar_url: string
   query: string
@@ -187,6 +190,7 @@ export function normalizeSubscription(value: unknown): Subscription | null {
     id: trim(value.id) || `${platform}-${uid}-${targetType}-${targetID}`,
     platform,
     uid,
+    unique_id: trim(value.unique_id) || undefined,
     name: trim(value.name) || uid,
     avatar_url: trim(value.avatar_url) || undefined,
     target_type: targetType,
@@ -205,6 +209,7 @@ export function createBlankRow(rowID: string): SubscriptionRow {
     row_id: rowID,
     platform: 'bilibili',
     uid: '',
+    unique_id: '',
     name: '',
     avatar_url: '',
     query: '',
@@ -233,6 +238,7 @@ export function buildRowsFromSettings(settings: SubscriptionSettings): Subscript
         row_id: `${subscription.platform}-${subscription.uid}`,
         platform: subscription.platform,
         uid: subscription.uid,
+        unique_id: subscription.unique_id || '',
         name: subscription.name || subscription.uid,
         avatar_url: subscription.avatar_url || '',
         query: subscription.name || subscription.uid,
@@ -313,6 +319,7 @@ export function buildSettingsPayload(
         id: target.subscription_id || `${row.platform}-${row.uid}-${target.target_type}-${target.target_id}`,
         platform: row.platform,
         uid: row.uid,
+        unique_id: row.unique_id || undefined,
         name: row.name,
         avatar_url: row.avatar_url || undefined,
         target_type: target.target_type,
@@ -465,6 +472,12 @@ export function safeSubjectId(value: unknown, platform: Platform): string {
     .join('')
     .replace(/^[_.-]+|[_.-]+$/g, '')
     .slice(0, 96)
+}
+
+// identityValue 展示用的账号标识：抖音优先展示可修改的抖音号（unique_id），
+// 缺失时回退稳定的 sec_uid（uid）用于绑定；其余平台直接使用 uid。
+export function identityValue(row: Pick<SubscriptionRow, 'platform' | 'uid' | 'unique_id'>): string {
+  return row.platform === 'douyin' && row.unique_id ? row.unique_id : row.uid
 }
 
 export function serviceLabels(platform: Platform): Record<string, string> {

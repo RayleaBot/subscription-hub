@@ -25,12 +25,23 @@ func prepareDouyinUpdateResources(data map[string]any) []plugin.RenderResource {
 			continue
 		}
 		item["url"] = plugin.FirstText(item["fallback"], "assets/grid.svg")
+		candidates := []string{parsed.String()}
+		seenCandidates := map[string]bool{parsed.String(): true}
+		for _, candidate := range plugin.MediaItemCandidates(item["candidates"]) {
+			candidateURL, candidateReferer, candidateErr := plugin.ValidateAvatarSourceURL(candidate, avatarPolicy())
+			if candidateErr != nil || candidateReferer != douyinRenderResourceReferer || seenCandidates[candidateURL.String()] {
+				continue
+			}
+			seenCandidates[candidateURL.String()] = true
+			candidates = append(candidates, candidateURL.String())
+		}
 		resourceID := "douyin-media-" + strconv.Itoa(len(resources))
 		item["resource_id"] = resourceID
 		resources = append(resources, plugin.RenderResource{
-			ID:      resourceID,
-			URL:     parsed.String(),
-			Referer: douyinRenderResourceReferer,
+			ID:           resourceID,
+			URL:          candidates[0],
+			Referer:      douyinRenderResourceReferer,
+			FallbackURLs: candidates[1:],
 		})
 		if len(resources) >= 9 {
 			break
