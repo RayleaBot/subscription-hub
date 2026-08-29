@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-label="weibo image">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-label="douyin image placeholder">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#ffe8ee"/>
-      <stop offset="1" stop-color="#ffd7a8"/>
+      <stop stop-color="#fff1f4"/>
+      <stop offset="1" stop-color="#eafbf9"/>
     </linearGradient>
   </defs>
   <rect width="900" height="900" fill="url(#bg)"/>
-  <rect x="90" y="90" width="720" height="720" rx="36" fill="#ffffff" opacity=".86"/>
+  <rect x="90" y="90" width="720" height="720" rx="36" fill="#ffffff" opacity=".9"/>
   <rect x="150" y="180" width="420" height="36" rx="18" fill="#fe2c55" opacity=".78"/>
-  <rect x="150" y="250" width="560" height="24" rx="12" fill="#e7d9cc"/>
-  <rect x="150" y="300" width="480" height="24" rx="12" fill="#f0e7de"/>
-  <circle cx="660" cy="620" r="90" fill="#fe2c55" opacity=".88"/>
+  <rect x="150" y="250" width="560" height="24" rx="12" fill="#d8dae5"/>
+  <rect x="150" y="300" width="480" height="24" rx="12" fill="#e7e8ef"/>
+  <circle cx="660" cy="620" r="90" fill="#25f4ee" opacity=".55"/>
 </svg>
