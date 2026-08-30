@@ -8,22 +8,22 @@ import {
   type ResolverPlatform,
   type ResolverSettings,
   type ResolverTargetSettings,
-  type TargetType,
   type TargetsState,
 } from '../model'
+
+type ResolverPage = 'group' | 'private' | 'strategy'
 
 const props = defineProps<{
   modelValue: ResolverSettings
   targets: TargetsState
+  view: ResolverPage
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: ResolverSettings]
   'open-help': []
 }>()
 
-type ResolverPage = TargetType | 'strategy'
-
-const page = ref<ResolverPage>('group')
+const page = computed(() => props.view)
 const search = ref('')
 const draft = ref<ResolverSettings>(structuredClone(props.modelValue))
 
@@ -70,10 +70,11 @@ const filteredTargets = computed(() => {
   })
 })
 const visibleTargets = computed(() => filteredTargets.value.slice(0, 100))
-const enabledCounts = computed(() => ({
-  group: draft.value.targets.filter((target) => target.target_type === 'group' && targetEnabled(target)).length,
-  private: draft.value.targets.filter((target) => target.target_type === 'private' && targetEnabled(target)).length,
-}))
+const pageCopy = computed(() => {
+  if (page.value === 'group') return { title: '群聊解析', description: '按群聊独立开启 B站、微博或抖音解析。解析默认关闭。' }
+  if (page.value === 'private') return { title: '用户解析', description: '按私聊用户独立开启 B站、微博或抖音解析。解析默认关闭。' }
+  return { title: '防抖与媒体策略', description: '管理解析冷却、直播录制、视频发送和平台清晰度策略。' }
+})
 
 function targetEnabled(target: ResolverTargetSettings): boolean {
   return target.bilibili || target.weibo || target.douyin
@@ -108,25 +109,13 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   <section class="resolver-panel" aria-labelledby="resolver-settings-title">
     <div class="resolver-heading">
       <div>
-        <h2 id="resolver-settings-title">链接解析</h2>
-        <p>解析默认关闭。开关按群聊或用户独立保存，发送链接后先发预览卡片，再发送媒体。</p>
+        <h2 id="resolver-settings-title">{{ pageCopy.title }}</h2>
+        <p>{{ pageCopy.description }}</p>
       </div>
       <button type="button" class="preview-help" @click="$emit('open-help')">预览解析帮助</button>
     </div>
 
-    <div class="resolver-tabs" role="tablist" aria-label="解析设置页面">
-      <button type="button" role="tab" :aria-selected="page === 'group'" :class="{ active: page === 'group' }" @click="page = 'group'">
-        群聊 <span>{{ enabledCounts.group }}</span>
-      </button>
-      <button type="button" role="tab" :aria-selected="page === 'private'" :class="{ active: page === 'private' }" @click="page = 'private'">
-        用户 <span>{{ enabledCounts.private }}</span>
-      </button>
-      <button type="button" role="tab" :aria-selected="page === 'strategy'" :class="{ active: page === 'strategy' }" @click="page = 'strategy'">
-        防抖与媒体策略
-      </button>
-    </div>
-
-    <div v-if="page !== 'strategy'" class="target-page" role="tabpanel">
+    <div v-if="page !== 'strategy'" class="target-page">
       <label class="target-search">
         <span>筛选{{ page === 'group' ? '群聊' : '用户' }}</span>
         <input v-model="search" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
@@ -159,7 +148,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
       <p v-if="filteredTargets.length > visibleTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
     </div>
 
-    <div v-else class="strategy-page" role="tabpanel">
+    <div v-else class="strategy-page">
       <section class="strategy-section">
         <div class="strategy-title"><h3>冷却防抖</h3><p>同链接冷却默认开启 10 秒；同平台冷却按需开启。</p></div>
         <div class="setting-grid setting-grid--two">
@@ -254,28 +243,6 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   font-weight: 700;
   cursor: pointer;
 }
-
-.resolver-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 0 26px;
-  border-bottom: 1px solid var(--border);
-}
-
-.resolver-tabs button {
-  min-height: 46px;
-  padding: 0 14px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  background: transparent;
-  font: inherit;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.resolver-tabs button.active { border-bottom-color: var(--accent); color: var(--accent-strong); }
-.resolver-tabs button span { margin-inline-start: 5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .target-page,
 .strategy-page { padding: 22px 26px 26px; }
@@ -388,8 +355,6 @@ select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, 
 @media (max-width: 820px) {
   .resolver-heading { align-items: stretch; flex-direction: column; }
   .preview-help { width: 100%; }
-  .resolver-tabs { overflow-x: auto; }
-  .resolver-tabs button { flex: 0 0 auto; }
   .target-table-head,
   .target-row { grid-template-columns: minmax(150px, 1fr) repeat(3, 62px); }
   .setting-grid--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -399,7 +364,6 @@ select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, 
   .resolver-heading,
   .target-page,
   .strategy-page { padding-inline: 18px; }
-  .resolver-tabs { padding-inline: 12px; }
   .target-search,
   .setting-grid--two,
   .setting-grid--three { grid-template-columns: 1fr; }

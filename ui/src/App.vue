@@ -20,6 +20,7 @@ import {
   DEFAULT_RESOLVER_SETTINGS,
   identityKey,
   normalizePlatform,
+  normalizeResolverSettings,
   normalizeServices,
   normalizeSettings,
   normalizeTargets,
@@ -50,6 +51,8 @@ import {
 } from './model'
 
 const host = usePluginHost()
+type ManagementPage = 'subscriptions' | 'resolver-groups' | 'resolver-users' | 'resolver-strategy'
+
 const defaultSettings: SubscriptionSettings = {
   enabled: true,
   delivery_max_age_minutes: DEFAULT_DELIVERY_MAX_AGE_MINUTES,
@@ -80,10 +83,22 @@ const resolvingAvatarURLs = new Map<string, number>()
 let avatarGeneration = 0
 let rowCounter = 0
 
+const activePage = computed<ManagementPage>(() => {
+  const pageID = host.init.value?.page.id
+  if (pageID === 'resolver-groups' || pageID === 'resolver-users' || pageID === 'resolver-strategy') return pageID
+  return 'subscriptions'
+})
+const isSubscriptionsPage = computed(() => activePage.value === 'subscriptions')
+const resolverView = computed<'group' | 'private' | 'strategy'>(() => {
+  if (activePage.value === 'resolver-groups') return 'group'
+  if (activePage.value === 'resolver-users') return 'private'
+  return 'strategy'
+})
+const currentPageLabel = computed(() => host.init.value?.page.label || '订阅设置')
 const hostErrorMessage = computed(() => host.error.value?.message ?? '')
 const context = computed(() => createRowContext(targets.value, rows.value, subscriberAvatars.value, avatarDataURLs.value))
-const errors = computed(() => [...validateSettings(settings.value), ...validateRows(rows.value, context.value)])
-const contentSnapshot = computed(() => JSON.stringify(buildSettingsPayload(settings.value, rows.value, new Map())))
+const errors = computed(() => isSubscriptionsPage.value ? [...validateSettings(settings.value), ...validateRows(rows.value, context.value)] : [])
+const contentSnapshot = computed(() => JSON.stringify(settingsPayloadForCurrentPage(settings.value, rows.value)))
 const isDirty = computed(() => loaded.value && contentSnapshot.value !== savedSnapshot.value)
 const visibleRows = computed(() => rows.value.filter((row) => rowVisible(row)))
 const knownTargetCount = computed(() => context.value.targets.groups.length + context.value.targets.private_users.length)
@@ -96,13 +111,18 @@ const dirtyStateText = computed(() => {
   if (saving.value) return '正在保存'
   return isDirty.value ? '设置有修改' : '设置已同步'
 })
+const footerStatusText = computed(() => {
+  if (statusIsError.value) return status.value
+  if (!isSubscriptionsPage.value && !isDirty.value) return status.value
+  return dirtyStateText.value
+})
 
 void host.ready
   .then(async (init) => {
     await applySettings(init.config, true)
     setStatus('设置已载入')
-    void reloadTargets(false)
-    void refreshStaleDouyinAvatars()
+    if (activePage.value !== 'resolver-strategy') void reloadTargets(false)
+    if (isSubscriptionsPage.value) void refreshStaleDouyinAvatars()
   })
   .catch((error: unknown) => {
     setStatus(errorMessage(error, '插件页面连接失败'), true)
@@ -120,7 +140,17 @@ function applySettings(value: Record<string, unknown>, markSaved: boolean): Prom
 }
 
 function signature(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): string {
-  return JSON.stringify(buildSettingsPayload(currentSettings, currentRows, new Map()))
+  return JSON.stringify(settingsPayloadForCurrentPage(currentSettings, currentRows))
+}
+
+function settingsPayloadForCurrentPage(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): SubscriptionSettings {
+  if (isSubscriptionsPage.value) return buildSettingsPayload(currentSettings, currentRows, new Map())
+  return {
+    enabled: currentSettings.enabled,
+    delivery_max_age_minutes: currentSettings.delivery_max_age_minutes,
+    subscriptions: structuredClone(currentSettings.subscriptions),
+    resolver: normalizeResolverSettings(currentSettings.resolver),
+  }
 }
 
 function setStatus(message: string, isError = false) {
@@ -520,7 +550,7 @@ async function reloadSettings() {
     const response = await host.client.reloadSettings()
     await applySettings(response.config, true)
     setStatus('设置已同步')
-    void refreshStaleDouyinAvatars()
+    if (isSubscriptionsPage.value) void refreshStaleDouyinAvatars()
   } catch (error) {
     setStatus(errorMessage(error, '重新载入设置失败'), true)
   }
@@ -535,6 +565,26 @@ function resetSettings() {
   setStatus('已恢复默认设置，保存后生效')
 }
 
+function resetCurrentPage() {
+  if (isSubscriptionsPage.value) {
+    resetSettings()
+    return
+  }
+  if (activePage.value === 'resolver-groups') {
+    settings.value.resolver.targets = settings.value.resolver.targets.filter((target) => target.target_type !== 'group')
+    setStatus('已关闭全部群聊解析，保存后生效')
+    return
+  }
+  if (activePage.value === 'resolver-users') {
+    settings.value.resolver.targets = settings.value.resolver.targets.filter((target) => target.target_type !== 'private')
+    setStatus('已关闭全部用户解析，保存后生效')
+    return
+  }
+  settings.value.resolver.cooldowns = structuredClone(DEFAULT_RESOLVER_SETTINGS.cooldowns)
+  settings.value.resolver.media = structuredClone(DEFAULT_RESOLVER_SETTINGS.media)
+  setStatus('已恢复默认防抖与媒体策略，保存后生效')
+}
+
 async function saveSettings() {
   if (errors.value.length > 0) {
     setStatus(errors.value[0]!, true)
@@ -542,7 +592,7 @@ async function saveSettings() {
   }
   saving.value = true
   try {
-    const identityRequests = buildIdentityRequests(rows.value)
+    const identityRequests = isSubscriptionsPage.value ? buildIdentityRequests(rows.value) : []
     if (identityRequests.length > 0) {
       setStatus('正在刷新订阅人身份…')
       const resolved = await host.client.request<IdentityResolveResponse>('protocol.identities.resolve', { items: identityRequests })
@@ -575,7 +625,9 @@ async function saveSettings() {
     }
 
     setStatus('正在保存设置…')
-    const payload = buildSettingsPayload(settings.value, rows.value, context.value.targetMap, subscriberIdentities.value)
+    const payload = isSubscriptionsPage.value
+      ? buildSettingsPayload(settings.value, rows.value, context.value.targetMap, subscriberIdentities.value)
+      : settingsPayloadForCurrentPage(settings.value, rows.value)
     const response = await host.client.saveSettings(payload as unknown as Record<string, unknown>)
     applySettings(response.config, true)
     setStatus('设置已同步')
@@ -628,14 +680,14 @@ function errorMessage(error: unknown, fallback: string): string {
 <template>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
   <main id="main-content" class="page-shell">
-    <h1 class="sr-only">订阅与解析设置</h1>
+    <h1 class="sr-only">{{ currentPageLabel }}</h1>
 
     <AAlert v-if="hostErrorMessage" class="host-alert" type="error" :message="hostErrorMessage" show-icon />
 
-    <section class="status-strip" aria-label="订阅与解析状态">
+    <section v-if="isSubscriptionsPage" class="status-strip" aria-label="订阅中心状态">
       <label class="switch-row" for="enabled-input">
         <input id="enabled-input" v-model="settings.enabled" name="enabled" type="checkbox" autocomplete="off" />
-        <span><strong>订阅与解析</strong><small>{{ settings.enabled ? '订阅启用' : '订阅停用' }}</small></span>
+        <span><strong>订阅中心</strong><small>{{ settings.enabled ? '启用' : '停用' }}</small></span>
       </label>
       <div class="strip-metric"><span>订阅</span><strong>{{ rows.length }} / {{ settings.subscriptions.length }}</strong></div>
       <div class="strip-metric"><span>可选推送范围</span><strong>{{ targetMetric }}</strong></div>
@@ -664,9 +716,15 @@ function errorMessage(error: unknown, fallback: string): string {
       <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button>
     </section>
 
-    <ResolverSettingsPanel v-model="settings.resolver" :targets="context.targets" @open-help="openPreview('resolver-help')" />
+    <ResolverSettingsPanel
+      v-if="!isSubscriptionsPage"
+      v-model="settings.resolver"
+      :targets="context.targets"
+      :view="resolverView"
+      @open-help="openPreview('resolver-help')"
+    />
 
-    <section class="panel">
+    <section v-if="isSubscriptionsPage" class="panel">
       <div class="section-title section-title--inline">
         <div><h2>订阅管理</h2><p>同一平台账号的群聊和私聊目标合并在同一卡片编辑。</p></div>
         <button type="button" class="button button--primary-accent" @click="addSubscription">添加订阅</button>
@@ -721,15 +779,16 @@ function errorMessage(error: unknown, fallback: string): string {
     </section>
 
     <footer class="actions-bar">
-      <div class="dirty-state" aria-live="polite">{{ dirtyStateText }}</div>
+      <div class="dirty-state" :class="{ 'is-error': statusIsError }" aria-live="polite">{{ footerStatusText }}</div>
       <div class="footer-buttons">
         <button type="button" class="button" :disabled="saving" @click="reloadSettings">重新载入</button>
-        <button type="button" class="button" :disabled="saving" @click="resetSettings">恢复默认</button>
-        <button type="button" class="button" :disabled="checking || saving" @click="checkNow">{{ checking ? '检查中…' : '立即检查' }}</button>
-        <button type="button" class="button" @click="openPreview('bilibili-update')">打开 Bilibili 卡片预览</button>
-        <button type="button" class="button" @click="openPreview('weibo-update')">打开微博卡片预览</button>
-        <button type="button" class="button" @click="openPreview('douyin-update')">打开抖音卡片预览</button>
-        <button type="button" class="button" @click="openPreview('resolver-help')">打开解析帮助预览</button>
+        <button type="button" class="button" :disabled="saving" @click="resetCurrentPage">{{ isSubscriptionsPage ? '恢复默认' : activePage === 'resolver-strategy' ? '恢复默认策略' : '关闭本页全部解析' }}</button>
+        <button v-if="!isSubscriptionsPage && activePage !== 'resolver-strategy'" type="button" class="button" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button>
+        <button v-if="isSubscriptionsPage" type="button" class="button" :disabled="checking || saving" @click="checkNow">{{ checking ? '检查中…' : '立即检查' }}</button>
+        <button v-if="isSubscriptionsPage" type="button" class="button" @click="openPreview('bilibili-update')">打开 Bilibili 卡片预览</button>
+        <button v-if="isSubscriptionsPage" type="button" class="button" @click="openPreview('weibo-update')">打开微博卡片预览</button>
+        <button v-if="isSubscriptionsPage" type="button" class="button" @click="openPreview('douyin-update')">打开抖音卡片预览</button>
+        <button v-if="!isSubscriptionsPage" type="button" class="button" @click="openPreview('resolver-help')">打开解析帮助预览</button>
         <button type="button" class="button button--primary" :disabled="!loaded || errors.length > 0 || saving" @click="saveSettings">{{ saving ? '保存中…' : '保存设置' }}</button>
       </div>
     </footer>

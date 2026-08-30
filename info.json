@@ -15,7 +15,22 @@
     "pages": [
       {
         "id": "subscriptions",
-        "label": "订阅与解析",
+        "label": "订阅设置",
+        "entry": "ui/index.html"
+      },
+      {
+        "id": "resolver-groups",
+        "label": "群聊解析",
+        "entry": "ui/index.html"
+      },
+      {
+        "id": "resolver-users",
+        "label": "用户解析",
+        "entry": "ui/index.html"
+      },
+      {
+        "id": "resolver-strategy",
+        "label": "防抖与媒体策略",
         "entry": "ui/index.html"
       }
     ]
