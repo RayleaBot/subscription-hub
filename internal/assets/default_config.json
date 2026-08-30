@@ -1,5 +1,35 @@
 {
   "enabled": true,
   "delivery_max_age_minutes": 30,
-  "subscriptions": []
+  "subscriptions": [],
+  "resolver": {
+    "targets": [],
+    "cooldowns": {
+      "same_link_enabled": true,
+      "same_link_seconds": 10,
+      "same_platform_enabled": false,
+      "same_platform_seconds": 10
+    },
+    "media": {
+      "live_record_seconds": 30,
+      "video_size_limit_mb": 70,
+      "upload_oversize": true,
+      "image_forward_threshold": 0,
+      "image_batch_size": 50,
+      "media_concurrency": 1,
+      "video_codec": "auto",
+      "compatibility_transcode": false,
+      "bilibili_max_duration_seconds": 480,
+      "bilibili_resolution": 480,
+      "bilibili_smart_resolution": false,
+      "bilibili_file_size_limit_mb": 100,
+      "bilibili_min_resolution": 360,
+      "bilibili_bangumi_direct": false,
+      "bilibili_bangumi_resolution": 480,
+      "bilibili_bangumi_max_seconds": 1800,
+      "douyin_max_duration_seconds": 480,
+      "douyin_resolution": 1080,
+      "douyin_merge_bgm": true
+    }
+  }
 }

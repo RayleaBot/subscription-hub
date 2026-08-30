@@ -104,10 +104,10 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		if update == nil {
 			continue
 		}
-		if ref.ID != "" && plugin.FirstText(update["id"]) != ref.ID && !strings.Contains(plugin.StringScalar(update["url"]), ref.ID) {
+		if ref.Kind != "short" && ref.ID != "" && plugin.FirstText(update["id"]) != ref.ID && !strings.Contains(plugin.StringScalar(update["url"]), ref.ID) {
 			continue
 		}
-		if rawURL := strings.TrimSpace(ref.URL); rawURL != "" {
+		if rawURL := strings.TrimSpace(ref.URL); rawURL != "" && ref.Kind != "short" {
 			update["url"] = rawURL
 		}
 		return update, nil

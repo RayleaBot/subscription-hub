@@ -11,6 +11,8 @@ import (
 )
 
 func (handler *Handler) Check(ctx context.Context, actions HostActions, current Settings) map[string]any {
+	handler.checkMu.Lock()
+	defer handler.checkMu.Unlock()
 	checkCtx, stateCtx, cancel := newSubscriptionCheckContexts(ctx)
 	defer cancel()
 	return handler.check(checkCtx, stateCtx, actions, current, handler.now())

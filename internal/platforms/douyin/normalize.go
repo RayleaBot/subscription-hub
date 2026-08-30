@@ -36,7 +36,7 @@ func normalizeDouyinAweme(aweme map[string]any) map[string]any {
 			"unique_id": plugin.FirstText(author["unique_id"], author["short_id"]),
 			"avatar":    douyinURLFromImage(plugin.FirstNonNil(author["avatar_larger"], author["avatar_medium"], author["avatar_thumb"], author["avatar"])),
 		},
-		"images": images,
+		"images": images, "_resolver_aweme": aweme,
 	}
 }
 
@@ -72,7 +72,7 @@ func normalizeDouyinLive(live map[string]any, secUID string) map[string]any {
 			"unique_id": plugin.FirstText(user["unique_id"], user["short_id"]),
 			"avatar":    douyinURLFromImage(plugin.FirstNonNil(user["avatar_larger"], user["avatar_thumb"], user["avatar"])),
 		},
-		"images": images,
+		"images": images, "_resolver_live": live,
 	}
 }
 

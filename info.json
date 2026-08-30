@@ -1,7 +1,7 @@
 {
   "id": "raylea.subscription-hub",
-  "name": "订阅中心",
-  "version": "0.2.8",
+  "name": "订阅与解析",
+  "version": "0.3.0",
   "manifest_version": "2",
   "plugin_protocol_version": "1",
   "min_core_version": "0.3.2",
@@ -9,13 +9,13 @@
   "entry": "bin/subscription-hub",
   "platforms": ["windows-x64", "linux-x64", "macos-arm64"],
   "license": "MIT",
-  "description": "订阅平台内容并推送更新",
+  "description": "订阅平台内容，并解析 B站、微博与抖音链接",
   "author": "raylea",
   "management_ui": {
     "pages": [
       {
         "id": "subscriptions",
-        "label": "订阅设置",
+        "label": "订阅与解析",
         "entry": "ui/index.html"
       }
     ]
@@ -47,11 +47,17 @@
     },
     {
       "path": "templates/douyin-update"
+    },
+    {
+      "path": "templates/resolver-help"
     }
   ],
   "capabilities": [
     "event.subscribe",
     "message.send",
+    "message.forward.send",
+    "file.group.upload",
+    "file.private.upload",
     "render.image",
     "storage.kv",
     "config.read",
@@ -107,8 +113,50 @@
   },
   "commands": [
     {
+      "name": "解析帮助",
+      "description": "查看当前群聊或私聊的解析开关与冷却状态",
+      "usage": "/解析帮助",
+      "permission": "everyone"
+    },
+    {
+      "name": "开启B站解析",
+      "description": "为当前群聊或私聊开启 B站链接解析",
+      "usage": "/开启B站解析",
+      "permission": "super_admin"
+    },
+    {
+      "name": "关闭B站解析",
+      "description": "为当前群聊或私聊关闭 B站链接解析",
+      "usage": "/关闭B站解析",
+      "permission": "super_admin"
+    },
+    {
+      "name": "开启微博解析",
+      "description": "为当前群聊或私聊开启微博链接解析",
+      "usage": "/开启微博解析",
+      "permission": "super_admin"
+    },
+    {
+      "name": "关闭微博解析",
+      "description": "为当前群聊或私聊关闭微博链接解析",
+      "usage": "/关闭微博解析",
+      "permission": "super_admin"
+    },
+    {
+      "name": "开启抖音解析",
+      "description": "为当前群聊或私聊开启抖音链接解析",
+      "usage": "/开启抖音解析",
+      "permission": "super_admin"
+    },
+    {
+      "name": "关闭抖音解析",
+      "description": "为当前群聊或私聊关闭抖音链接解析",
+      "usage": "/关闭抖音解析",
+      "permission": "super_admin"
+    },
+    {
       "name": "订阅状态",
-      "description": "查看订阅中心状态",
+      "description": "查看订阅与解析插件状态",
       "usage": "/订阅状态",
       "permission": "everyone"
     },
@@ -253,12 +301,18 @@
     }
   ],
   "help": {
-    "title": "订阅中心",
-    "summary": "订阅平台内容并推送更新",
+    "title": "订阅与解析",
+    "summary": "订阅平台内容，并按会话解析 B站、微博与抖音链接",
     "groups": [
       {
         "title": "订阅操作",
         "items": [
+          {
+            "title": "解析帮助",
+            "description": "查看当前群聊或私聊的 B站、微博、抖音解析状态，以及冷却和媒体策略摘要。",
+            "usage": "/解析帮助",
+            "command": "解析帮助"
+          },
           {
             "title": "订阅状态",
             "description": "查看启用状态、订阅数量和最近检查结果。",
@@ -430,7 +484,7 @@
           },
           {
             "title": "订阅检查",
-            "description": "订阅状态和立即检查入口在订阅中心插件管理页查看。",
+            "description": "订阅状态和立即检查入口在订阅与解析插件管理页查看。",
             "permission": "super_admin"
           }
         ]

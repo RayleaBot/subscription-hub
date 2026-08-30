@@ -213,9 +213,13 @@ func douyinLiveFromUserObject(object map[string]any) map[string]any {
 	if webRID != "" {
 		liveURL = "https://live.douyin.com/" + url.PathEscape(webRID)
 	}
+	room := plugin.MapValue(object["room"])
+	if room == nil {
+		room = plugin.MapValue(user["room"])
+	}
 	return map[string]any{
 		"id": liveID, "room_id": roomID, "web_rid": webRID, "session": session,
-		"title": title, "cover": cover, "url": liveURL, "user": user,
+		"title": title, "cover": cover, "url": liveURL, "user": user, "room": room,
 	}
 }
 

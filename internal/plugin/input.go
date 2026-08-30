@@ -6,7 +6,7 @@ import (
 	"unicode"
 )
 
-var URLPattern = regexp.MustCompile(`https?://[^\s<>"，]+`)
+var URLPattern = regexp.MustCompile(`https?://[^\s<>"，。；、！？）》」]+`)
 var HTMLTag = regexp.MustCompile(`<[^>]+>`)
 
 func PathParts(value string) []string {

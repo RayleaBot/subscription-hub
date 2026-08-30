@@ -17,6 +17,11 @@ type bilibiliPreviewRef struct {
 }
 
 func parseBilibiliPreviewURL(value string) *bilibiliPreviewRef {
+	rawParsed, _ := url.Parse(strings.TrimSpace(value))
+	mobileArticleID := ""
+	if rawParsed != nil {
+		mobileArticleID = plugin.Digits(rawParsed.Query().Get("id"))
+	}
 	canonical := plugin.NormalizePreviewURL(value)
 	if canonical == "" {
 		return nil
@@ -25,8 +30,16 @@ func parseBilibiliPreviewURL(value string) *bilibiliPreviewRef {
 	host := strings.ToLower(parsed.Hostname())
 	parts := plugin.PathParts(parsed.Path)
 	switch {
-	case isBilibiliContentHost(host) && len(parts) == 2 && parts[0] == "video" && bilibiliBVIDPattern.MatchString(parts[1]):
+	case isBilibiliContentHost(host) && len(parts) >= 2 && parts[0] == "video" && (bilibiliBVIDPattern.MatchString(parts[1]) || strings.HasPrefix(strings.ToLower(parts[1]), "av") && plugin.Digits(parts[1][2:]) != ""):
 		return &bilibiliPreviewRef{Kind: "video", ID: parts[1], URL: "https://www.bilibili.com/video/" + parts[1]}
+	case isBilibiliContentHost(host) && len(parts) >= 3 && parts[0] == "bangumi" && parts[1] == "play" && strings.HasPrefix(parts[2], "ep") && plugin.Digits(parts[2][2:]) != "":
+		return &bilibiliPreviewRef{Kind: "bangumi_ep", ID: parts[2][2:], URL: "https://www.bilibili.com/bangumi/play/" + parts[2]}
+	case isBilibiliContentHost(host) && len(parts) >= 3 && parts[0] == "bangumi" && parts[1] == "play" && strings.HasPrefix(parts[2], "ss") && plugin.Digits(parts[2][2:]) != "":
+		return &bilibiliPreviewRef{Kind: "bangumi_season", ID: parts[2][2:], URL: "https://www.bilibili.com/bangumi/play/" + parts[2]}
+	case isBilibiliContentHost(host) && len(parts) >= 2 && parts[0] == "read" && strings.HasPrefix(parts[1], "cv") && plugin.Digits(parts[1][2:]) != "":
+		return &bilibiliPreviewRef{Kind: "article", ID: parts[1][2:], URL: "https://www.bilibili.com/read/" + parts[1]}
+	case isBilibiliContentHost(host) && len(parts) >= 2 && parts[0] == "read" && parts[1] == "mobile" && mobileArticleID != "":
+		return &bilibiliPreviewRef{Kind: "article", ID: mobileArticleID, URL: "https://www.bilibili.com/read/cv" + mobileArticleID}
 	case isBilibiliContentHost(host) && len(parts) == 2 && parts[0] == "opus" && plugin.Digits(parts[1]) != "":
 		return &bilibiliPreviewRef{Kind: "opus", ID: parts[1], URL: "https://www.bilibili.com/opus/" + parts[1]}
 	case host == "t.bilibili.com" && len(parts) == 1 && plugin.Digits(parts[0]) != "":
@@ -61,12 +74,34 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 	var endpoint string
 	switch ref.Kind {
 	case "video":
-		endpoint = bilibiliVideoViewURL + "?" + url.Values{"bvid": []string{ref.ID}}.Encode()
+		query := url.Values{"bvid": []string{ref.ID}}
+		if strings.HasPrefix(strings.ToLower(ref.ID), "av") {
+			query = url.Values{"aid": []string{plugin.Digits(ref.ID[2:])}}
+		}
+		endpoint = bilibiliVideoViewURL + "?" + query.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
 		if err != nil {
 			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 视频预览失败", err))
 		}
 		return previewVideoUpdate(document, ref.URL)
+	case "bangumi_ep", "bangumi_season":
+		query := url.Values{}
+		if ref.Kind == "bangumi_ep" {
+			query.Set("ep_id", ref.ID)
+		} else {
+			query.Set("season_id", ref.ID)
+		}
+		document, err := client.requestJSON(ctx, "GET", bilibiliPGCSeasonURL+"?"+query.Encode(), account, false, false, "", false)
+		if err != nil {
+			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 番剧预览失败", err))
+		}
+		return previewBangumiUpdate(document, ref.URL, ref)
+	case "article":
+		document, err := client.requestJSON(ctx, "GET", bilibiliArticleViewURL+"?"+url.Values{"id": []string{ref.ID}}.Encode(), account, false, false, "", false)
+		if err != nil {
+			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 专栏预览失败", err))
+		}
+		return previewArticleUpdate(document, ref.URL, ref.ID)
 	case "opus":
 		endpoint = bilibiliOpusDetailURL + "?" + url.Values{"id": []string{ref.ID}}.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
@@ -121,7 +156,65 @@ func previewVideoUpdate(document map[string]any, canonicalURL string) (map[strin
 		"created_at":    plugin.FormatTime(plugin.IntScalar(plugin.FirstNonNil(data["pubdate"], data["ctime"])), ""),
 		"duration_text": plugin.FormatVideoDuration(plugin.IntScalar(data["duration"])),
 		"author":        map[string]any{"name": plugin.CleanText(owner["name"]), "avatar": plugin.NormalizeMediaURL(owner["face"]), "uid": plugin.CleanText(owner["mid"])},
-		"images":        images,
+		"images":        images, "duration_seconds": plugin.IntScalar(data["duration"]), "_resolver_video": data,
+	}, nil
+}
+
+func previewBangumiUpdate(document map[string]any, canonicalURL string, ref *bilibiliPreviewRef) (map[string]any, error) {
+	result := plugin.MapValue(document["result"])
+	if result == nil {
+		result = plugin.MapValue(document["data"])
+	}
+	if result == nil {
+		return nil, errors.New("Bilibili 番剧预览失败：响应格式不正确")
+	}
+	episodes := plugin.SliceValue(result["episodes"])
+	var episode map[string]any
+	if ref.Kind == "bangumi_ep" {
+		for _, raw := range episodes {
+			candidate := plugin.MapValue(raw)
+			if plugin.StringScalar(candidate["id"]) == ref.ID || plugin.StringScalar(candidate["ep_id"]) == ref.ID {
+				episode = candidate
+				break
+			}
+		}
+	}
+	if episode == nil && len(episodes) > 0 {
+		episode = plugin.MapValue(episodes[0])
+	}
+	title := plugin.FirstText(episode["long_title"], episode["share_copy"], episode["title"], result["title"], "Bilibili 番剧")
+	cover := plugin.FirstNonNil(episode["cover"], result["cover"], result["square_cover"])
+	images := make([]map[string]any, 0, 1)
+	appendBilibiliImage(&images, cover)
+	duration := int(plugin.IntScalar(episode["duration"]))
+	if duration > 1000 {
+		duration /= 1000
+	}
+	return map[string]any{
+		"id": plugin.FirstText(episode["id"], episode["ep_id"], ref.ID), "service": "video", "category": "番剧",
+		"title": title, "summary": plugin.TruncateRunes(plugin.FirstText(episode["share_copy"], result["evaluate"], result["subtitle"]), 420),
+		"url": canonicalURL, "duration_seconds": duration, "duration_text": plugin.FormatVideoDuration(int64(duration)),
+		"author": map[string]any{"name": plugin.FirstText(result["title"], "哔哩哔哩番剧")}, "images": images,
+		"_resolver_bangumi": map[string]any{"episode": episode, "season": result},
+	}, nil
+}
+
+func previewArticleUpdate(document map[string]any, canonicalURL, articleID string) (map[string]any, error) {
+	data := plugin.MapValue(document["data"])
+	if data == nil {
+		return nil, errors.New("Bilibili 专栏预览失败：响应格式不正确")
+	}
+	images := make([]map[string]any, 0)
+	for _, raw := range plugin.SliceValue(plugin.FirstNonNil(data["image_urls"], data["images"])) {
+		appendBilibiliImage(&images, raw)
+	}
+	appendBilibiliImage(&images, data["banner_url"])
+	return map[string]any{
+		"id": articleID, "service": "article", "category": "专栏文章", "title": plugin.FirstText(data["title"], "Bilibili 专栏"),
+		"summary": plugin.TruncateRunes(plugin.FirstText(data["summary"], data["desc"]), 420), "url": canonicalURL,
+		"pub_ts": plugin.IntScalar(data["publish_time"]), "created_at": plugin.FormatTime(plugin.IntScalar(data["publish_time"]), ""),
+		"author": map[string]any{"name": plugin.FirstText(data["author_name"], plugin.NestedValue(data, "author", "name")), "uid": plugin.FirstText(data["mid"], plugin.NestedValue(data, "author", "mid"))},
+		"images": images,
 	}, nil
 }
 
@@ -310,7 +403,7 @@ func previewLiveUpdate(document, statusDocument map[string]any, canonicalURL, ro
 		"summary": statusLabel, "url": canonicalURL, "pub_ts": pubTS, "created_at": startedAt,
 		"author": map[string]any{"name": authorName, "avatar": plugin.NormalizeMediaURL(plugin.FirstNonNil(statusEntry["face"], data["face"])), "uid": uid},
 		"images": images, "live_status": status, "live_event": map[bool]string{true: "started", false: "preview"}[status == 1],
-		"status_label": statusLabel, "live_started_at": startedAt,
+		"status_label": statusLabel, "live_started_at": startedAt, "_resolver_live": data,
 	}, nil
 }
 

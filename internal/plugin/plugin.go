@@ -17,8 +17,8 @@ func Run(ctx context.Context, platforms ...Platform) error {
 	}
 	return rayleabot.Run(ctx, rayleabot.Options{
 		PluginID:              "raylea.subscription-hub",
-		Subscriptions:         []string{"plugin.started", "config.changed", "scheduler.trigger", "management.action"},
-		MaxConcurrentHandlers: 1,
+		Subscriptions:         []string{"plugin.started", "config.changed", "scheduler.trigger", "management.action", "message.group", "message.private"},
+		MaxConcurrentHandlers: 4,
 	}, handler)
 }
 
@@ -69,7 +69,7 @@ func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContex
 func (handler *Handler) handleCommand(ctx context.Context, event *rayleabot.EventContext) error {
 	platform, operation := handler.CommandOperation(event.Event.Command())
 	if operation == "" {
-		return event.Result(map[string]any{"handled": false})
+		return handler.handleResolverMessage(ctx, event)
 	}
 	if InteractiveCommandOperation(operation) {
 		var cancel context.CancelFunc
@@ -88,8 +88,12 @@ func (handler *Handler) handleCommand(ctx context.Context, event *rayleabot.Even
 		return err
 	}
 	switch operation {
+	case "resolver_help":
+		return handler.replyResolverHelp(ctx, event, current)
 	case "status":
 		return event.SendText(handler.FormatStatus(current))
+	case "resolver_enable_bilibili", "resolver_disable_bilibili", "resolver_enable_weibo", "resolver_disable_weibo", "resolver_enable_douyin", "resolver_disable_douyin":
+		return handler.toggleResolverForCurrentTarget(ctx, event, &current, operation)
 	case "add", "remove":
 		var outcome SubscriptionOutcome
 		if operation == "add" {

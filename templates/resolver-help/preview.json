@@ -1,0 +1,15 @@
+{
+  "target_type": "群聊",
+  "target_name": "测试群",
+  "platforms": [
+    { "name": "B站", "enabled": true, "enable_command": "/开启B站解析", "disable_command": "/关闭B站解析" },
+    { "name": "微博", "enabled": false, "enable_command": "/开启微博解析", "disable_command": "/关闭微博解析" },
+    { "name": "抖音", "enabled": true, "enable_command": "/开启抖音解析", "disable_command": "/关闭抖音解析" }
+  ],
+  "same_link_enabled": true,
+  "same_link_seconds": 10,
+  "same_platform_enabled": false,
+  "same_platform_seconds": 10,
+  "live_record_seconds": 30,
+  "video_size_limit_mb": 70
+}

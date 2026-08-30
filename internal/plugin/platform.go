@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -148,6 +149,10 @@ type Handler struct {
 	now                 func() time.Time
 	jitter              func() time.Duration
 	schedulerRegistered atomic.Bool
+	checkMu             sync.Mutex
+	resolverMu          sync.Mutex
+	resolverCooldowns   map[string]time.Time
+	mediaGate           resolverMediaGate
 }
 
 var platformIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -157,7 +162,7 @@ func NewHandler(options Options) (*Handler, error) {
 		return nil, errors.New("subscription hub requires at least one platform")
 	}
 	handler := &Handler{
-		byID: map[string]Platform{}, commands: map[string]commandRoute{},
+		byID: map[string]Platform{}, commands: map[string]commandRoute{}, resolverCooldowns: map[string]time.Time{},
 		actions: options.Actions, now: options.Now, jitter: options.Jitter,
 	}
 	if handler.now == nil {
@@ -169,6 +174,10 @@ func NewHandler(options Options) (*Handler, error) {
 	for command, operation := range map[string]string{
 		"订阅状态": "status", "订阅列表": "list", "全部订阅列表": "list_all",
 		"立即检查订阅": "check", "预览订阅卡片": "preview",
+		"解析帮助":   "resolver_help",
+		"开启B站解析": "resolver_enable_bilibili", "关闭B站解析": "resolver_disable_bilibili",
+		"开启微博解析": "resolver_enable_weibo", "关闭微博解析": "resolver_disable_weibo",
+		"开启抖音解析": "resolver_enable_douyin", "关闭抖音解析": "resolver_disable_douyin",
 	} {
 		handler.commands[command] = commandRoute{operation: operation}
 	}

@@ -148,7 +148,7 @@ func (handler *Handler) handleManagementAction(ctx context.Context, event *rayle
 		platform := stringValue(payload, "platform", handler.platforms[0].ID)
 		return event.Result(handler.ResolveUser(ctx, actions, platform, stringValue(payload, "query", ""), current))
 	}
-	return event.Result(map[string]any{"handled": false, "message": "未知订阅中心管理动作。"})
+	return event.Result(map[string]any{"handled": false, "message": "未知订阅与解析管理动作。"})
 }
 
 func (handler *Handler) FormatStatus(current Settings) string {
@@ -166,5 +166,5 @@ func (handler *Handler) FormatStatus(current Settings) string {
 	for _, platform := range handler.platforms {
 		names = append(names, platform.Name)
 	}
-	return fmt.Sprintf("订阅中心\n状态：%s\n订阅：%d/%d\n平台：%s\n检查：订阅中心插件定时检查，支持手动立即检查\n账号：Web 三方账号页面管理平台 Cookie", state, enabled, len(current.Subscriptions), strings.Join(names, "、"))
+	return fmt.Sprintf("订阅与解析\n订阅状态：%s\n订阅：%d/%d\n解析：发送“解析帮助”查看当前会话开关\n平台：%s\n检查：插件定时检查，支持手动立即检查\n账号：Web 三方账号页面管理平台 Cookie", state, enabled, len(current.Subscriptions), strings.Join(names, "、"))
 }

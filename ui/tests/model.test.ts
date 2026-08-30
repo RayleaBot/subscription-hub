@@ -12,6 +12,7 @@ import {
   identityKey,
   identityValue,
   normalizeSettings,
+  normalizeResolverSettings,
   normalizeTargets,
   targetMap,
   validateRows,
@@ -27,6 +28,36 @@ describe('subscription settings model', () => {
     expect(buildSettingsPayload(settings, [], new Map()).delivery_max_age_minutes).toBe(90)
     expect(validateSettings({ delivery_max_age_minutes: 0 })).not.toEqual([])
     expect(validateSettings({ delivery_max_age_minutes: 1441 })).not.toEqual([])
+  })
+
+  it('defaults parsing off per target and enables only explicitly configured platforms', () => {
+    const defaults = normalizeSettings({})
+    expect(defaults.resolver.targets).toEqual([])
+    expect(defaults.resolver.cooldowns).toMatchObject({ same_link_enabled: true, same_link_seconds: 10, same_platform_enabled: false })
+    expect(defaults.resolver.media).toMatchObject({ live_record_seconds: 30, video_size_limit_mb: 70, media_concurrency: 1 })
+
+    const settings = normalizeSettings({
+      resolver: {
+        targets: [{ target_type: 'group', target_id: '200', target_name: '测试群', bilibili: true }],
+      },
+    })
+    expect(settings.resolver.targets).toEqual([{
+      target_type: 'group', target_id: '200', target_name: '测试群', bilibili: true, weibo: false, douyin: false,
+    }])
+    expect(buildSettingsPayload(settings, [], new Map()).resolver.targets[0]?.bilibili).toBe(true)
+  })
+
+  it('normalizes resolver strategy values to supported bounds', () => {
+    const resolver = normalizeResolverSettings({
+      cooldowns: { same_link_seconds: 0, same_platform_seconds: 9000 },
+      media: { live_record_seconds: 500, media_concurrency: 0, video_codec: 'vp9', image_forward_threshold: -1 },
+    })
+    expect(resolver.cooldowns.same_link_seconds).toBe(1)
+    expect(resolver.cooldowns.same_platform_seconds).toBe(3600)
+    expect(resolver.media.live_record_seconds).toBe(50)
+    expect(resolver.media.media_concurrency).toBe(1)
+    expect(resolver.media.video_codec).toBe('auto')
+    expect(resolver.media.image_forward_threshold).toBe(0)
   })
 
   it('clones reactive-style row proxies without structured clone failures', () => {

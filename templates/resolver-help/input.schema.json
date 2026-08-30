@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["platforms", "same_link_enabled", "same_link_seconds", "same_platform_enabled", "same_platform_seconds"],
+  "properties": {
+    "target_type": { "type": "string" },
+    "target_name": { "type": "string" },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "enabled", "enable_command", "disable_command"],
+        "properties": {
+          "name": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "enable_command": { "type": "string" },
+          "disable_command": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "same_link_enabled": { "type": "boolean" },
+    "same_link_seconds": { "type": "integer" },
+    "same_platform_enabled": { "type": "boolean" },
+    "same_platform_seconds": { "type": "integer" },
+    "live_record_seconds": { "type": "integer" },
+    "video_size_limit_mb": { "type": "integer" }
+  },
+  "additionalProperties": true
+}

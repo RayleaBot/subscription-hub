@@ -4,6 +4,7 @@ import { Alert as AAlert } from 'ant-design-vue'
 import { usePluginHost } from '@rayleabot/plugin-ui'
 
 import { readCachedAvatarDataURLs, storeAvatarDataURLs } from './avatar-cache'
+import ResolverSettingsPanel from './components/ResolverSettingsPanel.vue'
 import SubscriptionCard from './components/SubscriptionCard.vue'
 import {
   buildIdentityRequests,
@@ -16,6 +17,7 @@ import {
   createRowContext,
   emptyTargets,
   DEFAULT_DELIVERY_MAX_AGE_MINUTES,
+  DEFAULT_RESOLVER_SETTINGS,
   identityKey,
   normalizePlatform,
   normalizeServices,
@@ -52,6 +54,7 @@ const defaultSettings: SubscriptionSettings = {
   enabled: true,
   delivery_max_age_minutes: DEFAULT_DELIVERY_MAX_AGE_MINUTES,
   subscriptions: [],
+  resolver: structuredClone(DEFAULT_RESOLVER_SETTINGS),
 }
 const settings = ref<SubscriptionSettings>(structuredClone(defaultSettings))
 const rows = ref<SubscriptionRow[]>([])
@@ -588,7 +591,7 @@ async function checkNow() {
   setStatus('正在检查订阅…')
   try {
     const result = await host.client.invokeAction('subscription.check_now')
-    if (result.skipped === 'disabled') setStatus('订阅中心未启用')
+    if (result.skipped === 'disabled') setStatus('订阅功能未启用')
     else if (result.skipped === 'no_checkable_subscriptions' || result.skipped === 'no_bilibili_subscriptions') setStatus('没有可检查的订阅')
     else {
       const checked = Number(result.checked || 0)
@@ -625,14 +628,14 @@ function errorMessage(error: unknown, fallback: string): string {
 <template>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
   <main id="main-content" class="page-shell">
-    <h1 class="sr-only">订阅设置</h1>
+    <h1 class="sr-only">订阅与解析设置</h1>
 
     <AAlert v-if="hostErrorMessage" class="host-alert" type="error" :message="hostErrorMessage" show-icon />
 
-    <section class="status-strip" aria-label="订阅中心状态">
+    <section class="status-strip" aria-label="订阅与解析状态">
       <label class="switch-row" for="enabled-input">
         <input id="enabled-input" v-model="settings.enabled" name="enabled" type="checkbox" autocomplete="off" />
-        <span><strong>订阅中心</strong><small>{{ settings.enabled ? '启用' : '停用' }}</small></span>
+        <span><strong>订阅与解析</strong><small>{{ settings.enabled ? '订阅启用' : '订阅停用' }}</small></span>
       </label>
       <div class="strip-metric"><span>订阅</span><strong>{{ rows.length }} / {{ settings.subscriptions.length }}</strong></div>
       <div class="strip-metric"><span>可选推送范围</span><strong>{{ targetMetric }}</strong></div>
@@ -660,6 +663,8 @@ function errorMessage(error: unknown, fallback: string): string {
       </div>
       <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button>
     </section>
+
+    <ResolverSettingsPanel v-model="settings.resolver" :targets="context.targets" @open-help="openPreview('resolver-help')" />
 
     <section class="panel">
       <div class="section-title section-title--inline">
@@ -724,6 +729,7 @@ function errorMessage(error: unknown, fallback: string): string {
         <button type="button" class="button" @click="openPreview('bilibili-update')">打开 Bilibili 卡片预览</button>
         <button type="button" class="button" @click="openPreview('weibo-update')">打开微博卡片预览</button>
         <button type="button" class="button" @click="openPreview('douyin-update')">打开抖音卡片预览</button>
+        <button type="button" class="button" @click="openPreview('resolver-help')">打开解析帮助预览</button>
         <button type="button" class="button button--primary" :disabled="!loaded || errors.length > 0 || saving" @click="saveSettings">{{ saving ? '保存中…' : '保存设置' }}</button>
       </div>
     </footer>

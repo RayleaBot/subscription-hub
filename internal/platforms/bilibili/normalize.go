@@ -77,7 +77,7 @@ func normalizeDynamicItem(item map[string]any, depth int) map[string]any {
 		"avatar": plugin.NormalizeMediaURL(authorModule["face"]),
 		"uid":    plugin.CleanText(authorModule["mid"]),
 	}
-	return map[string]any{
+	update := map[string]any{
 		"id": dynamicID, "type": itemType, "service": service,
 		"category": dynamicCategory(service), "title": title,
 		"summary": summary, "summary_html": summaryHTML,
@@ -88,6 +88,10 @@ func normalizeDynamicItem(item map[string]any, depth int) map[string]any {
 		"topic": topic, "is_pinned": plugin.CleanText(tagModule["text"]) == "置顶",
 		"original": original,
 	}
+	if service == "video" {
+		update["_resolver_video"] = plugin.MapValue(major["archive"])
+	}
+	return update
 }
 
 func dynamicService(itemType string, basic, major map[string]any) string {

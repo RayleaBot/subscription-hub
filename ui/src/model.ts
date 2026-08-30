@@ -1,6 +1,7 @@
 export type Platform = 'bilibili' | 'weibo' | 'douyin' | 'netease_music'
 export type TargetType = 'group' | 'private'
 export type ResolveState = 'idle' | 'checking' | 'resolved' | 'error'
+export type ResolverPlatform = 'bilibili' | 'weibo' | 'douyin'
 
 export const DEFAULT_DELIVERY_MAX_AGE_MINUTES = 30
 export const MIN_DELIVERY_MAX_AGE_MINUTES = 1
@@ -55,6 +56,82 @@ export interface SubscriptionSettings {
   enabled: boolean
   delivery_max_age_minutes: number
   subscriptions: Subscription[]
+  resolver: ResolverSettings
+}
+
+export interface ResolverTargetSettings {
+  target_type: TargetType
+  target_id: string
+  target_name?: string
+  bilibili: boolean
+  weibo: boolean
+  douyin: boolean
+}
+
+export interface ResolverCooldownSettings {
+  same_link_enabled: boolean
+  same_link_seconds: number
+  same_platform_enabled: boolean
+  same_platform_seconds: number
+}
+
+export interface ResolverMediaSettings {
+  live_record_seconds: number
+  video_size_limit_mb: number
+  upload_oversize: boolean
+  image_forward_threshold: number
+  image_batch_size: number
+  media_concurrency: number
+  video_codec: 'auto' | 'avc' | 'hevc' | 'av1'
+  compatibility_transcode: boolean
+  bilibili_max_duration_seconds: number
+  bilibili_resolution: number
+  bilibili_smart_resolution: boolean
+  bilibili_file_size_limit_mb: number
+  bilibili_min_resolution: number
+  bilibili_bangumi_direct: boolean
+  bilibili_bangumi_resolution: number
+  bilibili_bangumi_max_seconds: number
+  douyin_max_duration_seconds: number
+  douyin_resolution: number
+  douyin_merge_bgm: boolean
+}
+
+export interface ResolverSettings {
+  targets: ResolverTargetSettings[]
+  cooldowns: ResolverCooldownSettings
+  media: ResolverMediaSettings
+}
+
+export const DEFAULT_RESOLVER_SETTINGS: ResolverSettings = {
+  targets: [],
+  cooldowns: {
+    same_link_enabled: true,
+    same_link_seconds: 10,
+    same_platform_enabled: false,
+    same_platform_seconds: 10,
+  },
+  media: {
+    live_record_seconds: 30,
+    video_size_limit_mb: 70,
+    upload_oversize: true,
+    image_forward_threshold: 0,
+    image_batch_size: 50,
+    media_concurrency: 1,
+    video_codec: 'auto',
+    compatibility_transcode: false,
+    bilibili_max_duration_seconds: 480,
+    bilibili_resolution: 480,
+    bilibili_smart_resolution: false,
+    bilibili_file_size_limit_mb: 100,
+    bilibili_min_resolution: 360,
+    bilibili_bangumi_direct: false,
+    bilibili_bangumi_resolution: 480,
+    bilibili_bangumi_max_seconds: 1800,
+    douyin_max_duration_seconds: 480,
+    douyin_resolution: 1080,
+    douyin_merge_bgm: true,
+  },
 }
 
 export interface RowTarget {
@@ -160,6 +237,65 @@ export function normalizeSettings(value: Record<string, unknown>): SubscriptionS
     enabled: value.enabled !== false,
     delivery_max_age_minutes: normalizeDeliveryMaxAgeMinutes(value.delivery_max_age_minutes),
     subscriptions: source.map(normalizeSubscription).filter((item): item is Subscription => item !== null),
+    resolver: normalizeResolverSettings(value.resolver),
+  }
+}
+
+export function normalizeResolverSettings(value: unknown): ResolverSettings {
+  const source = isRecord(value) ? value : {}
+  const cooldowns = isRecord(source.cooldowns) ? source.cooldowns : {}
+  const media = isRecord(source.media) ? source.media : {}
+  const codecs = new Set(['auto', 'avc', 'hevc', 'av1'])
+  const targets = Array.isArray(source.targets)
+    ? source.targets.map(normalizeResolverTarget).filter((item): item is ResolverTargetSettings => item !== null)
+    : []
+  return {
+    targets: [...new Map(targets.map((target) => [targetKey(target.target_type, target.target_id), target])).values()],
+    cooldowns: {
+      same_link_enabled: cooldowns.same_link_enabled !== false,
+      same_link_seconds: boundedInteger(cooldowns.same_link_seconds, 10, 1, 3600),
+      same_platform_enabled: cooldowns.same_platform_enabled === true,
+      same_platform_seconds: boundedInteger(cooldowns.same_platform_seconds, 10, 1, 3600),
+    },
+    media: {
+      live_record_seconds: boundedInteger(media.live_record_seconds, 30, 5, 50),
+      video_size_limit_mb: boundedInteger(media.video_size_limit_mb, 70, 1, 2048),
+      upload_oversize: media.upload_oversize !== false,
+      image_forward_threshold: boundedInteger(media.image_forward_threshold, 0, 0, 100),
+      image_batch_size: boundedInteger(media.image_batch_size, 50, 1, 100),
+      media_concurrency: boundedInteger(media.media_concurrency, 1, 1, 8),
+      video_codec: codecs.has(trim(media.video_codec)) ? trim(media.video_codec) as ResolverMediaSettings['video_codec'] : 'auto',
+      compatibility_transcode: media.compatibility_transcode === true,
+      bilibili_max_duration_seconds: boundedInteger(media.bilibili_max_duration_seconds, 480, 1, 7200),
+      bilibili_resolution: normalizeResolverResolution(media.bilibili_resolution, 480),
+      bilibili_smart_resolution: media.bilibili_smart_resolution === true,
+      bilibili_file_size_limit_mb: boundedInteger(media.bilibili_file_size_limit_mb, 100, 1, 2048),
+      bilibili_min_resolution: Math.min(
+        normalizeResolverResolution(media.bilibili_min_resolution, 360),
+        normalizeResolverResolution(media.bilibili_resolution, 480),
+      ),
+      bilibili_bangumi_direct: media.bilibili_bangumi_direct === true,
+      bilibili_bangumi_resolution: normalizeResolverResolution(media.bilibili_bangumi_resolution, 480),
+      bilibili_bangumi_max_seconds: boundedInteger(media.bilibili_bangumi_max_seconds, 1800, 1, 10800),
+      douyin_max_duration_seconds: boundedInteger(media.douyin_max_duration_seconds, 480, 1, 7200),
+      douyin_resolution: Number(media.douyin_resolution) === 720 ? 720 : 1080,
+      douyin_merge_bgm: media.douyin_merge_bgm !== false,
+    },
+  }
+}
+
+function normalizeResolverTarget(value: unknown): ResolverTargetSettings | null {
+  if (!isRecord(value)) return null
+  const targetType = value.target_type === 'private' ? 'private' : value.target_type === 'group' ? 'group' : null
+  const targetID = trim(value.target_id)
+  if (!targetType || !numericPattern.test(targetID)) return null
+  return {
+    target_type: targetType,
+    target_id: targetID,
+    target_name: trim(value.target_name) || undefined,
+    bilibili: value.bilibili === true,
+    weibo: value.weibo === true,
+    douyin: value.douyin === true,
   }
 }
 
@@ -306,7 +442,7 @@ function cloneRowSnapshot(row: SubscriptionRowSnapshot): SubscriptionRowSnapshot
 }
 
 export function buildSettingsPayload(
-  settings: Pick<SubscriptionSettings, 'enabled' | 'delivery_max_age_minutes'>,
+  settings: Pick<SubscriptionSettings, 'enabled' | 'delivery_max_age_minutes' | 'resolver'>,
   rows: SubscriptionRow[],
   targetsByKey: Map<string, LiveTarget>,
   subscriberIdentities: Map<string, Subscriber> = new Map(),
@@ -338,6 +474,7 @@ export function buildSettingsPayload(
     enabled: settings.enabled !== false,
     delivery_max_age_minutes: normalizeDeliveryMaxAgeMinutes(settings.delivery_max_age_minutes),
     subscriptions,
+    resolver: normalizeResolverSettings(settings.resolver),
   }
 }
 
@@ -605,6 +742,17 @@ export function identityKey(targetType: TargetType, targetID: string, userID: st
 
 export function isNumericID(value: string): boolean {
   return numericPattern.test(value.trim())
+}
+
+function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(Math.max(Math.trunc(parsed), minimum), maximum)
+}
+
+function normalizeResolverResolution(value: unknown, fallback: number): number {
+  const parsed = Number(value)
+  return [360, 480, 720, 1080, 2160].includes(parsed) ? parsed : fallback
 }
 
 export function trim(value: unknown): string {

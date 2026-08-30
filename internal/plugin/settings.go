@@ -16,7 +16,7 @@ const maximumDeliveryMaxAgeMinutes = 24 * 60
 func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.EventContext) (Settings, error) {
 	current := Settings{Enabled: true, DeliveryMaxAgeMinutes: defaultDeliveryMaxAgeMinutes, Subscriptions: []Subscription{}}
 	_ = json.Unmarshal(assets.DefaultConfigJSON, &current)
-	result, err := handler.hostActions(event).ConfigRead(ctx, "enabled", "delivery_max_age_minutes", "subscriptions")
+	result, err := handler.hostActions(event).ConfigRead(ctx, "enabled", "delivery_max_age_minutes", "subscriptions", "resolver")
 	if err != nil {
 		_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 			Level: "warn", Message: "订阅设置读取失败；本次使用内置默认设置，已保存配置未被修改。原因：" + err.Error(), Fields: map[string]any{"error": err.Error(), "fallback": "built_in_defaults"},
@@ -35,8 +35,13 @@ func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.Event
 		encoded, _ := json.Marshal(raw)
 		_ = json.Unmarshal(encoded, &current.Subscriptions)
 	}
+	if raw, ok := values["resolver"]; ok {
+		encoded, _ := json.Marshal(raw)
+		_ = json.Unmarshal(encoded, &current.Resolver)
+	}
 	current.DeliveryMaxAgeMinutes = NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)
 	current.Subscriptions = handler.NormalizeSubscriptions(current.Subscriptions)
+	current.Resolver = NormalizeResolverSettings(current.Resolver)
 	NormalizeSubscriptionSubscribers(current.Subscriptions, event.SuperAdmins)
 	handler.ensureScheduler(ctx, event)
 	return current, nil
@@ -47,6 +52,7 @@ func (handler *Handler) saveSettings(ctx context.Context, event *rayleabot.Event
 		"enabled":                  current.Enabled,
 		"delivery_max_age_minutes": NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes),
 		"subscriptions":            current.Subscriptions,
+		"resolver":                 NormalizeResolverSettings(current.Resolver),
 	})
 	return err
 }

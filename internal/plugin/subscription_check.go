@@ -108,7 +108,7 @@ func subscriptionCheckLogMessage(checked, sent int64, failures []string) string 
 func subscriptionCheckSummary(result map[string]any) string {
 	switch StringScalar(result["skipped"]) {
 	case "disabled":
-		return "订阅中心未启用。"
+		return "订阅功能未启用。"
 	case "no_checkable_subscriptions", "no_bilibili_subscriptions":
 		return "没有可检查的订阅。"
 	}

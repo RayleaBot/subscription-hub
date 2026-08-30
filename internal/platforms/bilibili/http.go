@@ -43,6 +43,16 @@ const bilibiliDynamicURL = "https://api.bilibili.com/x/polymer/web-dynamic/v1/de
 
 const bilibiliLiveRoomURL = "https://api.live.bilibili.com/room/v1/Room/get_info"
 
+const bilibiliVideoPlayURL = "https://api.bilibili.com/x/player/playurl"
+
+const bilibiliLivePlayURL = "https://api.live.bilibili.com/room/v1/Room/playUrl"
+
+const bilibiliPGCSeasonURL = "https://api.bilibili.com/pgc/view/web/season"
+
+const bilibiliPGCPlayURL = "https://api.bilibili.com/pgc/player/web/playurl"
+
+const bilibiliArticleViewURL = "https://api.bilibili.com/x/article/viewinfo"
+
 const bilibiliDMImage = "V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ"
 
 const bilibiliDMCover = "R29vZ2xlIEluYy4gKEludGVsKUFOR0xFIChJbnRlbCwgSW50ZWwoUikgVUhEIEdyYXBoaWNzIERpcmVjdDNEMTEgdnNfNV8wIHBzXzVfMCwgRDNEMTEp"

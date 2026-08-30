@@ -116,7 +116,7 @@ func normalizeWeiboMblog(mblog map[string]any, depth int) map[string]any {
 			"name": plugin.FirstText(name, uid), "uid": uid,
 			"avatar": weiboAuthorAvatar(author),
 		},
-		"images": images, "original": original,
+		"images": images, "original": original, "_resolver_mblog": mblog,
 	}
 }
 

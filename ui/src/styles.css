@@ -81,6 +81,7 @@ h3 { font-size: .92rem; line-height: 1.4; }
 .delivery-age-control strong { white-space: nowrap; }
 
 .panel { padding: var(--space-lg); }
+.resolver-panel { margin-bottom: var(--space-lg); }
 .section-title { display: grid; gap: var(--space-xs); margin-bottom: var(--space-lg); }
 .section-title--inline { grid-template-columns: 1fr auto; align-items: start; gap: var(--space-md); }
 .toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) 150px 180px; gap: var(--space-md); margin-bottom: var(--space-lg); }

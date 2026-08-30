@@ -420,10 +420,15 @@ func TestRenderDataTruncatesRichHTMLWithoutBreakingMarkup(t *testing.T) {
 
 func TestPreviewURLParserCoversHistoricalLinkKinds(t *testing.T) {
 	tests := map[string]string{
-		"https://www.bilibili.com/video/BV1abc123": "video",
-		"https://www.bilibili.com/opus/1000000001": "opus",
-		"https://t.bilibili.com/1000000002":        "dynamic",
-		"https://live.bilibili.com/777":            "live",
+		"https://www.bilibili.com/video/BV1abc123":   "video",
+		"https://www.bilibili.com/video/av123456":    "video",
+		"https://www.bilibili.com/bangumi/play/ep99": "bangumi_ep",
+		"https://www.bilibili.com/bangumi/play/ss88": "bangumi_season",
+		"https://www.bilibili.com/read/cv77":         "article",
+		"https://www.bilibili.com/read/mobile?id=66": "article",
+		"https://www.bilibili.com/opus/1000000001":   "opus",
+		"https://t.bilibili.com/1000000002":          "dynamic",
+		"https://live.bilibili.com/777":              "live",
 	}
 	for rawURL, kind := range tests {
 		ref := parseBilibiliPreviewURL(rawURL)
