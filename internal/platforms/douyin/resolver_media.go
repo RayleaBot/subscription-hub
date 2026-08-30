@@ -31,7 +31,7 @@ func (session *session) ResolverMedia(ctx context.Context, update plugin.Update,
 	duration := douyinResolverDurationSeconds(aweme)
 	if service == "video" {
 		if duration > settings.DouyinMaxDurationSeconds {
-			return plugin.ResolverMediaPlan{}, &plugin.ResolverMediaSkippedError{Reason: fmt.Sprintf("视频时长 %d 秒，超过 %d 秒限制，不发送视频", duration, settings.DouyinMaxDurationSeconds)}
+			return plugin.ResolverMediaPlan{}, &plugin.ResolverMediaSkippedError{Reason: fmt.Sprintf("视频时长 %d 秒，超过超级管理员设置的 %d 秒限制，不发送视频", duration, settings.DouyinMaxDurationSeconds)}
 		}
 		urls := douyinResolverVideoURLs(plugin.MapValue(aweme["video"]), settings.DouyinResolution)
 		if len(urls) == 0 {

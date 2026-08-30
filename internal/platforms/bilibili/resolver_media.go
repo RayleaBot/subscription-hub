@@ -47,7 +47,7 @@ func (session *session) ResolverMedia(ctx context.Context, update plugin.Update,
 		episode := plugin.MapValue(bangumi["episode"])
 		duration := bilibiliResolverDuration(update, episode)
 		if duration > settings.BilibiliBangumiMaxSeconds {
-			return plugin.ResolverMediaPlan{}, &plugin.ResolverMediaSkippedError{Reason: fmt.Sprintf("番剧时长 %d 秒，超过 %d 秒限制，不发送视频", duration, settings.BilibiliBangumiMaxSeconds)}
+			return plugin.ResolverMediaPlan{}, &plugin.ResolverMediaSkippedError{Reason: fmt.Sprintf("番剧时长 %d 秒，超过超级管理员设置的 %d 秒限制，不发送视频", duration, settings.BilibiliBangumiMaxSeconds)}
 		}
 		query := bilibiliResolverPlayQuery(episode, settings.BilibiliBangumiResolution)
 		if epID := plugin.FirstText(episode["id"], episode["ep_id"]); epID != "" {
@@ -69,7 +69,7 @@ func (session *session) ResolverMedia(ctx context.Context, update plugin.Update,
 	}
 	duration := bilibiliResolverDuration(update, video)
 	if duration > settings.BilibiliMaxDurationSeconds {
-		return plugin.ResolverMediaPlan{}, &plugin.ResolverMediaSkippedError{Reason: fmt.Sprintf("视频时长 %d 秒，超过 %d 秒限制，不发送视频", duration, settings.BilibiliMaxDurationSeconds)}
+		return plugin.ResolverMediaPlan{}, &plugin.ResolverMediaSkippedError{Reason: fmt.Sprintf("视频时长 %d 秒，超过超级管理员设置的 %d 秒限制，不发送视频", duration, settings.BilibiliMaxDurationSeconds)}
 	}
 	query := bilibiliResolverPlayQuery(video, settings.BilibiliResolution)
 	document, err := newBilibiliClient(session.actions).requestJSON(ctx, "GET", bilibiliVideoPlayURL+"?"+query.Encode(), account, false, false, "", false)

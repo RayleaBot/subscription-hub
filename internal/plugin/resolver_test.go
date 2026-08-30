@@ -7,8 +7,8 @@ import (
 
 func TestResolverMediaPlanMessageDistinguishesLimitsFromFailures(t *testing.T) {
 	t.Run("duration limit", func(t *testing.T) {
-		message := resolverMediaPlanMessage(&ResolverMediaSkippedError{Reason: "视频时长 768 秒，超过 480 秒限制，不发送视频"})
-		if message != "视频时长 768 秒，超过 480 秒限制，不发送视频" {
+		message := resolverMediaPlanMessage(&ResolverMediaSkippedError{Reason: "视频时长 768 秒，超过超级管理员设置的 480 秒限制，不发送视频"})
+		if message != "视频时长 768 秒，超过超级管理员设置的 480 秒限制，不发送视频" {
 			t.Fatalf("unexpected limit message: %q", message)
 		}
 	})
