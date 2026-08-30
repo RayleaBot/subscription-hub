@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"path"
@@ -23,6 +24,14 @@ type ResolverMediaSource struct {
 
 type ResolverMediaPlan struct {
 	Sources []ResolverMediaSource
+}
+
+type ResolverMediaSkippedError struct {
+	Reason string
+}
+
+func (err *ResolverMediaSkippedError) Error() string {
+	return err.Reason
 }
 
 type ResolverMediaPlanningSession interface {
@@ -98,7 +107,7 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 	if planner, ok := session.(ResolverMediaPlanningSession); ok {
 		planned, planErr := planner.ResolverMedia(resolverCtx, update, current.Resolver.Media)
 		if planErr != nil {
-			handler.sendResolverFailure(resolverCtx, event, "媒体解析失败："+planErr.Error())
+			handler.sendResolverFailure(resolverCtx, event, resolverMediaPlanMessage(planErr))
 			return event.Result(map[string]any{"handled": true, "card": true, "media": false})
 		}
 		if len(planned.Sources) > 0 {
@@ -118,6 +127,14 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		}
 	}
 	return event.Result(map[string]any{"handled": true, "card": true, "media": len(plan.Sources) > 0})
+}
+
+func resolverMediaPlanMessage(err error) string {
+	var skipped *ResolverMediaSkippedError
+	if errors.As(err, &skipped) {
+		return skipped.Error()
+	}
+	return "媒体解析失败：" + err.Error()
 }
 
 func firstResolverURL(text string) string {
