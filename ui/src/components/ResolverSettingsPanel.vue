@@ -8,7 +8,6 @@ import {
   type LiveTarget,
   type ResolverPlatform,
   type ResolverSettings,
-  type ResolverTargetSettings,
   type TargetsState,
 } from '../model'
 
@@ -25,7 +24,9 @@ const emit = defineEmits<{
 }>()
 
 const page = computed(() => props.view)
-const search = ref('')
+const manageSearch = ref('')
+const pickerSearch = ref('')
+const pickerOpen = ref(false)
 const draft = ref<ResolverSettings>(normalizeResolverSettings(props.modelValue))
 
 watch(
@@ -44,65 +45,85 @@ watch(
   { deep: true },
 )
 
-const configured = computed(() => new Map(draft.value.targets.map((target) => [targetKey(target.target_type, target.target_id), target])))
-const targetOptions = computed(() => {
-  const result = new Map<string, LiveTarget>()
-  for (const target of allTargets(props.targets)) result.set(target.key, target)
-  for (const target of draft.value.targets) {
-    const key = targetKey(target.target_type, target.target_id)
-    if (!result.has(key)) {
-      result.set(key, {
-        key,
-        target_type: target.target_type,
-        target_id: target.target_id,
-        label: target.target_name || target.target_id,
-        avatar_url: '',
-      })
-    }
-  }
-  return [...result.values()]
+watch(page, () => {
+  manageSearch.value = ''
+  pickerSearch.value = ''
+  pickerOpen.value = false
 })
-const filteredTargets = computed(() => {
+
+const configured = computed(() => new Map(draft.value.targets.map((target) => [targetKey(target.target_type, target.target_id), target])))
+const liveTargets = computed(() => new Map(allTargets(props.targets).map((target) => [target.key, target])))
+const configuredTargets = computed(() => {
   if (page.value === 'strategy') return []
-  const query = search.value.trim().toLowerCase()
-  return targetOptions.value.filter((target) => {
-    if (target.target_type !== page.value) return false
-    return !query || `${target.label} ${target.target_id}`.toLowerCase().includes(query)
+  return draft.value.targets.filter((target) => target.target_type === page.value).map((target) => {
+    const key = targetKey(target.target_type, target.target_id)
+    const live = liveTargets.value.get(key)
+    return {
+      key,
+      target_type: target.target_type,
+      target_id: target.target_id,
+      label: live?.label || target.target_name || target.target_id,
+      avatar_url: live?.avatar_url || '',
+    }
   })
 })
-const visibleTargets = computed(() => filteredTargets.value.slice(0, 100))
+const filteredConfiguredTargets = computed(() => {
+  if (page.value === 'strategy') return []
+  const query = manageSearch.value.trim().toLowerCase()
+  return configuredTargets.value.filter((target) => !query || targetMatches(target, query))
+})
+const candidateTargets = computed(() => {
+  if (page.value === 'strategy') return []
+  const query = pickerSearch.value.trim().toLowerCase()
+  return allTargets(props.targets).filter((target) => (
+    target.target_type === page.value
+    && !configured.value.has(target.key)
+    && (!query || targetMatches(target, query))
+  ))
+})
+const visibleConfiguredTargets = computed(() => filteredConfiguredTargets.value.slice(0, 100))
+const visibleCandidateTargets = computed(() => candidateTargets.value.slice(0, 100))
+const targetTypeLabel = computed(() => page.value === 'group' ? '群聊' : '用户')
 const pageCopy = computed(() => {
-  if (page.value === 'group') return { title: '群聊解析', description: '按群聊独立开启 B站、微博或抖音解析。解析默认关闭。' }
-  if (page.value === 'private') return { title: '用户解析', description: '按私聊用户独立开启 B站、微博或抖音解析。解析默认关闭。' }
+  if (page.value === 'group') return { title: '群聊解析', description: '从连接协议添加需要管理的群聊，再分别开启 B站、微博或抖音解析。' }
+  if (page.value === 'private') return { title: '用户解析', description: '从连接协议添加需要管理的私聊用户，再分别开启 B站、微博或抖音解析。' }
   return { title: '防抖与媒体策略', description: '管理解析冷却、直播录制、视频发送和平台清晰度策略。' }
 })
 
-function targetEnabled(target: ResolverTargetSettings): boolean {
-  return target.bilibili || target.weibo || target.douyin
+function targetMatches(target: LiveTarget, query: string): boolean {
+  return `${target.label} ${target.target_id}`.toLowerCase().includes(query)
 }
 
 function platformEnabled(target: LiveTarget, platform: ResolverPlatform): boolean {
   return configured.value.get(target.key)?.[platform] === true
 }
 
-function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: boolean) {
+function addTarget(target: LiveTarget) {
+  if (configured.value.has(target.key)) return
+  draft.value.targets.push({
+    target_type: target.target_type,
+    target_id: target.target_id,
+    target_name: target.label,
+    bilibili: false,
+    weibo: false,
+    douyin: false,
+  })
+}
+
+function removeTarget(target: LiveTarget) {
   const index = draft.value.targets.findIndex((item) => targetKey(item.target_type, item.target_id) === target.key)
+  if (index >= 0) draft.value.targets.splice(index, 1)
+}
+
+function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: boolean) {
+  let index = draft.value.targets.findIndex((item) => targetKey(item.target_type, item.target_id) === target.key)
   if (index < 0) {
-    draft.value.targets.push({
-      target_type: target.target_type,
-      target_id: target.target_id,
-      target_name: target.label,
-      bilibili: false,
-      weibo: false,
-      douyin: false,
-      [platform]: enabled,
-    })
-    return
+    addTarget(target)
+    index = draft.value.targets.length - 1
   }
   const current = draft.value.targets[index]!
   current.target_name = target.label
   current[platform] = enabled
-  if (!targetEnabled(current)) draft.value.targets.splice(index, 1)
 }
 </script>
 
@@ -117,16 +138,49 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
     </div>
 
     <div v-if="page !== 'strategy'" class="target-page">
-      <label class="target-search">
-        <span>筛选{{ page === 'group' ? '群聊' : '用户' }}</span>
-        <input v-model="search" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
-      </label>
+      <div class="target-toolbar">
+        <label v-if="configuredTargets.length" class="target-search">
+          <span>筛选已添加{{ targetTypeLabel }}</span>
+          <input v-model="manageSearch" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
+        </label>
+        <button type="button" class="target-button target-button--primary" :aria-expanded="pickerOpen" @click="pickerOpen = !pickerOpen">
+          {{ pickerOpen ? '收起添加列表' : `添加${targetTypeLabel}` }}
+        </button>
+      </div>
+
+      <section v-if="pickerOpen" class="target-picker" aria-labelledby="target-picker-title">
+        <div class="target-picker-heading">
+          <div>
+            <h3 id="target-picker-title">从连接协议添加{{ targetTypeLabel }}</h3>
+            <p>这里只列出尚未添加的对象；添加后才会出现在解析开关列表中。</p>
+          </div>
+        </div>
+        <label class="picker-search">
+          <span>搜索可添加{{ targetTypeLabel }}</span>
+          <input v-model="pickerSearch" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
+        </label>
+        <div class="candidate-list">
+          <div v-for="target in visibleCandidateTargets" :key="target.key" class="candidate-row">
+            <div class="target-identity">
+              <strong :title="target.label">{{ target.label }}</strong>
+              <span>{{ target.target_id }}</span>
+            </div>
+            <button type="button" class="target-button" @click="addTarget(target)">添加</button>
+          </div>
+          <div v-if="visibleCandidateTargets.length === 0" class="picker-empty">
+            <strong>{{ !targets.loaded ? `正在读取连接协议中的${targetTypeLabel}…` : pickerSearch ? '没有匹配项' : `暂无可添加${targetTypeLabel}` }}</strong>
+            <span v-if="targets.loaded && !pickerSearch">{{ targets.available ? `连接协议中的${targetTypeLabel}已全部添加。` : '请确认连接协议在线，并刷新可选范围。' }}</span>
+          </div>
+        </div>
+        <p v-if="targets.issues.length" class="picker-issue">{{ targets.issues.map((issue) => issue.message).join('；') }}</p>
+        <p v-if="candidateTargets.length > visibleCandidateTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
+      </section>
 
       <div class="target-table" role="table" :aria-label="`${page === 'group' ? '群聊' : '用户'}解析开关`">
         <div class="target-table-head" role="row">
-          <span role="columnheader">对象</span><span role="columnheader">B站</span><span role="columnheader">微博</span><span role="columnheader">抖音</span>
+          <span role="columnheader">对象</span><span role="columnheader">B站</span><span role="columnheader">微博</span><span role="columnheader">抖音</span><span role="columnheader">操作</span>
         </div>
-        <div v-for="target in visibleTargets" :key="target.key" class="target-row" role="row">
+        <div v-for="target in visibleConfiguredTargets" :key="target.key" class="target-row" role="row">
           <div class="target-identity" role="cell">
             <strong :title="target.label">{{ target.label }}</strong>
             <span>{{ target.target_id }}</span>
@@ -140,13 +194,14 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
             />
             <span aria-hidden="true"></span>
           </label>
+          <div class="target-action" role="cell"><button type="button" @click="removeTarget(target)">移除</button></div>
         </div>
-        <div v-if="visibleTargets.length === 0" class="resolver-empty">
-          <strong>暂无可管理对象</strong>
-          <span>{{ search ? '没有匹配项，请调整筛选条件。' : '刷新可选范围后，可在此逐项开启解析。' }}</span>
+        <div v-if="visibleConfiguredTargets.length === 0" class="resolver-empty">
+          <strong>{{ manageSearch ? '没有匹配项' : `尚未添加${targetTypeLabel}` }}</strong>
+          <span>{{ manageSearch ? '请调整筛选条件。' : `点击“添加${targetTypeLabel}”从连接协议选择；在聊天中开启解析后也会自动加入。` }}</span>
         </div>
       </div>
-      <p v-if="filteredTargets.length > visibleTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
+      <p v-if="filteredConfiguredTargets.length > visibleConfiguredTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
     </div>
 
     <div v-else class="strategy-page">
@@ -248,18 +303,28 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 .target-page,
 .strategy-page { padding: 22px 26px 26px; }
 
-.target-search {
-  display: grid;
-  grid-template-columns: minmax(110px, 0.28fr) minmax(240px, 1fr);
-  align-items: center;
+.target-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
   gap: 16px;
-  max-width: 620px;
   margin-bottom: 18px;
+}
+
+.target-search,
+.picker-search {
+  display: grid;
+  gap: 7px;
   color: var(--text);
+  font-size: 14px;
   font-weight: 700;
 }
 
+.target-search { width: min(620px, 100%); }
+.picker-search { margin-top: 18px; }
+
 .target-search input,
+.picker-search input,
 .number-field input,
 .select-field select {
   min-width: 0;
@@ -271,11 +336,44 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   font: inherit;
 }
 
-.target-search input { padding: 0 13px; font-size: 16px; }
+.target-search input,
+.picker-search input { padding: 0 13px; font-size: 16px; }
+
+.target-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.target-button:hover { border-color: var(--accent); color: var(--accent-strong); }
+.target-button--primary { flex: 0 0 auto; min-height: 42px; color: #fff; border-color: var(--accent); background: var(--accent); }
+.target-button--primary:hover { color: #fff; border-color: var(--accent-strong); background: var(--accent-strong); }
+
+.target-picker {
+  margin-bottom: 22px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+.target-picker-heading h3 { margin: 0; color: var(--text); font-size: 17px; }
+.target-picker-heading p { max-width: 70ch; margin: 6px 0 0; color: var(--muted); line-height: 1.55; }
+.candidate-list { display: grid; gap: 0; overflow: hidden; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.candidate-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 62px; padding: 10px 14px; }
+.candidate-row + .candidate-row { border-top: 1px solid var(--border); }
+.candidate-row .target-identity { flex: 1 1 auto; padding-inline: 0; }
+.picker-empty { display: grid; gap: 5px; place-items: center; min-height: 126px; padding: 22px; color: var(--muted); text-align: center; }
+.picker-empty strong { color: var(--text); }
+.picker-issue { margin: 12px 0 0; color: var(--danger); font-size: 13px; line-height: 1.55; }
 
 .target-table { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
 .target-table-head,
-.target-row { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(70px, 94px)); align-items: center; }
+.target-row { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(70px, 94px)) 72px; align-items: center; }
 .target-table-head { min-height: 42px; color: var(--muted); background: var(--surface-soft); font-size: 13px; font-weight: 800; }
 .target-table-head span { text-align: center; }
 .target-table-head span:first-child { padding-inline: 18px; text-align: start; }
@@ -311,9 +409,13 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 }
 .compact-switch input:checked + span { background: var(--accent); }
 .compact-switch input:checked + span::after { transform: translateX(16px); }
+.target-action { display: grid; place-items: center; }
+.target-action button { min-height: 34px; padding: 0 9px; border: 0; border-radius: 8px; color: var(--danger); background: transparent; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.target-action button:hover { background: color-mix(in srgb, var(--danger) 9%, transparent); }
 .compact-switch input:focus-visible + span,
 .preview-help:focus-visible,
-.resolver-tabs button:focus-visible,
+.target-button:focus-visible,
+.target-action button:focus-visible,
 input:focus-visible,
 select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, transparent); outline-offset: 2px; }
 
@@ -357,7 +459,7 @@ select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, 
   .resolver-heading { align-items: stretch; flex-direction: column; }
   .preview-help { width: 100%; }
   .target-table-head,
-  .target-row { grid-template-columns: minmax(150px, 1fr) repeat(3, 62px); }
+  .target-row { grid-template-columns: minmax(150px, 1fr) repeat(3, 62px) 60px; }
   .setting-grid--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -365,11 +467,14 @@ select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, 
   .resolver-heading,
   .target-page,
   .strategy-page { padding-inline: 18px; }
-  .target-search,
   .setting-grid--two,
   .setting-grid--three { grid-template-columns: 1fr; }
+  .target-toolbar { align-items: stretch; flex-direction: column; }
+  .target-button--primary { width: 100%; }
+  .target-picker { padding: 16px; }
   .target-table-head,
-  .target-row { grid-template-columns: minmax(120px, 1fr) repeat(3, 52px); }
+  .target-row { grid-template-columns: minmax(110px, 1fr) repeat(3, 50px) 52px; }
   .target-identity { padding-inline: 12px; }
+  .target-action button { padding-inline: 6px; }
 }
 </style>

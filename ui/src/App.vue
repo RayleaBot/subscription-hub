@@ -570,12 +570,22 @@ function resetCurrentPage() {
     return
   }
   if (activePage.value === 'resolver-groups') {
-    settings.value.resolver.targets = settings.value.resolver.targets.filter((target) => target.target_type !== 'group')
+    for (const target of settings.value.resolver.targets) {
+      if (target.target_type !== 'group') continue
+      target.bilibili = false
+      target.weibo = false
+      target.douyin = false
+    }
     setStatus('已关闭全部群聊解析，保存后生效')
     return
   }
   if (activePage.value === 'resolver-users') {
-    settings.value.resolver.targets = settings.value.resolver.targets.filter((target) => target.target_type !== 'private')
+    for (const target of settings.value.resolver.targets) {
+      if (target.target_type !== 'private') continue
+      target.bilibili = false
+      target.weibo = false
+      target.douyin = false
+    }
     setStatus('已关闭全部用户解析，保存后生效')
     return
   }
@@ -718,7 +728,7 @@ function errorMessage(error: unknown, fallback: string): string {
     <ResolverSettingsPanel
       v-if="!isSubscriptionsPage"
       v-model="settings.resolver"
-      :targets="context.targets"
+      :targets="targets"
       :view="resolverView"
       @open-help="openPreview('resolver-help')"
     />
