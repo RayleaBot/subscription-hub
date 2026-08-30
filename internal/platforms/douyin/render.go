@@ -25,12 +25,38 @@ func buildDouyinRenderData(item plugin.Subscription, update map[string]any) map[
 		// sec_uid 并加 "UID " 前缀。
 		"author": author, "author_uid_text": plugin.FirstText(author["unique_id"], item.UniqueID),
 		"summary": summary, "images": images, "image_count": len(mediaItems),
+		"metrics":          buildDouyinMetrics(update),
 		"media_grid_class": plugin.MediaGridClass(len(mediaItems)), "media_items": mediaItems,
 		"duration_text": plugin.StringScalar(update["duration_text"]), "url": plugin.StringScalar(update["url"]),
 		"pub_ts": plugin.IntScalar(update["pub_ts"]), "created_at": plugin.StringScalar(update["created_at"]),
 		"subscription": map[string]any{"uid": item.UID, "name": plugin.FirstText(item.Name, item.UID)},
 		"subscribers":  item.Subscribers, "subscriber_cards": subscriberCards, "subscriber_text": plugin.SubscriberNames(subscriberCards),
 	}
+}
+
+func buildDouyinMetrics(update map[string]any) []map[string]any {
+	stats := plugin.MapValue(update["stats"])
+	if stats == nil {
+		return nil
+	}
+	metrics := make([]map[string]any, 0, 6)
+	specs := []struct {
+		key, label string
+		value      any
+	}{
+		{key: "play", label: "播放", value: stats["play"]},
+		{key: "like", label: "点赞", value: stats["like"]},
+		{key: "favorite", label: "收藏", value: stats["favorite"]},
+		{key: "comment", label: "评论", value: stats["comment"]},
+		{key: "share", label: "分享", value: stats["share"]},
+		{key: "viewers", label: "观看", value: stats["viewers"]},
+	}
+	for _, spec := range specs {
+		if metric := plugin.BuildContentMetric(spec.key, spec.label, spec.value); metric != nil {
+			metrics = append(metrics, metric)
+		}
+	}
+	return metrics
 }
 
 func buildDouyinFallback(data map[string]any) string {

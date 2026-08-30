@@ -1,0 +1,118 @@
+{
+  "content_text": "这组照片的配色太舒服了，转发收藏……下次路过也想去看看。",
+  "subtitle": "微博 · 转发",
+  "source_label": "转发微博",
+  "platform": "微博",
+  "service": "转发",
+  "category": "转发微博",
+  "author": {
+    "name": "RayleaBot 示例博主",
+    "avatar": "assets/weibo-default-avatar.svg",
+    "uid": "6000000001"
+  },
+  "author_uid_text": "UID 6000000001",
+  "summary": "这组照片的配色太舒服了，转发收藏……下次路过也想去看看。",
+  "images": [
+    {
+      "url": "assets/cover.svg",
+      "width": 1280,
+      "height": 720
+    }
+  ],
+  "image_count": 1,
+  "media_grid_class": "media-grid--single",
+  "media_items": [
+    {
+      "url": "assets/cover.svg",
+      "class": "media-item media-item--wide media-item--video",
+      "label": "",
+      "duration_text": "01:20",
+      "width": 1280,
+      "height": 720
+    }
+  ],
+  "metrics": [
+    { "key": "repost", "label": "转发", "value": 12000, "value_text": "1.2万", "icon_class": "metric-icon--repost" },
+    { "key": "comment", "label": "评论", "value": 8600, "value_text": "8600", "icon_class": "metric-icon--comment" },
+    { "key": "like", "label": "点赞", "value": 96000, "value_text": "9.6万", "icon_class": "metric-icon--like" }
+  ],
+  "duration_text": "01:20",
+  "url": "https://m.weibo.cn/status/5000000000000001",
+  "pub_ts": 1778342400,
+  "created_at": "2026年05月09日 20:00",
+  "original": {
+    "service": "图片",
+    "category": "图片微博",
+    "author": {
+      "name": "原微博作者",
+      "avatar": "assets/weibo-default-avatar.svg",
+      "uid": "6000000002"
+    },
+    "author_uid_text": "UID 6000000002",
+    "summary": "周末的街角花店换了新橱窗，路过时拍下了这组照片。橙色郁金香和木质陈列架很适合初秋。",
+    "images": [
+      {
+        "url": "assets/grid.svg",
+        "width": 900,
+        "height": 900
+      }
+    ],
+    "image_count": 1,
+    "media_grid_class": "media-grid--single",
+    "media_items": [
+      {
+        "url": "assets/grid.svg",
+        "class": "media-item",
+        "label": "",
+        "width": 900,
+        "height": 900
+      }
+    ],
+    "url": "https://m.weibo.cn/status/5000000000000000",
+    "created_at": "2026年05月09日 19:55"
+  },
+  "subscription": {
+    "uid": "6000000001",
+    "name": "RayleaBot 示例博主"
+  },
+  "subscribers": [
+    {
+      "id": "10001",
+      "nickname": "普通昵称",
+      "group_nickname": "群昵称",
+      "title": "专属头衔",
+      "role": "admin",
+      "role_label": "管理员",
+      "avatar_url": "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100"
+    },
+    {
+      "id": "10002",
+      "nickname": "旧订阅人"
+    }
+  ],
+  "subscriber_cards": [
+    {
+      "id": "10001",
+      "nickname": "普通昵称",
+      "group_nickname": "群昵称",
+      "display_name": "群昵称",
+      "title": "专属头衔",
+      "role": "admin",
+      "role_label": "管理员",
+      "avatar_url": "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100",
+      "uid_text": "10001"
+    },
+    {
+      "id": "10002",
+      "nickname": "旧订阅人",
+      "group_nickname": "",
+      "display_name": "旧订阅人",
+      "title": "",
+      "role": "",
+      "role_label": "",
+      "avatar_url": "https://q1.qlogo.cn/g?b=qq&nk=10002&s=100",
+      "uid_text": "10002"
+    }
+  ],
+  "subscriber_text": "群昵称、旧订阅人"
+}

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["platform", "service", "subscription"],
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "headline": {
+      "type": "string"
+    },
+    "content_text": {
+      "type": "string"
+    },
+    "subtitle": {
+      "type": "string"
+    },
+    "source_label": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "service": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "author": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "author_uid_text": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "image_count": {
+      "type": "integer"
+    },
+    "media_grid_class": {
+      "type": "string"
+    },
+    "media_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "label", "value", "value_text", "icon_class"],
+        "properties": {
+          "key": { "type": "string", "enum": ["repost", "comment", "like"] },
+          "label": { "type": "string", "minLength": 1 },
+          "value": { "type": "integer", "minimum": 0 },
+          "value_text": { "type": "string", "minLength": 1 },
+          "icon_class": { "type": "string", "pattern": "^metric-icon--[a-z]+$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "duration_text": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "pub_ts": {
+      "type": "integer"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "original": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "subscription": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "subscribers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "subscriber_cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "subscriber_text": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

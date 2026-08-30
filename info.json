@@ -40,6 +40,9 @@
       "path": "templates/bilibili-update"
     },
     {
+      "path": "templates/bilibili-resolver"
+    },
+    {
       "path": "templates/bilibili-user-card"
     },
     {
@@ -55,6 +58,9 @@
       "path": "templates/weibo-update"
     },
     {
+      "path": "templates/weibo-resolver"
+    },
+    {
       "path": "templates/douyin-search-results"
     },
     {
@@ -62,6 +68,9 @@
     },
     {
       "path": "templates/douyin-update"
+    },
+    {
+      "path": "templates/douyin-resolver"
     },
     {
       "path": "templates/resolver-help"

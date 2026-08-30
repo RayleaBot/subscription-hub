@@ -23,6 +23,7 @@ func buildWeiboRenderData(item plugin.Subscription, update map[string]any) map[s
 		"platform": "微博", "service": service, "category": category,
 		"author": author, "author_uid_text": plugin.UIDText(plugin.FirstText(author["uid"], item.UID)),
 		"summary": summary, "images": images, "image_count": len(mediaItems),
+		"metrics":          buildWeiboMetrics(update),
 		"media_grid_class": plugin.MediaGridClass(len(mediaItems)), "media_items": mediaItems,
 		"duration_text": plugin.StringScalar(update["duration_text"]), "url": plugin.StringScalar(update["url"]),
 		"pub_ts": plugin.IntScalar(update["pub_ts"]), "created_at": plugin.StringScalar(update["created_at"]),
@@ -30,6 +31,27 @@ func buildWeiboRenderData(item plugin.Subscription, update map[string]any) map[s
 		"subscription": map[string]any{"uid": item.UID, "name": plugin.FirstText(item.Name, item.UID)},
 		"subscribers":  item.Subscribers, "subscriber_cards": subscriberCards, "subscriber_text": plugin.SubscriberNames(subscriberCards),
 	}
+}
+
+func buildWeiboMetrics(update map[string]any) []map[string]any {
+	stats := plugin.MapValue(update["stats"])
+	if stats == nil {
+		return nil
+	}
+	metrics := make([]map[string]any, 0, 3)
+	for _, spec := range []struct {
+		key, label string
+		value      any
+	}{
+		{key: "repost", label: "转发", value: stats["repost"]},
+		{key: "comment", label: "评论", value: stats["comment"]},
+		{key: "like", label: "点赞", value: stats["like"]},
+	} {
+		if metric := plugin.BuildContentMetric(spec.key, spec.label, spec.value); metric != nil {
+			metrics = append(metrics, metric)
+		}
+	}
+	return metrics
 }
 
 func buildWeiboFallback(data map[string]any) string {

@@ -88,6 +88,7 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		Services: []string{"all"}, Subscribers: []Subscriber{}, Enabled: true,
 	}
 	card := session.UpdateCard(item, update)
+	card.Template = resolverTemplateID(platform)
 	imagePath, renderErr := handler.renderReplyCard(resolverCtx, handler.hostActions(event), card, map[string]any{"platform": platform, "stage": "resolve"})
 	if renderErr != nil {
 		if _, sendErr := handler.hostActions(event).MessageSend(resolverCtx, rayleabot.MessageSendRequest{
@@ -127,6 +128,15 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		}
 	}
 	return event.Result(map[string]any{"handled": true, "card": true, "media": len(plan.Sources) > 0})
+}
+
+func resolverTemplateID(platform string) string {
+	switch platform {
+	case "bilibili", "weibo", "douyin":
+		return platform + "-resolver"
+	default:
+		return platform + "-update"
+	}
 }
 
 func resolverMediaPlanMessage(err error) string {

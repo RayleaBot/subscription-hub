@@ -42,6 +42,25 @@ func BuildSubscriberCards(items []Subscriber) []map[string]any {
 	return result
 }
 
+func BuildContentMetric(key, label string, value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	rawText := strings.TrimSpace(StringScalar(value))
+	if rawText == "" {
+		return nil
+	}
+	count := IntScalar(value)
+	if count < 0 {
+		return nil
+	}
+	valueText := FormatCount(int(count))
+	if count == 0 && rawText != "0" {
+		valueText = rawText
+	}
+	return map[string]any{"key": key, "label": label, "value": count, "value_text": valueText, "icon_class": "metric-icon--" + key}
+}
+
 func SubscriberNames(cards []map[string]any) string {
 	names := make([]string, 0, len(cards))
 	for _, card := range cards {

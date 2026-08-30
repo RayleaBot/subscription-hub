@@ -121,7 +121,8 @@ func sampleDouyinUpdate(service string, now time.Time) map[string]any {
 		"category": douyinServiceCategory(service),
 		"author":   map[string]any{"name": "RayleaBot 示例用户", "uid": "MS4wLjABAAAApreview"},
 		"pub_ts":   now.Unix(), "created_at": now.Format("2006-01-02 15:04"),
-		"url": "https://www.douyin.com/video/7000000000000000000",
+		"url":   "https://www.douyin.com/video/7000000000000000000",
+		"stats": map[string]any{"play": 1286000, "like": 96000, "favorite": 68000, "comment": 8600, "share": 12000},
 	}
 	switch service {
 	case "image_text":
@@ -135,6 +136,7 @@ func sampleDouyinUpdate(service string, now time.Time) map[string]any {
 		base["title"], base["summary"] = "示例直播间", "直播封面会显示在卡片图片区域。"
 		base["url"] = "https://live.douyin.com/123456"
 		base["images"] = []map[string]any{{"url": "assets/cover.svg"}}
+		base["stats"] = map[string]any{"viewers": 12680}
 	default:
 		base["title"], base["summary"], base["duration_text"] = "示例视频", "视频简介会显示在卡片正文区域，封面图显示在图片区域。", "1:20"
 		base["images"] = []map[string]any{{"url": "assets/cover.svg", "width": 1280, "height": 720}}

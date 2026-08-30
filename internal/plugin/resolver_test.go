@@ -20,3 +20,15 @@ func TestResolverMediaPlanMessageDistinguishesLimitsFromFailures(t *testing.T) {
 		}
 	})
 }
+
+func TestResolverTemplateIDUsesResolverSpecificCards(t *testing.T) {
+	for platform, want := range map[string]string{
+		"bilibili": "bilibili-resolver",
+		"weibo":    "weibo-resolver",
+		"douyin":   "douyin-resolver",
+	} {
+		if got := resolverTemplateID(platform); got != want {
+			t.Fatalf("resolverTemplateID(%q) = %q, want %q", platform, got, want)
+		}
+	}
+}

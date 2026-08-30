@@ -189,7 +189,8 @@ func sampleWeiboUpdate(service string, now time.Time) map[string]any {
 		"category": weiboServiceCategory(service),
 		"author":   map[string]any{"name": "RayleaBot 示例博主", "uid": "6000000001"},
 		"pub_ts":   now.Unix(), "created_at": now.Format("2006-01-02 15:04"),
-		"url": "https://m.weibo.cn/status/5000000000000001",
+		"url":   "https://m.weibo.cn/status/5000000000000001",
+		"stats": map[string]any{"repost": 12000, "comment": 8600, "like": 96000},
 	}
 	switch service {
 	case "image":

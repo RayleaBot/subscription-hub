@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>{{ .Stylesheet }}</style>
+  </head>
+  <body class="theme-{{ .Theme }}">
+    <main class="dynamic-shell">
+      {{ $authorName := "抖音作品" }}
+      {{ $authorAvatar := "" }}
+      {{ $authorUID := .author_uid_text }}
+      {{ with .author }}
+        {{ with .name }}{{ $authorName = printf "%v" . }}{{ end }}
+        {{ with .avatar }}{{ $authorAvatar = printf "%v" . }}{{ end }}
+        {{ if not $authorUID }}{{ with .uid }}{{ $authorUID = printf "UID %v" . }}{{ end }}{{ end }}
+      {{ end }}
+
+      <article class="dynamic-card">
+        <header class="dynamic-header">
+          <div class="author">
+            <div class="avatar-wrap">
+              <img class="avatar" src="assets/douyin-default-avatar.svg"{{ if $authorAvatar }} data-avatar="{{ $authorAvatar }}" data-fallback="assets/douyin-default-avatar.svg"{{ end }} alt="" />
+            </div>
+            <div class="author-text">
+              <strong>{{ $authorName }}{{ if $authorUID }}<em>（{{ $authorUID }}）</em>{{ end }}</strong>
+              <span>{{ if .created_at }}{{ .created_at }}{{ else }}抖音订阅更新{{ end }}</span>
+            </div>
+          </div>
+          <div class="header-tags">
+            <span class="brand">抖音</span>
+            <span class="service-tag">{{ .service }}</span>
+          </div>
+        </header>
+
+        <section class="post-body">
+          <div class="source-line">
+            <span>{{ if .source_label }}{{ .source_label }}{{ else }}{{ .platform }} · {{ .category }}{{ end }}</span>
+          </div>
+          {{ if or .headline .title }}
+          <h1>{{ if .headline }}{{ .headline }}{{ else }}{{ .title }}{{ end }}</h1>
+          {{ end }}
+
+          {{ if .content_html }}
+          <div class="dynamic-text">{{ safeHTML .content_html }}</div>
+          {{ else if .content_text }}
+          <div class="dynamic-text">{{ .content_text }}</div>
+          {{ else if .summary }}
+          <div class="dynamic-text">{{ .summary }}</div>
+          {{ end }}
+        </section>
+
+        {{ if .media_items }}
+        <section class="media-grid {{ .media_grid_class }}" aria-label="抖音图片">
+          {{ range .media_items }}
+          <figure class="{{ .class }}">
+            <img src="{{ if and .resource_id .url }}{{ .url }}{{ else }}assets/grid.svg{{ end }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ else if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
+            {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
+            {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}
+          </figure>
+          {{ end }}
+        </section>
+        {{ end }}
+
+        {{ if .metrics }}
+        <section class="metric-panel" aria-label="内容数据">
+          {{ range .metrics }}
+          <div class="metric-item">
+            <span class="metric-icon {{ .icon_class }}" aria-hidden="true"></span>
+            <span class="metric-copy"><small>{{ .label }}</small><strong>{{ .value_text }}</strong></span>
+          </div>
+          {{ end }}
+        </section>
+        {{ end }}
+
+        {{ with .original }}
+        {{ $originalAuthor := "原作品" }}
+        {{ $originalAvatar := "" }}
+        {{ with .author }}
+          {{ with .name }}{{ $originalAuthor = printf "%v" . }}{{ end }}
+          {{ with .avatar }}{{ $originalAvatar = printf "%v" . }}{{ end }}
+        {{ end }}
+        <section class="repost-card" aria-label="转发内容">
+          <header class="repost-header">
+            <div class="repost-author">
+              <img class="repost-avatar" src="assets/douyin-default-avatar.svg"{{ if $originalAvatar }} data-avatar="{{ $originalAvatar }}"{{ end }} data-fallback="assets/douyin-default-avatar.svg" alt="" />
+              <div>
+                <strong>{{ $originalAuthor }}</strong>
+                <span>{{ .category }}{{ if .created_at }} · {{ .created_at }}{{ end }}</span>
+              </div>
+            </div>
+            <span class="repost-label">{{ .service }}</span>
+          </header>
+          {{ if .title }}<h2>{{ .title }}</h2>{{ end }}
+          {{ if .summary }}<p>{{ .summary }}</p>{{ end }}
+          {{ if .media_items }}
+          <div class="repost-media {{ .media_grid_class }}">
+            {{ range .media_items }}
+            <figure class="{{ .class }}">
+              <img src="{{ if and .resource_id .url }}{{ .url }}{{ else }}assets/grid.svg{{ end }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ else if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
+              {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
+              {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}
+            </figure>
+            {{ end }}
+          </div>
+          {{ end }}
+          {{ if .url }}<div class="inline-link">{{ .url }}</div>{{ end }}
+        </section>
+        {{ end }}
+
+        {{ if or .subscriber_cards .subscriber_text .url }}
+        <footer class="dynamic-footer">
+          {{ if .subscriber_cards }}
+          <section class="subscriber-panel" aria-label="订阅人">
+            <span class="subscriber-panel__label">订阅人</span>
+            <div class="subscriber-list">
+              {{ range .subscriber_cards }}
+              <div class="subscriber-card">
+                <img class="subscriber-avatar" src="assets/douyin-default-avatar.svg"{{ if .avatar_url }} data-avatar="{{ .avatar_url }}"{{ end }} alt="" />
+                <div class="subscriber-info">
+                  <div class="subscriber-name-row">
+                    <strong>{{ .display_name }}</strong>
+                    {{ if .uid_text }}<em>（{{ .uid_text }}）</em>{{ end }}
+                  </div>
+                  {{ if or .title .role_label }}
+                  <div class="subscriber-badges">
+                    {{ if .title }}<span class="subscriber-title">{{ .title }}</span>{{ end }}
+                    {{ if .role_label }}<span class="subscriber-role subscriber-role--{{ .role }}">{{ .role_label }}</span>{{ end }}
+                  </div>
+                  {{ end }}
+                </div>
+              </div>
+              {{ end }}
+            </div>
+          </section>
+          {{ else if .subscriber_text }}
+          <section class="subscriber-panel" aria-label="订阅人">
+            <span class="subscriber-panel__label">订阅人</span>
+            <strong class="subscriber-text-fallback">{{ .subscriber_text }}</strong>
+          </section>
+          {{ end }}
+          {{ if .url }}<div class="footer-link">{{ .url }}</div>{{ end }}
+        </footer>
+        {{ end }}
+      </article>
+    </main>
+    <script>
+      for (const image of document.querySelectorAll("img[data-avatar], img[data-media]")) {
+        const source = image.dataset.avatar || image.dataset.media;
+        if (!source) continue;
+        image.addEventListener("error", () => {
+          image.removeAttribute("data-avatar");
+          image.removeAttribute("data-media");
+          image.src = image.dataset.fallback || "assets/douyin-default-avatar.svg";
+        }, { once: true });
+        image.src = source;
+      }
+    </script>
+  </body>
+</html>

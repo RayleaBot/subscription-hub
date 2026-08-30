@@ -28,6 +28,7 @@ func buildBilibiliRenderData(item plugin.Subscription, update map[string]any) ma
 		"author": author, "author_uid_text": plugin.UIDText(plugin.FirstText(author["uid"], item.UID)),
 		"summary": summary, "summary_html": summaryHTML, "topic": renderTopic(update["topic"]),
 		"images": images, "image_count": len(mediaItems), "media_grid_class": plugin.MediaGridClass(len(mediaItems)), "media_items": mediaItems,
+		"metrics":       buildBilibiliMetrics(update),
 		"duration_text": plugin.StringScalar(update["duration_text"]), "url": plugin.StringScalar(update["url"]),
 		"pub_ts": plugin.IntScalar(update["pub_ts"]), "created_at": plugin.StringScalar(update["created_at"]),
 		"live_event": plugin.StringScalar(update["live_event"]), "live_status": update["live_status"],
@@ -37,6 +38,50 @@ func buildBilibiliRenderData(item plugin.Subscription, update map[string]any) ma
 		"subscription":     map[string]any{"uid": item.UID, "name": plugin.FirstText(item.Name, item.UID)},
 		"subscribers":      item.Subscribers, "subscriber_cards": subscriberCards, "subscriber_text": plugin.SubscriberNames(subscriberCards),
 	}
+}
+
+func buildBilibiliMetrics(update map[string]any) []map[string]any {
+	stats := plugin.MapValue(update["stats"])
+	if stats == nil {
+		return nil
+	}
+	metrics := make([]map[string]any, 0, 7)
+	appendMetric := func(key, label string, value any) {
+		if metric := plugin.BuildContentMetric(key, label, value); metric != nil {
+			metrics = append(metrics, metric)
+		}
+	}
+	if plugin.StringScalar(update["service"]) == "live" {
+		appendMetric("play", "人气", bilibiliStatValue(stats, "viewers", "online"))
+		return metrics
+	}
+	appendMetric("play", "播放", bilibiliStatValue(stats, "view", "views", "play"))
+	appendMetric("like", "点赞", bilibiliStatValue(stats, "like", "likes"))
+	appendMetric("coin", "投币", bilibiliStatValue(stats, "coin", "coins"))
+	favoriteLabel := "收藏"
+	if stats["favorites"] != nil && stats["favorite"] == nil {
+		favoriteLabel = "追番"
+	}
+	appendMetric("favorite", favoriteLabel, bilibiliStatValue(stats, "favorite", "favorites"))
+	appendMetric("share", "转发", bilibiliStatValue(stats, "share", "forward"))
+	appendMetric("comment", "评论", bilibiliStatValue(stats, "reply", "comment", "comments"))
+	appendMetric("danmaku", "弹幕", bilibiliStatValue(stats, "danmaku", "danmakus"))
+	return metrics
+}
+
+func bilibiliStatValue(stats map[string]any, keys ...string) any {
+	for _, key := range keys {
+		value := stats[key]
+		if object := plugin.MapValue(value); object != nil {
+			if count := plugin.FirstNonNil(object["count"], object["num"], object["value"]); count != nil {
+				return count
+			}
+		}
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func buildBilibiliFallback(data map[string]any) string {

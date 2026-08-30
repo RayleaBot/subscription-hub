@@ -156,7 +156,7 @@ func previewVideoUpdate(document map[string]any, canonicalURL string) (map[strin
 		"created_at":    plugin.FormatTime(plugin.IntScalar(plugin.FirstNonNil(data["pubdate"], data["ctime"])), ""),
 		"duration_text": plugin.FormatVideoDuration(plugin.IntScalar(data["duration"])),
 		"author":        map[string]any{"name": plugin.CleanText(owner["name"]), "avatar": plugin.NormalizeMediaURL(owner["face"]), "uid": plugin.CleanText(owner["mid"])},
-		"images":        images, "duration_seconds": plugin.IntScalar(data["duration"]), "_resolver_video": data,
+		"images":        images, "duration_seconds": plugin.IntScalar(data["duration"]), "stats": mergeBilibiliStats(data["stat"]), "_resolver_video": data,
 	}, nil
 }
 
@@ -194,7 +194,7 @@ func previewBangumiUpdate(document map[string]any, canonicalURL string, ref *bil
 		"id": plugin.FirstText(episode["id"], episode["ep_id"], ref.ID), "service": "video", "category": "番剧",
 		"title": title, "summary": plugin.TruncateRunes(plugin.FirstText(episode["share_copy"], result["evaluate"], result["subtitle"]), 420),
 		"url": canonicalURL, "duration_seconds": duration, "duration_text": plugin.FormatVideoDuration(int64(duration)),
-		"author": map[string]any{"name": plugin.FirstText(result["title"], "哔哩哔哩番剧")}, "images": images,
+		"author": map[string]any{"name": plugin.FirstText(result["title"], "哔哩哔哩番剧")}, "images": images, "stats": mergeBilibiliStats(result["stat"]),
 		"_resolver_bangumi": map[string]any{"episode": episode, "season": result},
 	}, nil
 }
@@ -214,7 +214,7 @@ func previewArticleUpdate(document map[string]any, canonicalURL, articleID strin
 		"summary": plugin.TruncateRunes(plugin.FirstText(data["summary"], data["desc"]), 420), "url": canonicalURL,
 		"pub_ts": plugin.IntScalar(data["publish_time"]), "created_at": plugin.FormatTime(plugin.IntScalar(data["publish_time"]), ""),
 		"author": map[string]any{"name": plugin.FirstText(data["author_name"], plugin.NestedValue(data, "author", "name")), "uid": plugin.FirstText(data["mid"], plugin.NestedValue(data, "author", "mid"))},
-		"images": images,
+		"images": images, "stats": mergeBilibiliStats(data["stats"], data["stat"]),
 	}, nil
 }
 
@@ -268,6 +268,7 @@ func normalizeOpusDetailItem(item map[string]any, canonicalURL string) map[strin
 	summaryParts := make([]string, 0)
 	htmlParts := make([]string, 0)
 	images := make([]map[string]any, 0)
+	stats := map[string]any(nil)
 	topic := topicFromValue(plugin.FirstNonNil(item["topic"], basic["topic"]))
 	for _, raw := range modules {
 		module := plugin.MapValue(raw)
@@ -291,6 +292,8 @@ func normalizeOpusDetailItem(item map[string]any, canonicalURL string) map[strin
 			if value := topicFromValue(module["module_topic"]); value != nil {
 				topic = value
 			}
+		case "MODULE_TYPE_STAT":
+			stats = mergeBilibiliStats(stats, module["module_stat"])
 		}
 	}
 	authorName := plugin.StringScalar(author["name"])
@@ -320,7 +323,7 @@ func normalizeOpusDetailItem(item map[string]any, canonicalURL string) map[strin
 		"title": title, "summary": plugin.TruncateRunes(strings.Join(summaryParts, "\n"), 420), "summary_html": strings.Join(htmlParts, "<br>"),
 		"url": canonicalURL, "pub_ts": pubTS, "created_at": plugin.FormatTime(pubTS, plugin.StringScalar(author["pub_time"])),
 		"author": map[string]any{"name": authorName, "avatar": plugin.NormalizeMediaURL(author["avatar"]), "uid": plugin.FirstText(author["uid"], basic["uid"])},
-		"images": images, "topic": topic, "is_pinned": false, "original": nil,
+		"images": images, "topic": topic, "is_pinned": false, "original": nil, "stats": stats,
 	}
 }
 
@@ -403,7 +406,11 @@ func previewLiveUpdate(document, statusDocument map[string]any, canonicalURL, ro
 		"summary": statusLabel, "url": canonicalURL, "pub_ts": pubTS, "created_at": startedAt,
 		"author": map[string]any{"name": authorName, "avatar": plugin.NormalizeMediaURL(plugin.FirstNonNil(statusEntry["face"], data["face"])), "uid": uid},
 		"images": images, "live_status": status, "live_event": map[bool]string{true: "started", false: "preview"}[status == 1],
-		"status_label": statusLabel, "live_started_at": startedAt, "_resolver_live": data,
+		"status_label": statusLabel, "live_started_at": startedAt,
+		"stats": mergeBilibiliStats(map[string]any{
+			"viewers": plugin.FirstNonNil(data["online"], statusEntry["online"], plugin.NestedValue(data, "watched_show", "num"), plugin.NestedValue(statusEntry, "watched_show", "num")),
+		}),
+		"_resolver_live": data,
 	}, nil
 }
 
@@ -413,11 +420,13 @@ func sampleBilibiliUpdate(service string, now time.Time) map[string]any {
 		"author": map[string]any{"name": "RayleaBot 示例账号"}, "pub_ts": now.Unix(), "created_at": now.Format("2006-01-02 15:04"),
 		"url":    "https://t.bilibili.com/100000000000000001",
 		"images": []map[string]any{{"url": "https://i0.hdslb.com/bfs/archive/sample-cover.jpg"}},
+		"stats":  map[string]any{"view": 1286000, "like": 96000, "coin": 52000, "favorite": 68000, "share": 12000, "reply": 8600, "danmaku": 32000},
 	}
 	switch service {
 	case "live":
 		base["id"], base["title"], base["summary"] = "preview-live", "直播间已开播", "直播中\n开播时间："+now.Format("2006-01-02 15:04")
 		base["live_status"], base["live_event"], base["status_label"], base["live_started_at"] = 1, "started", "直播中", now.Format("2006-01-02 15:04")
+		base["stats"] = map[string]any{"viewers": 12680}
 		base["url"] = "https://live.bilibili.com/123456"
 	case "image_text":
 		base["title"], base["summary"] = "图文动态示例", "这里展示图文动态正文、图片九宫格、UP 主信息和订阅人身份。"

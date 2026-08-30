@@ -87,11 +87,31 @@ func normalizeDynamicItem(item map[string]any, depth int) map[string]any {
 		"author":        author, "images": dynamicImages(major, service),
 		"topic": topic, "is_pinned": plugin.CleanText(tagModule["text"]) == "置顶",
 		"original": original,
+		"stats": mergeBilibiliStats(
+			plugin.NestedValue(major, "archive", "stat"),
+			plugin.NestedValue(major, "article", "stat"),
+			modules["module_stat"],
+		),
 	}
 	if service == "video" {
 		update["_resolver_video"] = plugin.MapValue(major["archive"])
 	}
 	return update
+}
+
+func mergeBilibiliStats(values ...any) map[string]any {
+	result := map[string]any{}
+	for _, value := range values {
+		for key, field := range plugin.MapValue(value) {
+			if field != nil {
+				result[key] = field
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func dynamicService(itemType string, basic, major map[string]any) string {
