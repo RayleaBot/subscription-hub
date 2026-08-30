@@ -25,6 +25,8 @@ const douyinWebReferer = "https://www.douyin.com/"
 
 const douyinUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
 
+const douyinShareUserAgent = "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.25 Mobile Safari/537.36"
+
 const douyinBrowserVersion = "151.0.0.0"
 
 const douyinRequestTimeoutSeconds = 10
@@ -43,6 +45,8 @@ const douyinDiscoverSearchURL = "https://www.douyin.com/aweme/v1/web/discover/se
 
 const douyinAwemePostURL = "https://www.douyin.com/aweme/v1/web/aweme/post/"
 
+const douyinAwemeDetailURL = "https://www.douyin.com/aweme/v1/web/aweme/detail/"
+
 const douyinTTWIDRegisterURL = "https://ttwid.bytedance.com/ttwid/union/register/"
 
 const douyinWebIDURL = "https://mcs.zijieapi.com/webid?aid=6383&sdk_version=5.1.18_zip&device_platform=web"
@@ -51,8 +55,8 @@ const douyinMsTokenRegisterURL = "https://mssdk.bytedance.com/web/r/token?ms_app
 
 const douyinMsTokenTTL = 2 * time.Hour
 
-// douyinWebParams 对齐真实浏览器的公共查询参数；a_bogus 覆盖完整查询串，
-// 参数与 UA/浏览器环境的一致性本身就是风控校验项。
+// douyinWebParams 对齐真实浏览器的公共查询参数；作品详情请求会基于
+// 完整查询串追加 a_bogus，参数与 UA 必须保持一致。
 func douyinWebParams() url.Values {
 	return url.Values{
 		"device_platform":  {"webapp"},
@@ -181,6 +185,18 @@ func douyinRequestHeaders(cookie, referer, accept string) map[string]string {
 	return headers
 }
 
+func douyinShareRequestHeaders(referer string) map[string]string {
+	if strings.TrimSpace(referer) == "" {
+		referer = douyinWebReferer
+	}
+	return map[string]string{
+		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+		"User-Agent":      douyinShareUserAgent,
+		"Referer":         referer,
+	}
+}
+
 func douyinHasLoginCookie(cookie string) bool {
 	for _, name := range []string{"sessionid", "sessionid_ss", "sid_guard"} {
 		if plugin.CookieField(cookie, name) != "" {
@@ -211,7 +227,18 @@ func newDouyinClient(actions plugin.SourceActions) *douyinClient {
 func (client *douyinClient) requestJSON(ctx context.Context, rawURL string, account douyinAccount, referer string) (map[string]any, error) {
 	session := client.session(ctx, account)
 	signed := client.signAPIURL(rawURL, session)
-	response, err := client.request(ctx, signed, douyinAccount{ID: account.ID, Label: account.Label, Cookie: session.Cookie}, referer, "application/json, text/plain, */*")
+	return client.requestJSONURL(ctx, rawURL, signed, account, session, referer)
+}
+
+func (client *douyinClient) requestDetailJSON(ctx context.Context, rawURL string, account douyinAccount, referer string) (map[string]any, error) {
+	session := client.session(ctx, account)
+	signed := client.signAPIURL(rawURL, session)
+	signed = client.signDetailAPIURL(signed)
+	return client.requestJSONURL(ctx, rawURL, signed, account, session, referer)
+}
+
+func (client *douyinClient) requestJSONURL(ctx context.Context, rawURL, signedURL string, account douyinAccount, session douyinSession, referer string) (map[string]any, error) {
+	response, err := client.request(ctx, signedURL, douyinAccount{ID: account.ID, Label: account.Label, Cookie: session.Cookie}, referer, "application/json, text/plain, */*")
 	if err != nil {
 		return nil, err
 	}
@@ -266,45 +293,61 @@ func (client *douyinClient) requestHTML(ctx context.Context, rawURL string, acco
 	return body, nil
 }
 
+func (client *douyinClient) requestShareHTML(ctx context.Context, rawURL string) (string, string, error) {
+	response, finalURL, err := client.requestFollowing(ctx, rawURL, douyinShareRequestHeaders(douyinWebReferer))
+	if err != nil {
+		return "", finalURL, err
+	}
+	status := int(plugin.IntScalar(response["status_code"]))
+	body := douyinResponseBody(response)
+	kind := douyinHTMLBlockKind(status, body)
+	if status < 200 || status >= 300 || kind == "auth" || kind == "session_blocked" || kind == "risk_control" || kind == "rate_limit" {
+		return "", finalURL, &douyinSourceError{Kind: kind, HTTPStatus: status, Endpoint: douyinEndpointPath(finalURL)}
+	}
+	return body, finalURL, nil
+}
+
 func (client *douyinClient) request(ctx context.Context, rawURL string, account douyinAccount, referer, accept string) (rayleabot.ActionResult, error) {
+	response, _, err := client.requestFollowing(ctx, rawURL, douyinRequestHeaders(account.Cookie, referer, accept))
+	return response, err
+}
+
+func (client *douyinClient) requestFollowing(ctx context.Context, rawURL string, headers map[string]string) (rayleabot.ActionResult, string, error) {
 	current := strings.TrimSpace(rawURL)
 	var response rayleabot.ActionResult
 	for hop := 0; hop <= douyinRedirectMaxHops; hop++ {
 		result, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
-			Method: "GET", URL: current, Headers: douyinRequestHeaders(account.Cookie, referer, accept), TimeoutSeconds: douyinRequestTimeoutSeconds,
+			Method: "GET", URL: current, Headers: headers, TimeoutSeconds: douyinRequestTimeoutSeconds,
 		})
 		if err != nil {
-			return nil, err
+			return nil, current, err
 		}
 		response = result
 		status := int(plugin.IntScalar(result["status_code"]))
 		if status < 300 || status >= 400 {
-			return result, nil
+			return result, current, nil
 		}
 		location := douyinResponseHeader(result, "Location")
 		if location == "" {
-			return result, nil
+			return result, current, nil
 		}
 		next, err := url.Parse(location)
 		if err != nil {
-			return result, nil
+			return result, current, nil
 		}
 		if !next.IsAbs() {
 			base, parseErr := url.Parse(current)
 			if parseErr != nil {
-				return result, nil
+				return result, current, nil
 			}
 			next = base.ResolveReference(next)
 		}
 		if !douyinAllowedRequestHost(next.Hostname()) {
-			return result, nil
+			return result, current, nil
 		}
 		current = next.String()
-		if referer == "" {
-			referer = douyinWebReferer
-		}
 	}
-	return response, nil
+	return response, current, nil
 }
 
 // signAPIURL 使用账号会话中的 msToken、webid 和设备标识补齐 Web API 参数。
@@ -328,6 +371,22 @@ func (client *douyinClient) signAPIURL(rawURL string, session douyinSession) str
 		encoded += "&verifyFp=" + url.QueryEscape(verifyFP) + "&fp=" + url.QueryEscape(verifyFP)
 	}
 	parsed.RawQuery = encoded
+	return parsed.String()
+}
+
+func (client *douyinClient) signDetailAPIURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Query().Get("a_bogus") != "" {
+		return rawURL
+	}
+	signature := douyinABogus(parsed.RawQuery, douyinUserAgent, client.now())
+	if signature == "" {
+		return rawURL
+	}
+	if parsed.RawQuery != "" {
+		parsed.RawQuery += "&"
+	}
+	parsed.RawQuery += "a_bogus=" + signature
 	return parsed.String()
 }
 
@@ -716,7 +775,6 @@ func douyinHTMLBlockKind(status int, body string) string {
 	for _, marker := range []string{
 		"验证码中间页",
 		"为了你的账号安全，请先完成验证",
-		"_$jsvmprt",
 		"verifycenter_nocaptcha",
 	} {
 		if strings.Contains(lower, marker) {
@@ -881,7 +939,7 @@ func friendlyDouyinSourceError(label string, err error) string {
 		if strings.Contains(label, "搜索") {
 			return label + "：抖音要求安全验证，本次已停止继续探测。请在浏览器中打开抖音完成一次搜索（按提示通过验证）后，重新获取 Cookie 更新到账号页；也可以直接使用用户主页链接或完整 sec_uid 订阅（该路径不受影响）；此结果不能说明 CK 已失效。"
 		}
-		return label + "：抖音请求被安全验证拦截，已进入退避；此结果不能单独说明 CK 已失效。"
+		return label + "：抖音请求被安全验证拦截，请稍后再试；此结果不能单独说明 CK 已失效。"
 	case "rate_limit":
 		return label + "：抖音请求过于频繁，请稍后再试。"
 	case "auth":

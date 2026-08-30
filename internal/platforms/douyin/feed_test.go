@@ -69,6 +69,11 @@ func douyinRenderDataPage(document map[string]any) string {
 	return `<html><head></head><body><script id="RENDER_DATA" type="application/json">` + url.QueryEscape(string(raw)) + `</script></body></html>`
 }
 
+func douyinRouterDataPage(document map[string]any) string {
+	raw, _ := json.Marshal(document)
+	return `<html><head></head><body><script>window._ROUTER_DATA = ` + string(raw) + `</script></body></html>`
+}
+
 func TestDouyinFeedNormalizesVideoAndImageText(t *testing.T) {
 	fake := newActions()
 	fake.Accounts = fixtureDouyinAccounts("primary")
@@ -413,10 +418,11 @@ func TestDouyinSecUIDFromInput(t *testing.T) {
 
 func TestParseDouyinPreviewURL(t *testing.T) {
 	for rawURL, kind := range map[string]string{
-		"https://www.douyin.com/video/7000000000000000000": "video",
-		"https://www.douyin.com/note/7000000000000000001":  "image_text",
-		"https://v.douyin.com/abc123/":                     "short",
-		"https://live.douyin.com/123456":                   "live",
+		"https://www.douyin.com/video/7000000000000000000":           "video",
+		"https://www.douyin.com/note/7000000000000000001":            "image_text",
+		"https://www.iesdouyin.com/share/video/7000000000000000002/": "video",
+		"https://v.douyin.com/abc123/":                               "short",
+		"https://live.douyin.com/123456":                             "live",
 	} {
 		ref := parseDouyinPreviewURL(rawURL)
 		if ref == nil || ref.Kind != kind {
@@ -432,6 +438,73 @@ func TestParseDouyinPreviewURL(t *testing.T) {
 		if ref := parseDouyinPreviewURL(rawURL); ref != nil {
 			t.Fatalf("parseDouyinPreviewURL(%q) = %#v, want nil", rawURL, ref)
 		}
+	}
+}
+
+func TestDouyinRouterDataExtractsCurrentSharePageItemID(t *testing.T) {
+	body := douyinRouterDataPage(map[string]any{"loaderData": map[string]any{
+		"video_(id)/page": map[string]any{"itemId": "7679356419690253583"},
+	}})
+	if got := douyinPreviewIDFromPage(body); got != "7679356419690253583" {
+		t.Fatalf("douyinPreviewIDFromPage() = %q", got)
+	}
+	if kind := douyinHTMLBlockKind(200, body); kind != "upstream" {
+		t.Fatalf("router data page kind = %q", kind)
+	}
+}
+
+func TestFetchDouyinPreviewUsesMobileShortLinkAndSignedDetailAPI(t *testing.T) {
+	const awemeID = "7679356419690253583"
+	fake := newActions()
+	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.KV["source:douyin:web_cookies:primary"] = map[string]any{
+		"msToken": "fixture-mstoken-primary", "ms_token_fetched_at": time.Now().Unix(),
+	}
+	fake.HTTPRoutes = []testkit.HTTPRoute{
+		{Path: "/4ZDtWeIBr4g/", Result: rayleabot.ActionResult{
+			"status_code": 302,
+			"headers":     map[string]any{"Location": "https://www.iesdouyin.com/share/video/" + awemeID + "/"},
+		}},
+		{Path: "/share/video/" + awemeID + "/", Result: rayleabot.ActionResult{
+			"status_code": 200,
+			"headers":     map[string]any{"Content-Type": "text/html"},
+			"body_text": douyinRouterDataPage(map[string]any{"loaderData": map[string]any{
+				"video_(id)/page": map[string]any{"itemId": awemeID},
+			}}),
+		}},
+		{Path: "/aweme/v1/web/aweme/detail/", Result: testkit.HTTPJSON(200, map[string]any{
+			"status_code":  0,
+			"aweme_detail": douyinVideoAweme(awemeID, "MS4wLjABAAAAfixture", "测试用户", "测试作品", time.Now().Unix()),
+		})},
+	}
+
+	update, err := fetchDouyinPreview(context.Background(), fake, &douyinPreviewRef{
+		Kind: "short", ID: "4ZDtWeIBr4g", URL: "https://v.douyin.com/4ZDtWeIBr4g/",
+	})
+	if err != nil {
+		t.Fatalf("fetchDouyinPreview() error = %v", err)
+	}
+	if plugin.StringScalar(update["id"]) != awemeID || plugin.StringScalar(update["url"]) != "https://www.douyin.com/video/"+awemeID {
+		t.Fatalf("preview update = %#v", update)
+	}
+	if len(fake.HTTPRequests) != 3 {
+		t.Fatalf("preview requests = %#v", testkit.RequestURLs(fake))
+	}
+	for _, request := range fake.HTTPRequests[:2] {
+		if request.Headers["User-Agent"] != douyinShareUserAgent {
+			t.Fatalf("share request user agent = %q", request.Headers["User-Agent"])
+		}
+	}
+	detailRequest := fake.HTTPRequests[2]
+	parsed, parseErr := url.Parse(detailRequest.URL)
+	if parseErr != nil {
+		t.Fatalf("parse detail URL: %v", parseErr)
+	}
+	if parsed.Query().Get("aweme_id") != awemeID || parsed.Query().Get("a_bogus") == "" {
+		t.Fatalf("detail request is not signed: %s", detailRequest.URL)
+	}
+	if detailRequest.Headers["User-Agent"] != douyinUserAgent || !strings.Contains(detailRequest.Headers["Cookie"], "sessionid=primary") {
+		t.Fatalf("detail request headers = %#v", detailRequest.Headers)
 	}
 }
 
@@ -656,10 +729,14 @@ func TestDouyinHTMLBlockKindRequiresExplicitInterstitial(t *testing.T) {
 	}
 	for _, blocked := range []string{
 		`<html><head><title>验证码中间页</title></head></html>`,
-		`<html><body><script>window._$jsvmprt = function () {};</script></body></html>`,
+		`<html><body><div>为了你的账号安全，请先完成验证</div></body></html>`,
 	} {
 		if kind := douyinHTMLBlockKind(200, blocked); kind != "risk_control" {
 			t.Fatalf("blocked page kind = %q", kind)
 		}
+	}
+	shell := `<html><body><script>window._$jsvmprt = function () {};</script></body></html>`
+	if kind := douyinHTMLBlockKind(200, shell); kind != "upstream" {
+		t.Fatalf("generic shell kind = %q", kind)
 	}
 }

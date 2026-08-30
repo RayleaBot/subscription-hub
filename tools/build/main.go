@@ -8,7 +8,7 @@ import (
 func main() {
 	buildcmd.Main(buildcmd.Config{
 		BackendPackage: "./cmd/subscription-hub",
-		Assets:         []string{"templates"},
+		Assets:         []string{"templates", "LICENSES"},
 		MappedAssets: []pluginbuild.AssetMapping{{
 			Source: "internal/assets/default_config.json", Destination: "default_config.json",
 		}},

@@ -78,18 +78,35 @@ func looksLikeDouyinPreviewURL(value string) bool {
 func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *douyinPreviewRef) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(ctx, douyinDetailTotalTimeout)
 	defer cancel()
-	accounts, accErr := readDouyinAccounts(ctx, actions)
-	if accErr != nil {
-		accounts = []douyinAccount{{}}
+	client := newDouyinClient(actions)
+	shareBody := ""
+	if ref.Kind == "short" {
+		body, finalURL, err := client.requestShareHTML(ctx, ref.URL)
+		if err != nil {
+			return nil, errors.New(friendlyDouyinSourceError("抖音短链展开失败", err))
+		}
+		shareBody = body
+		resolved := parseDouyinPreviewURL(finalURL)
+		if resolved == nil || resolved.Kind == "short" {
+			if id := douyinPreviewIDFromPage(body); id != "" {
+				resolved = &douyinPreviewRef{Kind: "video", ID: id, URL: douyinCanonicalPreviewURL("video", id)}
+			}
+		}
+		if resolved == nil || resolved.Kind == "short" || resolved.ID == "" {
+			return nil, errors.New("没有从这条抖音短链解析到作品 ID")
+		}
+		resolved.URL = douyinCanonicalPreviewURL(resolved.Kind, resolved.ID)
+		ref = resolved
 	}
-	body, err := requestDouyinHTMLAcrossAccounts(ctx, actions, accounts, ref.URL, douyinWebReferer)
-	if err != nil {
+	accounts, accErr := readDouyinAccounts(ctx, actions)
+	if ref.Kind == "live" {
 		if accErr != nil {
 			return nil, accErr
 		}
-		return nil, errors.New(friendlyDouyinSourceError("抖音预览失败", err))
-	}
-	if ref.Kind == "live" {
+		body, err := requestDouyinHTMLAcrossAccounts(ctx, actions, accounts, ref.URL, douyinWebReferer)
+		if err != nil {
+			return nil, errors.New(friendlyDouyinSourceError("抖音预览失败", err))
+		}
 		live := normalizeDouyinLive(douyinLiveFromPage(body), "")
 		if live == nil {
 			return nil, errors.New("没有找到这场抖音直播")
@@ -99,20 +116,96 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		}
 		return live, nil
 	}
-	for _, aweme := range douyinAwemesFromPage(body) {
-		update := normalizeDouyinAweme(aweme)
-		if update == nil {
-			continue
+	var detailErr error
+	if accErr == nil {
+		if update, err := fetchDouyinDetailAcrossAccounts(ctx, client, accounts, ref); err == nil {
+			return update, nil
+		} else {
+			detailErr = err
 		}
-		if ref.Kind != "short" && ref.ID != "" && plugin.FirstText(update["id"]) != ref.ID && !strings.Contains(plugin.StringScalar(update["url"]), ref.ID) {
-			continue
+	}
+	if shareBody == "" {
+		body, _, err := client.requestShareHTML(ctx, douyinSharePreviewURL(ref.Kind, ref.ID))
+		if err == nil {
+			shareBody = body
+		} else if detailErr == nil {
+			detailErr = err
 		}
-		if rawURL := strings.TrimSpace(ref.URL); rawURL != "" && ref.Kind != "short" {
-			update["url"] = rawURL
-		}
+	}
+	if update := douyinPreviewUpdateFromPage(shareBody, ref); update != nil {
 		return update, nil
 	}
+	if detailErr != nil {
+		return nil, errors.New(friendlyDouyinSourceError("抖音预览失败", detailErr))
+	}
+	if accErr != nil {
+		return nil, accErr
+	}
 	return nil, errors.New("没有找到这条抖音作品")
+}
+
+func fetchDouyinDetailAcrossAccounts(ctx context.Context, client *douyinClient, accounts []douyinAccount, ref *douyinPreviewRef) (map[string]any, error) {
+	endpoint := douyinAwemeDetailAPIURL(ref.ID)
+	var lastError error
+	for _, account := range accounts {
+		document, err := client.requestDetailJSON(ctx, endpoint, account, ref.URL)
+		if err != nil {
+			lastError = err
+			continue
+		}
+		for _, aweme := range douyinAwemesFromValue(document) {
+			if update := douyinPreviewUpdateFromAweme(aweme, ref); update != nil {
+				return update, nil
+			}
+		}
+		lastError = &douyinSourceError{Kind: "invalid_response", HTTPStatus: 200, Endpoint: douyinEndpointPath(endpoint)}
+	}
+	if lastError == nil {
+		lastError = errors.New("没有可用的抖音账号")
+	}
+	return nil, lastError
+}
+
+func douyinPreviewUpdateFromPage(body string, ref *douyinPreviewRef) map[string]any {
+	for _, aweme := range douyinAwemesFromPage(body) {
+		if update := douyinPreviewUpdateFromAweme(aweme, ref); update != nil {
+			return update
+		}
+	}
+	return nil
+}
+
+func douyinPreviewUpdateFromAweme(aweme map[string]any, ref *douyinPreviewRef) map[string]any {
+	update := normalizeDouyinAweme(aweme)
+	if update == nil || (ref.ID != "" && plugin.FirstText(update["id"]) != ref.ID && !strings.Contains(plugin.StringScalar(update["url"]), ref.ID)) {
+		return nil
+	}
+	if rawURL := strings.TrimSpace(ref.URL); rawURL != "" {
+		update["url"] = rawURL
+	}
+	return update
+}
+
+func douyinAwemeDetailAPIURL(awemeID string) string {
+	values := douyinWebParams()
+	values.Set("aweme_id", strings.TrimSpace(awemeID))
+	return douyinAwemeDetailURL + "?" + values.Encode()
+}
+
+func douyinCanonicalPreviewURL(kind, id string) string {
+	segment := "video"
+	if kind == "image_text" {
+		segment = "note"
+	}
+	return "https://www.douyin.com/" + segment + "/" + url.PathEscape(strings.TrimSpace(id))
+}
+
+func douyinSharePreviewURL(kind, id string) string {
+	segment := "video"
+	if kind == "image_text" {
+		segment = "note"
+	}
+	return "https://www.iesdouyin.com/share/" + segment + "/" + url.PathEscape(strings.TrimSpace(id)) + "/"
 }
 
 func sampleDouyinUpdate(service string, now time.Time) map[string]any {

@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -19,6 +20,13 @@ func TestResolverMediaPlanMessageDistinguishesLimitsFromFailures(t *testing.T) {
 			t.Fatalf("unexpected failure message: %q", message)
 		}
 	})
+}
+
+func TestExpandResolverURLLeavesDouyinShortLinksToPlatform(t *testing.T) {
+	const rawURL = "https://v.douyin.com/4ZDtWeIBr4g/"
+	if got := expandResolverURL(context.Background(), rawURL); got != rawURL {
+		t.Fatalf("expandResolverURL() = %q, want platform-owned URL", got)
+	}
 }
 
 func TestResolverTemplateIDUsesResolverSpecificCards(t *testing.T) {

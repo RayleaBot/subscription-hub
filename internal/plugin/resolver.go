@@ -175,7 +175,7 @@ func expandResolverURL(ctx context.Context, raw string) string {
 		return raw
 	}
 	host := strings.ToLower(parsed.Hostname())
-	if host != "b23.tv" && host != "bili2233.cn" && host != "v.douyin.com" && host != "t.cn" {
+	if host != "b23.tv" && host != "bili2233.cn" && host != "t.cn" {
 		return raw
 	}
 	client := &http.Client{Timeout: 8 * time.Second}

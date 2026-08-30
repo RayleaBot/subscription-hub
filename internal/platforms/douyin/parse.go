@@ -15,6 +15,8 @@ const douyinWalkMaxDepth = 8
 
 var douyinRENDERDataPattern = regexp.MustCompile(`(?is)<script[^>]*id=["'](?:RENDER_DATA|ROUTER_DATA|__UNIVERSAL_DATA_FOR_REHYDRATION__)["'][^>]*>(.*?)</script>`)
 
+const douyinRouterDataMarker = "window._ROUTER_DATA"
+
 func douyinUserFromValue(value any) douyinUser {
 	user := douyinUserFromObject(plugin.MapValue(value))
 	if user.UID != "" && user.Name != "" {
@@ -314,7 +316,72 @@ func douyinDocumentsFromHTML(body string) []any {
 		}
 		documents = append(documents, document)
 	}
+	if document := douyinRouterDataFromHTML(body); document != nil {
+		documents = append(documents, document)
+	}
 	return documents
+}
+
+func douyinRouterDataFromHTML(body string) any {
+	marker := strings.Index(body, douyinRouterDataMarker)
+	if marker < 0 {
+		return nil
+	}
+	start := strings.IndexByte(body[marker:], '{')
+	if start < 0 {
+		return nil
+	}
+	start += marker
+	depth := 0
+	inString := false
+	escaped := false
+	for index := start; index < len(body); index++ {
+		current := body[index]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if current == '\\' {
+				escaped = true
+				continue
+			}
+			if current == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch current {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				var document any
+				if json.Unmarshal([]byte(body[start:index+1]), &document) == nil {
+					return document
+				}
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+func douyinPreviewIDFromPage(body string) string {
+	for _, document := range douyinDocumentsFromHTML(body) {
+		found := ""
+		walkDouyinValue(document, 0, func(object map[string]any) bool {
+			found = plugin.FirstText(object["aweme_id"], object["awemeId"], object["itemId"])
+			return found == ""
+		})
+		if found != "" {
+			return found
+		}
+	}
+	return ""
 }
 
 func walkDouyinValue(value any, depth int, visit func(map[string]any) bool) {

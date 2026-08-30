@@ -29,7 +29,7 @@ func TestDouyinSearchRequestsCarrySessionTokens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse signed URL: %v", err)
 	}
-	// 实验性移除 a_bogus：Go 移植的签名可能被平台识别为异常（verify_check）。
+	// 搜索接口保持会话参数请求；a_bogus 只用于作品详情接口。
 	if parsed.Query().Get("a_bogus") != "" {
 		t.Fatalf("search URL should not carry a_bogus: %s", request.URL)
 	}
@@ -161,7 +161,7 @@ func TestDouyinSignAPIURLBindsCookieTokens(t *testing.T) {
 	if query.Get("msToken") != "cookie-token" || query.Get("webid") != "7000000000000000001" {
 		t.Fatalf("signed query = %s", parsed.RawQuery)
 	}
-	// 实验性移除 a_bogus 后签名参数不再出现。
+	// 通用会话签名不追加 a_bogus，作品详情由独立签名步骤处理。
 	if query.Get("a_bogus") != "" {
 		t.Fatalf("signed query should not carry a_bogus: %s", parsed.RawQuery)
 	}
