@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import {
   allTargets,
+  normalizeResolverSettings,
   targetKey,
   type LiveTarget,
   type ResolverPlatform,
@@ -25,12 +26,12 @@ const emit = defineEmits<{
 
 const page = computed(() => props.view)
 const search = ref('')
-const draft = ref<ResolverSettings>(structuredClone(props.modelValue))
+const draft = ref<ResolverSettings>(normalizeResolverSettings(props.modelValue))
 
 watch(
   () => props.modelValue,
   (value) => {
-    if (JSON.stringify(value) !== JSON.stringify(draft.value)) draft.value = structuredClone(value)
+    if (JSON.stringify(value) !== JSON.stringify(draft.value)) draft.value = normalizeResolverSettings(value)
   },
   { deep: true },
 )
@@ -38,7 +39,7 @@ watch(
 watch(
   draft,
   (value) => {
-    if (JSON.stringify(value) !== JSON.stringify(props.modelValue)) emit('update:modelValue', structuredClone(value))
+    if (JSON.stringify(value) !== JSON.stringify(props.modelValue)) emit('update:modelValue', normalizeResolverSettings(value))
   },
   { deep: true },
 )

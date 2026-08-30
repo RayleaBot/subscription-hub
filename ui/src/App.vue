@@ -20,7 +20,6 @@ import {
   DEFAULT_RESOLVER_SETTINGS,
   identityKey,
   normalizePlatform,
-  normalizeResolverSettings,
   normalizeServices,
   normalizeSettings,
   normalizeTargets,
@@ -145,12 +144,12 @@ function signature(currentSettings: SubscriptionSettings, currentRows: Subscript
 
 function settingsPayloadForCurrentPage(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): SubscriptionSettings {
   if (isSubscriptionsPage.value) return buildSettingsPayload(currentSettings, currentRows, new Map())
-  return {
+  return normalizeSettings({
     enabled: currentSettings.enabled,
     delivery_max_age_minutes: currentSettings.delivery_max_age_minutes,
-    subscriptions: structuredClone(currentSettings.subscriptions),
-    resolver: normalizeResolverSettings(currentSettings.resolver),
-  }
+    subscriptions: currentSettings.subscriptions,
+    resolver: currentSettings.resolver,
+  })
 }
 
 function setStatus(message: string, isError = false) {

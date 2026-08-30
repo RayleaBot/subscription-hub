@@ -60,6 +60,20 @@ describe('subscription settings model', () => {
     expect(resolver.media.image_forward_threshold).toBe(0)
   })
 
+  it('clones reactive-style resolver proxies without structured clone failures', () => {
+    const source = normalizeResolverSettings({
+      targets: [{ target_type: 'group', target_id: '200', bilibili: true }],
+      cooldowns: { same_link_seconds: 20 },
+    })
+    const proxy = new Proxy(source, {})
+
+    const copy = normalizeResolverSettings(proxy)
+
+    expect(copy).not.toBe(proxy)
+    expect(copy.targets).not.toBe(proxy.targets)
+    expect(copy).toEqual(source)
+  })
+
   it('clones reactive-style row proxies without structured clone failures', () => {
     const settings = normalizeSettings({
       subscriptions: [{ platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' }],
