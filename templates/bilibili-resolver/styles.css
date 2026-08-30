@@ -449,7 +449,7 @@ h1 {
 .metric-icon {
   display: block;
   width: 27px;
-  height: 27px;
+  height: 36px;
   flex: 0 0 auto;
   background-image: url("assets/metric-icons.png");
   background-repeat: no-repeat;
