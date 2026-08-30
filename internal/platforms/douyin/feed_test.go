@@ -508,6 +508,37 @@ func TestFetchDouyinPreviewUsesMobileShortLinkAndSignedDetailAPI(t *testing.T) {
 	}
 }
 
+func TestFetchDouyinPreviewUsesCompleteSharePageBeforeAccountAPI(t *testing.T) {
+	const awemeID = "7679356419690253583"
+	fake := newActions()
+	fake.HTTPRoutes = []testkit.HTTPRoute{
+		{Path: "/share-fast/", Result: rayleabot.ActionResult{
+			"status_code": 302,
+			"headers":     map[string]any{"Location": "https://www.iesdouyin.com/share/video/" + awemeID + "/"},
+		}},
+		{Path: "/share/video/" + awemeID + "/", Result: rayleabot.ActionResult{
+			"status_code": 200,
+			"headers":     map[string]any{"Content-Type": "text/html"},
+			"body_text": douyinRouterDataPage(map[string]any{"loaderData": map[string]any{
+				"video_(id)/page": map[string]any{"aweme_detail": douyinVideoAweme(awemeID, "MS4wLjABAAAAfixture", "测试用户", "测试作品", time.Now().Unix())},
+			}}),
+		}},
+	}
+
+	update, err := fetchDouyinPreview(context.Background(), fake, &douyinPreviewRef{
+		Kind: "short", ID: "share-fast", URL: "https://v.douyin.com/share-fast/",
+	})
+	if err != nil {
+		t.Fatalf("fetchDouyinPreview() error = %v", err)
+	}
+	if plugin.StringScalar(update["id"]) != awemeID {
+		t.Fatalf("share page update = %#v", update)
+	}
+	if len(fake.HTTPRequests) != 2 {
+		t.Fatalf("complete share page still reached account API: %#v", testkit.RequestURLs(fake))
+	}
+}
+
 func TestValidateAvatarSourceURLAllowsDouyinCDN(t *testing.T) {
 	for _, sourceURL := range []string{
 		"https://p3-pc.douyinpic.com/aweme/100x100/face.jpeg",

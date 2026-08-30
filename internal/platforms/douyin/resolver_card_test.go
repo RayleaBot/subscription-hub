@@ -1,0 +1,60 @@
+package douyin
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+)
+
+func TestPrepareResolverCardInlinesCoverBeforeRendering(t *testing.T) {
+	fake := newActions()
+	fake.HTTPDefault = testkit.AvatarHTTPResult()
+	card := resolverCardFixture()
+
+	prepared := (&session{actions: fake}).PrepareResolverCard(t.Context(), card)
+	if len(prepared.Resources) != 0 {
+		t.Fatalf("resolver card kept remote render resources: %#v", prepared.Resources)
+	}
+	items := plugin.MapSliceValue(prepared.Data["media_items"])
+	if got := plugin.StringScalar(items[0]["url"]); !strings.HasPrefix(got, "data:image/png;base64,") {
+		t.Fatalf("resolver cover was not inlined: %q", got)
+	}
+	if plugin.StringScalar(items[0]["resource_id"]) != "" {
+		t.Fatalf("resolver cover kept resource id: %#v", items[0])
+	}
+	if len(fake.HTTPRequests) != 1 || fake.HTTPRequests[0].TimeoutSeconds != douyinResolverCardImageTimeout {
+		t.Fatalf("resolver cover request = %#v", fake.HTTPRequests)
+	}
+}
+
+func TestPrepareResolverCardFallsBackWhenCoverTimesOut(t *testing.T) {
+	fake := newActions()
+	fake.HTTPErrors = []error{context.DeadlineExceeded}
+	card := resolverCardFixture()
+
+	prepared := (&session{actions: fake}).PrepareResolverCard(t.Context(), card)
+	if len(prepared.Resources) != 0 {
+		t.Fatalf("timed out cover kept remote render resources: %#v", prepared.Resources)
+	}
+	items := plugin.MapSliceValue(prepared.Data["media_items"])
+	if got := plugin.StringScalar(items[0]["url"]); got != "assets/cover.svg" {
+		t.Fatalf("timed out cover did not use template fallback: %q", got)
+	}
+	if plugin.StringScalar(items[0]["resource_id"]) != "" {
+		t.Fatalf("timed out cover kept resource id: %#v", items[0])
+	}
+}
+
+func resolverCardFixture() plugin.CardRequest {
+	return plugin.CardRequest{
+		Data: map[string]any{"media_items": []map[string]any{{
+			"url": "assets/cover.svg", "fallback": "assets/cover.svg", "resource_id": "douyin-media-0",
+		}}},
+		Resources: []plugin.RenderResource{{
+			ID: "douyin-media-0", URL: "https://p3-pc.douyinpic.com/aweme/cover.jpeg", Referer: douyinRenderResourceReferer,
+		}},
+	}
+}

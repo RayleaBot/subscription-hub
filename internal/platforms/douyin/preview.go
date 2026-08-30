@@ -98,6 +98,9 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		resolved.URL = douyinCanonicalPreviewURL(resolved.Kind, resolved.ID)
 		ref = resolved
 	}
+	if update := douyinPreviewUpdateFromPage(shareBody, ref); update != nil {
+		return update, nil
+	}
 	accounts, accErr := readDouyinAccounts(ctx, actions)
 	if ref.Kind == "live" {
 		if accErr != nil {

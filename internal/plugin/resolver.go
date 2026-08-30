@@ -38,6 +38,10 @@ type ResolverMediaPlanningSession interface {
 	ResolverMedia(context.Context, Update, ResolverMediaSettings) (ResolverMediaPlan, error)
 }
 
+type ResolverCardPreparingSession interface {
+	PrepareResolverCard(context.Context, CardRequest) CardRequest
+}
+
 func (handler *Handler) handleResolverMessage(ctx context.Context, event *rayleabot.EventContext) error {
 	if event.Event.EventType != "message.group" && event.Event.EventType != "message.private" {
 		return event.Result(map[string]any{"handled": false})
@@ -88,6 +92,9 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		Services: []string{"all"}, Subscribers: []Subscriber{}, Enabled: true,
 	}
 	card := session.UpdateCard(item, update)
+	if preparer, ok := session.(ResolverCardPreparingSession); ok {
+		card = preparer.PrepareResolverCard(resolverCtx, card)
+	}
 	card.Template = resolverTemplateID(platform)
 	imagePath, renderErr := handler.renderReplyCard(resolverCtx, handler.hostActions(event), card, map[string]any{"platform": platform, "stage": "resolve"})
 	if renderErr != nil {
