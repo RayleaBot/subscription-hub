@@ -3,6 +3,8 @@ import { computed, ref, watch } from 'vue'
 
 import {
   allTargets,
+  deriveTargetAvatarURL,
+  displayAvatarURL,
   normalizeResolverSettings,
   targetKey,
   type LiveTarget,
@@ -15,12 +17,14 @@ type ResolverPage = 'group' | 'private' | 'strategy'
 
 const props = defineProps<{
   modelValue: ResolverSettings
+  avatarDataUrls: Map<string, string>
   targets: TargetsState
   view: ResolverPage
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: ResolverSettings]
   'open-help': []
+  'request-avatars': [sources: string[]]
 }>()
 
 const page = computed(() => props.view)
@@ -63,7 +67,7 @@ const configuredTargets = computed(() => {
       target_type: target.target_type,
       target_id: target.target_id,
       label: live?.label || target.target_name || target.target_id,
-      avatar_url: live?.avatar_url || '',
+      avatar_url: live?.avatar_url || deriveTargetAvatarURL(target.target_type, target.target_id),
     }
   })
 })
@@ -83,6 +87,12 @@ const candidateTargets = computed(() => {
 })
 const visibleConfiguredTargets = computed(() => filteredConfiguredTargets.value.slice(0, 100))
 const visibleCandidateTargets = computed(() => candidateTargets.value.slice(0, 100))
+const visibleAvatarSources = computed(() => {
+  const targets = pickerOpen.value
+    ? [...visibleConfiguredTargets.value, ...visibleCandidateTargets.value]
+    : visibleConfiguredTargets.value
+  return [...new Set(targets.map((target) => target.avatar_url).filter(Boolean))]
+})
 const targetTypeLabel = computed(() => page.value === 'group' ? '群聊' : '用户')
 const pageCopy = computed(() => {
   if (page.value === 'group') return { title: '群聊解析', description: '从连接协议添加需要管理的群聊，再分别开启 B站、微博或抖音解析。' }
@@ -90,8 +100,33 @@ const pageCopy = computed(() => {
   return { title: '防抖与媒体策略', description: '管理解析冷却、直播录制、视频发送和平台清晰度策略。' }
 })
 
+watch(
+  () => visibleAvatarSources.value.join('\n'),
+  () => {
+    if (visibleAvatarSources.value.length > 0) emit('request-avatars', visibleAvatarSources.value)
+  },
+  { immediate: true },
+)
+
 function targetMatches(target: LiveTarget, query: string): boolean {
   return `${target.label} ${target.target_id}`.toLowerCase().includes(query)
+}
+
+function avatarURL(target: LiveTarget): string {
+  return displayAvatarURL(target.avatar_url, props.avatarDataUrls)
+}
+
+function avatarFallback(target: LiveTarget): string {
+  return [...target.label.trim()][0] || (target.target_type === 'group' ? '群' : '用')
+}
+
+function targetNumberLabel(target: LiveTarget): string {
+  return `${target.target_type === 'group' ? '群号' : 'QQ'} ${target.target_id}`
+}
+
+function resolverPlatformLabel(platform: ResolverPlatform): string {
+  if (platform === 'bilibili') return 'B站'
+  return platform === 'weibo' ? '微博' : '抖音'
 }
 
 function platformEnabled(target: LiveTarget, platform: ResolverPlatform): boolean {
@@ -159,14 +194,25 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
           <span>搜索可添加{{ targetTypeLabel }}</span>
           <input v-model="pickerSearch" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
         </label>
-        <div class="candidate-list">
-          <div v-for="target in visibleCandidateTargets" :key="target.key" class="candidate-row">
-            <div class="target-identity">
+        <div class="candidate-grid">
+          <button
+            v-for="target in visibleCandidateTargets"
+            :key="target.key"
+            type="button"
+            class="target-choice-card"
+            :aria-label="`添加${target.label}，${targetNumberLabel(target)}`"
+            :title="`点击添加${target.label}`"
+            @click="addTarget(target)"
+          >
+            <span class="target-avatar target-avatar--choice" aria-hidden="true">
+              <img v-if="avatarURL(target)" :src="avatarURL(target)" alt="" />
+              <span v-else>{{ avatarFallback(target) }}</span>
+            </span>
+            <span class="target-identity">
               <strong :title="target.label">{{ target.label }}</strong>
-              <span>{{ target.target_id }}</span>
-            </div>
-            <button type="button" class="target-button" @click="addTarget(target)">添加</button>
-          </div>
+              <span>{{ targetNumberLabel(target) }}</span>
+            </span>
+          </button>
           <div v-if="visibleCandidateTargets.length === 0" class="picker-empty">
             <strong>{{ !targets.loaded ? `正在读取连接协议中的${targetTypeLabel}…` : pickerSearch ? '没有匹配项' : `暂无可添加${targetTypeLabel}` }}</strong>
             <span v-if="targets.loaded && !pickerSearch">{{ targets.available ? `连接协议中的${targetTypeLabel}已全部添加。` : '请确认连接协议在线，并刷新可选范围。' }}</span>
@@ -176,26 +222,34 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
         <p v-if="candidateTargets.length > visibleCandidateTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
       </section>
 
-      <div class="target-table" role="table" :aria-label="`${page === 'group' ? '群聊' : '用户'}解析开关`">
-        <div class="target-table-head" role="row">
-          <span role="columnheader">对象</span><span role="columnheader">B站</span><span role="columnheader">微博</span><span role="columnheader">抖音</span><span role="columnheader">操作</span>
-        </div>
-        <div v-for="target in visibleConfiguredTargets" :key="target.key" class="target-row" role="row">
-          <div class="target-identity" role="cell">
-            <strong :title="target.label">{{ target.label }}</strong>
-            <span>{{ target.target_id }}</span>
+      <div class="resolver-target-grid" :aria-label="`${page === 'group' ? '群聊' : '用户'}解析开关`">
+        <article v-for="target in visibleConfiguredTargets" :key="target.key" class="resolver-target-card">
+          <div class="resolver-target-card__head">
+            <span class="target-avatar" aria-hidden="true">
+              <img v-if="avatarURL(target)" :src="avatarURL(target)" alt="" />
+              <span v-else>{{ avatarFallback(target) }}</span>
+            </span>
+            <div class="target-identity">
+              <strong :title="target.label">{{ target.label }}</strong>
+              <span>{{ targetNumberLabel(target) }}</span>
+            </div>
+            <button type="button" class="target-remove" :aria-label="`移除${target.label}`" @click="removeTarget(target)">移除</button>
           </div>
-          <label v-for="platform in (['bilibili', 'weibo', 'douyin'] as ResolverPlatform[])" :key="platform" class="compact-switch" role="cell">
-            <input
-              type="checkbox"
-              :checked="platformEnabled(target, platform)"
-              :aria-label="`${target.label} ${platform === 'bilibili' ? 'B站' : platform === 'weibo' ? '微博' : '抖音'}解析`"
-              @change="setPlatform(target, platform, ($event.target as HTMLInputElement).checked)"
-            />
-            <span aria-hidden="true"></span>
-          </label>
-          <div class="target-action" role="cell"><button type="button" @click="removeTarget(target)">移除</button></div>
-        </div>
+          <div class="resolver-platforms">
+            <label v-for="platform in (['bilibili', 'weibo', 'douyin'] as ResolverPlatform[])" :key="platform" class="platform-switch">
+              <span>{{ resolverPlatformLabel(platform) }}</span>
+              <span class="compact-switch">
+                <input
+                  type="checkbox"
+                  :checked="platformEnabled(target, platform)"
+                  :aria-label="`${target.label} ${resolverPlatformLabel(platform)}解析`"
+                  @change="setPlatform(target, platform, ($event.target as HTMLInputElement).checked)"
+                />
+                <span aria-hidden="true"></span>
+              </span>
+            </label>
+          </div>
+        </article>
         <div v-if="visibleConfiguredTargets.length === 0" class="resolver-empty">
           <strong>{{ manageSearch ? '没有匹配项' : `尚未添加${targetTypeLabel}` }}</strong>
           <span>{{ manageSearch ? '请调整筛选条件。' : `点击“添加${targetTypeLabel}”从连接协议选择；在聊天中开启解析后也会自动加入。` }}</span>
@@ -363,26 +417,66 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 }
 .target-picker-heading h3 { margin: 0; color: var(--text); font-size: 17px; }
 .target-picker-heading p { max-width: 70ch; margin: 6px 0 0; color: var(--muted); line-height: 1.55; }
-.candidate-list { display: grid; gap: 0; overflow: hidden; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
-.candidate-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 62px; padding: 10px 14px; }
-.candidate-row + .candidate-row { border-top: 1px solid var(--border); }
-.candidate-row .target-identity { flex: 1 1 auto; padding-inline: 0; }
-.picker-empty { display: grid; gap: 5px; place-items: center; min-height: 126px; padding: 22px; color: var(--muted); text-align: center; }
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.target-choice-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 68px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 160ms ease-out, background 160ms ease-out, transform 160ms ease-out;
+}
+.target-choice-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); transform: translateY(-1px); }
+.picker-empty { display: grid; grid-column: 1 / -1; gap: 5px; place-items: center; min-height: 126px; padding: 22px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); background: var(--surface); text-align: center; }
 .picker-empty strong { color: var(--text); }
 .picker-issue { margin: 12px 0 0; color: var(--danger); font-size: 13px; line-height: 1.55; }
 
-.target-table { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
-.target-table-head,
-.target-row { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(70px, 94px)) 72px; align-items: center; }
-.target-table-head { min-height: 42px; color: var(--muted); background: var(--surface-soft); font-size: 13px; font-weight: 800; }
-.target-table-head span { text-align: center; }
-.target-table-head span:first-child { padding-inline: 18px; text-align: start; }
-.target-row { min-height: 66px; border-top: 1px solid var(--border); }
-.target-identity { min-width: 0; padding-inline: 18px; }
+.resolver-target-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+.resolver-target-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.resolver-target-card__head { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.target-avatar {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-soft));
+  font-size: 17px;
+  font-weight: 800;
+}
+.target-avatar--choice { width: 44px; height: 44px; }
+.target-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.target-identity { min-width: 0; }
 .target-identity strong,
-.target-identity span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.target-identity strong { color: var(--text); }
-.target-identity span { margin-top: 3px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.target-identity span { display: block; min-width: 0; }
+.target-identity strong { display: -webkit-box; overflow: hidden; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.target-identity span { overflow: hidden; margin-top: 3px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.target-remove { min-height: 36px; padding: 0 9px; border: 0; border-radius: 8px; color: var(--danger); background: transparent; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.target-remove:hover { background: color-mix(in srgb, var(--danger) 9%, transparent); }
+.resolver-platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--border); }
+.platform-switch { display: grid; min-width: 0; place-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 750; }
 
 .compact-switch { display: grid; place-items: center; }
 .compact-switch input { position: absolute; opacity: 0; pointer-events: none; }
@@ -409,17 +503,15 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 }
 .compact-switch input:checked + span { background: var(--accent); }
 .compact-switch input:checked + span::after { transform: translateX(16px); }
-.target-action { display: grid; place-items: center; }
-.target-action button { min-height: 34px; padding: 0 9px; border: 0; border-radius: 8px; color: var(--danger); background: transparent; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
-.target-action button:hover { background: color-mix(in srgb, var(--danger) 9%, transparent); }
 .compact-switch input:focus-visible + span,
 .preview-help:focus-visible,
 .target-button:focus-visible,
-.target-action button:focus-visible,
+.target-choice-card:focus-visible,
+.target-remove:focus-visible,
 input:focus-visible,
 select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, transparent); outline-offset: 2px; }
 
-.resolver-empty { display: grid; gap: 5px; place-items: center; min-height: 160px; padding: 24px; color: var(--muted); text-align: center; }
+.resolver-empty { display: grid; grid-column: 1 / -1; gap: 5px; place-items: center; min-height: 160px; padding: 24px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; }
 .resolver-empty strong { color: var(--text); }
 .result-limit { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
 
@@ -458,8 +550,6 @@ select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, 
 @media (max-width: 820px) {
   .resolver-heading { align-items: stretch; flex-direction: column; }
   .preview-help { width: 100%; }
-  .target-table-head,
-  .target-row { grid-template-columns: minmax(150px, 1fr) repeat(3, 62px) 60px; }
   .setting-grid--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -472,9 +562,7 @@ select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, 
   .target-toolbar { align-items: stretch; flex-direction: column; }
   .target-button--primary { width: 100%; }
   .target-picker { padding: 16px; }
-  .target-table-head,
-  .target-row { grid-template-columns: minmax(110px, 1fr) repeat(3, 50px) 52px; }
-  .target-identity { padding-inline: 12px; }
-  .target-action button { padding-inline: 6px; }
+  .resolver-target-card__head { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; }
+  .target-avatar { width: 44px; height: 44px; }
 }
 </style>

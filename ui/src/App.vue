@@ -6,6 +6,7 @@ import { usePluginHost } from '@rayleabot/plugin-ui'
 import { readCachedAvatarDataURLs, storeAvatarDataURLs } from './avatar-cache'
 import ResolverSettingsPanel from './components/ResolverSettingsPanel.vue'
 import SubscriptionCard from './components/SubscriptionCard.vue'
+import { mergeAndCacheProtocolTargets, readCachedProtocolTargets } from './target-cache'
 import {
   buildIdentityRequests,
   buildRowsFromSettings,
@@ -15,7 +16,6 @@ import {
   collectSubscriberIdentities,
   createBlankRow,
   createRowContext,
-  emptyTargets,
   DEFAULT_DELIVERY_MAX_AGE_MINUTES,
   DEFAULT_RESOLVER_SETTINGS,
   identityKey,
@@ -60,7 +60,7 @@ const defaultSettings: SubscriptionSettings = {
 }
 const settings = ref<SubscriptionSettings>(structuredClone(defaultSettings))
 const rows = ref<SubscriptionRow[]>([])
-const targets = ref<TargetsState>(emptyTargets())
+const targets = ref<TargetsState>(readCachedProtocolTargets())
 const subscriberAvatars = ref(new Map<string, string>())
 const subscriberIdentities = ref(new Map<string, Subscriber>())
 const avatarDataURLs = ref(new Map<string, string>())
@@ -108,7 +108,7 @@ const targetMetric = computed(() => {
 const dirtyStateText = computed(() => {
   if (!loaded.value) return '等待载入'
   if (saving.value) return '正在保存'
-  return isDirty.value ? '设置有修改' : '设置已同步'
+  return isDirty.value ? '设置尚未保存' : '设置已同步'
 })
 const footerStatusText = computed(() => {
   if (statusIsError.value) return status.value
@@ -188,7 +188,7 @@ async function reloadTargets(refreshAvatars = true) {
   setStatus('正在刷新可选推送范围…')
   try {
     const payload = await host.client.request<Record<string, unknown>>('protocol.targets.reload', undefined, 5_000)
-    targets.value = normalizeTargets(payload)
+    targets.value = mergeAndCacheProtocolTargets(normalizeTargets(payload))
     const issue = targets.value.issues[0]?.message
     const liveCount = targets.value.groups.length + targets.value.private_users.length
     const knownCount = context.value.targets.groups.length + context.value.targets.private_users.length
@@ -197,18 +197,20 @@ async function reloadTargets(refreshAvatars = true) {
     else if (knownCount > 0) setStatus(`${issue ? `未拉到新的可选范围：${issue}` : '未拉到新的可选范围'}，已保留 ${knownCount} 个已保存目标`)
     else setStatus(issue || '可选推送范围不可用', true)
   } catch (error) {
-    targets.value = normalizeTargets({
+    targets.value = mergeAndCacheProtocolTargets(normalizeTargets({
       available: false,
       groups: [],
       private_users: [],
       issues: [{ scope: 'protocol', message: errorMessage(error, '可选推送范围不可用') }],
-    })
+    }))
     const knownCount = context.value.targets.groups.length + context.value.targets.private_users.length
     setStatus(knownCount > 0 ? `未拉到新的可选范围，已保留 ${knownCount} 个已保存目标` : errorMessage(error, '可选推送范围不可用'), knownCount === 0)
   } finally {
     targetsLoading.value = false
-    if (refreshAvatars) revalidateAvatarURLs()
-    else void hydrateAvatarURLs()
+    if (isSubscriptionsPage.value) {
+      if (refreshAvatars) void revalidateAvatarURLs()
+      else hydrateAvatarURLs()
+    }
   }
 }
 
@@ -445,6 +447,18 @@ function currentAvatarURLs(): string[] {
 
 function hydrateAvatarURLs(force = false) {
   void resolveAvatarURLs(currentAvatarURLs(), force)
+}
+
+function hydrateResolverAvatarURLs(sources: string[]) {
+  const remoteSources = unique(sources).filter((source) => /^https:\/\//i.test(source))
+  if (remoteSources.length === 0) return
+  const cached = readCachedAvatarDataURLs(remoteSources)
+  if (cached.size > 0) {
+    const next = new Map(avatarDataURLs.value)
+    for (const [source, dataURL] of cached) next.set(source, dataURL)
+    avatarDataURLs.value = next
+  }
+  void resolveAvatarURLs(remoteSources)
 }
 
 function revalidateAvatarURLs(): Promise<void> {
@@ -728,9 +742,11 @@ function errorMessage(error: unknown, fallback: string): string {
     <ResolverSettingsPanel
       v-if="!isSubscriptionsPage"
       v-model="settings.resolver"
+      :avatar-data-urls="avatarDataURLs"
       :targets="targets"
       :view="resolverView"
       @open-help="openPreview('resolver-help')"
+      @request-avatars="hydrateResolverAvatarURLs"
     />
 
     <section v-if="isSubscriptionsPage" class="panel">
@@ -788,7 +804,10 @@ function errorMessage(error: unknown, fallback: string): string {
     </section>
 
     <footer class="actions-bar">
-      <div class="dirty-state" :class="{ 'is-error': statusIsError }" aria-live="polite">{{ footerStatusText }}</div>
+      <div class="dirty-state" :class="{ 'is-error': statusIsError, 'is-warning': isDirty && !saving && !statusIsError }" aria-live="polite">
+        <strong>{{ footerStatusText }}</strong>
+        <span v-if="isDirty && !saving && !statusIsError">请点击“保存设置”；重新载入或离开页面会丢失修改。</span>
+      </div>
       <div class="footer-buttons">
         <button type="button" class="button" :disabled="saving" @click="reloadSettings">重新载入</button>
         <button type="button" class="button" :disabled="saving" @click="resetCurrentPage">{{ isSubscriptionsPage ? '恢复默认' : activePage === 'resolver-strategy' ? '恢复默认策略' : '关闭本页全部解析' }}</button>
