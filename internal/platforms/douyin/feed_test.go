@@ -3,6 +3,7 @@ package douyin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -607,6 +608,16 @@ func TestDouyinDiagnosticsNeverIncludeUpstreamBody(t *testing.T) {
 	}
 	if !strings.Contains(message, "HTTP 403") {
 		t.Fatalf("douyin diagnostic = %q", message)
+	}
+	var sourceErr *douyinSourceError
+	if !errors.As(err, &sourceErr) || sourceErr.Kind != "session_blocked" {
+		t.Fatalf("HTTP 403 classification = %#v", sourceErr)
+	}
+	if strings.Contains(message, "CK 已失效") || !strings.Contains(message, "服务器检查结果") {
+		t.Fatalf("HTTP 403 feedback = %q", message)
+	}
+	if len(fake.AccountValidations) != 1 || fake.AccountValidations[0].Observation != "session_blocked" || fake.AccountValidations[0].HTTPStatus != 403 {
+		t.Fatalf("HTTP 403 validation request = %#v", fake.AccountValidations)
 	}
 }
 
