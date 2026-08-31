@@ -39,12 +39,11 @@ func buildDouyinMetrics(update map[string]any) []map[string]any {
 	if stats == nil {
 		return nil
 	}
-	metrics := make([]map[string]any, 0, 6)
+	metrics := make([]map[string]any, 0, 5)
 	specs := []struct {
 		key, label string
 		value      any
 	}{
-		{key: "play", label: "播放", value: stats["play"]},
 		{key: "like", label: "点赞", value: stats["like"]},
 		{key: "favorite", label: "收藏", value: stats["favorite"]},
 		{key: "comment", label: "评论", value: stats["comment"]},

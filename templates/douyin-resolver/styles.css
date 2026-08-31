@@ -364,7 +364,6 @@ h1 {
   background-size: 300% 200%;
 }
 
-.metric-icon--play { background-position: 0 0; }
 .metric-icon--like { background-position: 50% 0; }
 .metric-icon--favorite { background-position: 100% 0; }
 .metric-icon--comment { background-position: 0 100%; }

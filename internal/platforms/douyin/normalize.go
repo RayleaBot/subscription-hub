@@ -87,7 +87,6 @@ func mergeDouyinStats(stats map[string]any) map[string]any {
 		return nil
 	}
 	return map[string]any{
-		"play":     plugin.FirstNonNil(stats["play_count"], stats["playCount"]),
 		"like":     plugin.FirstNonNil(stats["digg_count"], stats["like_count"], stats["diggCount"]),
 		"favorite": plugin.FirstNonNil(stats["collect_count"], stats["collectCount"]),
 		"comment":  plugin.FirstNonNil(stats["comment_count"], stats["commentCount"]),

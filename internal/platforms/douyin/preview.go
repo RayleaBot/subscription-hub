@@ -239,7 +239,7 @@ func sampleDouyinUpdate(service string, now time.Time) map[string]any {
 		"author":   map[string]any{"name": "RayleaBot 示例用户", "uid": "MS4wLjABAAAApreview"},
 		"pub_ts":   now.Unix(), "created_at": now.Format("2006-01-02 15:04"),
 		"url":   "https://www.douyin.com/video/7000000000000000000",
-		"stats": map[string]any{"play": 1286000, "like": 96000, "favorite": 68000, "comment": 8600, "share": 12000},
+		"stats": map[string]any{"like": 96000, "favorite": 68000, "comment": 8600, "share": 12000},
 	}
 	switch service {
 	case "image_text":

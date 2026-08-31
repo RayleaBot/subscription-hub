@@ -63,7 +63,7 @@
         "type": "object",
         "required": ["key", "label", "value", "value_text", "icon_class"],
         "properties": {
-          "key": { "type": "string", "enum": ["play", "like", "favorite", "comment", "share", "viewers"] },
+          "key": { "type": "string", "enum": ["like", "favorite", "comment", "share", "viewers"] },
           "label": { "type": "string", "minLength": 1 },
           "value": { "type": "integer", "minimum": 0 },
           "value_text": { "type": "string", "minLength": 1 },

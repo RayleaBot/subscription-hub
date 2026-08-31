@@ -35,7 +35,6 @@
     }
   ],
   "metrics": [
-    { "key": "play", "label": "播放", "value": 1286000, "value_text": "128.6万", "icon_class": "metric-icon--play" },
     { "key": "like", "label": "点赞", "value": 96000, "value_text": "9.6万", "icon_class": "metric-icon--like" },
     { "key": "favorite", "label": "收藏", "value": 68000, "value_text": "6.8万", "icon_class": "metric-icon--favorite" },
     { "key": "comment", "label": "评论", "value": 8600, "value_text": "8600", "icon_class": "metric-icon--comment" },
