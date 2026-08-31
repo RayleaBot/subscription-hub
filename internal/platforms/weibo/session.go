@@ -96,6 +96,9 @@ func (session *session) Preview(ctx context.Context, input string) (plugin.Updat
 		update, err := fetchWeiboPreview(ctx, session.actions, ref)
 		return update, true, err
 	}
+	if isWeiboShortURL(input) {
+		return nil, true, errors.New("微博短链展开失败，请发送完整微博链接。")
+	}
 	if looksLikeWeiboPreviewURL(input) {
 		return nil, true, errors.New("暂不支持这个 微博 链接。")
 	}

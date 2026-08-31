@@ -2,6 +2,7 @@ package weibo
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -12,13 +13,14 @@ import (
 
 func TestParseWeiboPreviewURL(t *testing.T) {
 	tests := map[string]string{
-		"https://m.weibo.cn/status/5000000000000001":    "5000000000000001",
-		"https://m.weibo.cn/detail/5000000000000001":    "5000000000000001",
-		"https://m.weibo.cn/statuses/show?id=P8abcXYZ":  "P8abcXYZ",
-		"https://weibo.com/6000000001/P8abcXYZ":         "P8abcXYZ",
-		"https://weibo.com/7198559139/5331543666721397": "5331543666721397",
-		"https://www.weibo.com/u/6000000001/5000000001": "5000000001",
-		"m.weibo.cn/status/5000000000000001":            "5000000000000001",
+		"https://m.weibo.cn/status/5000000000000001":                           "5000000000000001",
+		"https://m.weibo.cn/detail/5000000000000001":                           "5000000000000001",
+		"https://m.weibo.cn/statuses/show?id=P8abcXYZ":                         "P8abcXYZ",
+		"https://weibo.com/6000000001/P8abcXYZ":                                "P8abcXYZ",
+		"https://weibo.com/7198559139/5331543666721397":                        "5331543666721397",
+		"https://weibo.com/tv/show/1034:5331543666721397?mid=5331543666721397": "RdeASscxD",
+		"https://www.weibo.com/u/6000000001/5000000001":                        "5000000001",
+		"m.weibo.cn/status/5000000000000001":                                   "5000000000000001",
 	}
 	for rawURL, id := range tests {
 		ref := parseWeiboPreviewURL(rawURL)
@@ -34,6 +36,13 @@ func TestParseWeiboPreviewURL(t *testing.T) {
 	}
 	if !looksLikeWeiboPreviewURL("https://weibo.com/ttarticle/p/show?id=230940") {
 		t.Fatal("article URL should still look like a weibo link")
+	}
+}
+
+func TestWeiboPreviewReportsUnexpandedShortLink(t *testing.T) {
+	_, handled, err := (&session{}).Preview(t.Context(), "https://t.cn/A6fixture")
+	if !handled || err == nil || !strings.Contains(err.Error(), "请发送完整微博链接") {
+		t.Fatalf("short-link result: handled=%v err=%v", handled, err)
 	}
 }
 
@@ -58,6 +67,37 @@ func TestFetchWeiboPreviewUsesMobileStatusAPI(t *testing.T) {
 	}
 	if fake.HTTPRequests[0].Headers["Referer"] != "https://m.weibo.cn/status/5000000000000001" {
 		t.Fatalf("preview referer = %#v", fake.HTTPRequests[0].Headers)
+	}
+}
+
+func TestFetchWeiboPreviewFallsBackToDetailPage(t *testing.T) {
+	fake := testkit.NewActions()
+	fake.Accounts = fixtureWeiboAccounts("primary")
+	mblog := weiboImageMblog("5000000000000001", "6000000001", "详情页微博", 1700000000)
+	raw, err := json.Marshal(mblog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.HTTPRoutes = []testkit.HTTPRoute{
+		{Path: "/statuses/show", Result: testkit.HTTPJSON(503, map[string]any{"ok": 0})},
+		{Path: "/detail/5000000000000001", Result: map[string]any{
+			"status_code": 200,
+			"body_text":   `<script>window.$render_data = [{"status":` + string(raw) + `}][0]</script>`,
+		}},
+	}
+
+	update, err := fetchWeiboPreview(t.Context(), fake, parseWeiboPreviewURL("https://m.weibo.cn/status/5000000000000001"))
+	if err != nil {
+		t.Fatalf("fetchWeiboPreview() error = %v", err)
+	}
+	if plugin.StringScalar(update["id"]) != "5000000000000001" || plugin.StringScalar(update["summary"]) != "详情页微博" {
+		t.Fatalf("detail-page update = %#v", update)
+	}
+	if len(fake.HTTPRequests) != 2 || !strings.Contains(fake.HTTPRequests[1].URL, "/detail/5000000000000001") {
+		t.Fatalf("preview fallback requests = %#v", testkit.RequestURLs(fake))
+	}
+	if _, exists := fake.HTTPRequests[1].Headers["X-Requested-With"]; exists {
+		t.Fatalf("detail page kept API-only header: %#v", fake.HTTPRequests[1].Headers)
 	}
 }
 

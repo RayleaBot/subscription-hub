@@ -18,6 +18,8 @@ const weiboMobileContainerURL = "https://m.weibo.cn/api/container/getIndex"
 
 const weiboStatusShowURL = "https://m.weibo.cn/statuses/show"
 
+const weiboDetailURL = "https://m.weibo.cn/detail/"
+
 const weiboLongTextURL = "https://m.weibo.cn/statuses/extend"
 
 const weiboWebUserSearchURL = "https://s.weibo.com/user"
@@ -168,6 +170,10 @@ func weiboStatusShowEndpoint(id string) string {
 	return weiboStatusShowURL + "?" + values.Encode()
 }
 
+func weiboDetailEndpoint(id string) string {
+	return weiboDetailURL + url.PathEscape(strings.TrimSpace(id))
+}
+
 func weiboLongTextEndpoint(id string) string {
 	values := url.Values{}
 	values.Set("id", strings.TrimSpace(id))
@@ -207,6 +213,31 @@ func (client *weiboClient) requestJSON(ctx context.Context, rawURL string, accou
 		return nil, sourceErr
 	}
 	return document, nil
+}
+
+func (client *weiboClient) requestHTML(ctx context.Context, rawURL string, account weiboAccount, referer string) (string, error) {
+	headers := weiboRequestHeaders(account.Cookie, referer)
+	headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+	headers["Sec-Fetch-Dest"] = "document"
+	headers["Sec-Fetch-Mode"] = "navigate"
+	delete(headers, "X-Requested-With")
+	response, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+		Method: "GET", URL: rawURL, Headers: headers, TimeoutSeconds: weiboRequestTimeoutSeconds,
+	})
+	if err != nil {
+		return "", err
+	}
+	status := int(plugin.IntScalar(response["status_code"]))
+	if status < 200 || status >= 300 {
+		sourceErr := &weiboSourceError{Kind: weiboErrorKind(status), HTTPStatus: status}
+		client.requestCredentialValidation(ctx, account, sourceErr)
+		return "", sourceErr
+	}
+	body := plugin.StringScalar(response["body_text"])
+	if body == "" {
+		return "", &weiboSourceError{Kind: "invalid_response", HTTPStatus: status}
+	}
+	return body, nil
 }
 
 func (client *weiboClient) requestCredentialValidation(ctx context.Context, account weiboAccount, sourceErr *weiboSourceError) {

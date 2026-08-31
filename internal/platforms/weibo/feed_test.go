@@ -520,7 +520,7 @@ func TestWeiboSubscriptionCheckFiltersByService(t *testing.T) {
 	}
 }
 
-func TestWeiboSubscriptionCheckDelegatesMediaPrefetchToHost(t *testing.T) {
+func TestWeiboSubscriptionCheckPrefetchesMediaBeforeRendering(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.Accounts = fixtureWeiboAccounts("primary")
 	now := time.Now().Truncate(time.Second)
@@ -531,6 +531,7 @@ func TestWeiboSubscriptionCheckDelegatesMediaPrefetchToHost(t *testing.T) {
 	fake.KV[weiboFeedSourceKey(item)] = true
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/api/container/getIndex", Result: weiboFeedResult(weiboImageMblog("retry-image", item.UID, "图片微博", now.Unix()))},
+		{Path: "/mw690/ok.jpg", Result: testkit.AvatarHTTPResult()},
 		{Path: "/face.jpg", Result: testkit.AvatarHTTPResult()},
 	}
 
@@ -539,24 +540,24 @@ func TestWeiboSubscriptionCheckDelegatesMediaPrefetchToHost(t *testing.T) {
 	}, now)
 
 	if plugin.IntScalar(result["sent"]) != 1 || plugin.BoolScalar(result["degraded"]) {
-		t.Fatalf("host-prefetched media should keep the plugin delivery healthy: %#v", result)
+		t.Fatalf("plugin-prefetched media should keep the delivery healthy: %#v", result)
 	}
 	if len(fake.Renders) != 1 || len(fake.Messages) != 1 {
 		t.Fatalf("media render was not delivered: renders=%d messages=%d", len(fake.Renders), len(fake.Messages))
 	}
 	media := plugin.MapSliceValue(fake.Renders[0].Data["media_items"])
-	if len(media) != 1 || plugin.StringScalar(media[0]["url"]) != "assets/grid.svg" || plugin.StringScalar(media[0]["resource_id"]) != "weibo-media-0" {
+	if len(media) != 1 || !strings.HasPrefix(plugin.StringScalar(media[0]["url"]), "data:image/png;base64,") || plugin.StringScalar(media[0]["resource_id"]) != "" {
 		t.Fatalf("media resource mapping = %#v", media)
 	}
-	if len(fake.ResourceRenders) != 1 || len(fake.ResourceRenders[0].Resources) != 1 || fake.ResourceRenders[0].Resources[0].URL != "https://tvax2.sinaimg.cn/large/ok.jpg" {
-		t.Fatalf("render resources = %#v", fake.ResourceRenders)
+	if len(fake.ResourceRenders) != 0 {
+		t.Fatalf("render still received remote resources: %#v", fake.ResourceRenders)
 	}
 	if _, exists := fake.KV["seen:retry-weibo-media:image:retry-image"]; !exists {
 		t.Fatalf("delivered placeholder card was not marked seen: %#v", fake.KV)
 	}
 }
 
-func TestWeiboSubscriptionCheckPassesMultipleMediaResources(t *testing.T) {
+func TestWeiboSubscriptionCheckFallsBackForUnavailableMedia(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.Accounts = fixtureWeiboAccounts("primary")
 	now := time.Now().Truncate(time.Second)
@@ -572,6 +573,7 @@ func TestWeiboSubscriptionCheckPassesMultipleMediaResources(t *testing.T) {
 	}
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/api/container/getIndex", Result: weiboFeedResult(mblog)},
+		{Path: "/mw690/good.jpg", Result: testkit.AvatarHTTPResult()},
 		{Path: "/face.jpg", Result: testkit.AvatarHTTPResult()},
 	}
 
@@ -580,17 +582,17 @@ func TestWeiboSubscriptionCheckPassesMultipleMediaResources(t *testing.T) {
 	}, now)
 
 	if plugin.IntScalar(result["sent"]) != 1 || plugin.BoolScalar(result["degraded"]) {
-		t.Fatalf("host-prefetched media should keep the plugin delivery healthy: %#v", result)
+		t.Fatalf("partial media fallback should keep the delivery healthy: %#v", result)
 	}
 	if len(fake.Renders) != 1 || len(fake.Messages) != 1 {
 		t.Fatalf("partial media failure did not deliver a card: renders=%d messages=%d", len(fake.Renders), len(fake.Messages))
 	}
 	media := plugin.MapSliceValue(fake.Renders[0].Data["media_items"])
-	if len(media) != 2 || plugin.StringScalar(media[0]["resource_id"]) != "weibo-media-0" || plugin.StringScalar(media[1]["resource_id"]) != "weibo-media-1" {
+	if len(media) != 2 || !strings.HasPrefix(plugin.StringScalar(media[0]["url"]), "data:image/png;base64,") || plugin.StringScalar(media[1]["url"]) != "assets/grid.svg" || plugin.StringScalar(media[0]["resource_id"]) != "" || plugin.StringScalar(media[1]["resource_id"]) != "" {
 		t.Fatalf("media resource mapping = %#v", media)
 	}
-	if len(fake.ResourceRenders) != 1 || len(fake.ResourceRenders[0].Resources) != 2 || fake.ResourceRenders[0].Resources[0].URL != "https://wx2.sinaimg.cn/large/good.jpg" || fake.ResourceRenders[0].Resources[1].URL != "https://wx2.sinaimg.cn/large/broken.jpg" {
-		t.Fatalf("render resources = %#v", fake.ResourceRenders)
+	if len(fake.ResourceRenders) != 0 {
+		t.Fatalf("render still received remote resources: %#v", fake.ResourceRenders)
 	}
 	if _, exists := fake.KV["seen:retry-partial-weibo-media:image:partial-image"]; !exists {
 		t.Fatalf("delivered card was not marked seen: %#v", fake.KV)

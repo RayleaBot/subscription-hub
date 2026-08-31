@@ -54,6 +54,10 @@ type CheckSession interface {
 	UpdateCard(Subscription, Update) CardRequest
 }
 
+type UpdateCardPreparingSession interface {
+	PrepareUpdateCard(context.Context, CardRequest) CardRequest
+}
+
 type PreviewSession interface {
 	Preview(context.Context, string) (Update, bool, error)
 	Sample(string, time.Time) Update

@@ -3,6 +3,7 @@ package weibo
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
@@ -47,6 +48,12 @@ func weiboResolverVideoURLs(mblog map[string]any) []string {
 		seen[candidate] = true
 		result = append(result, candidate)
 	}
+	urlMaps := []map[string]any{plugin.MapValue(page["urls"]), plugin.MapValue(media["urls"])}
+	for _, key := range []string{"mp4_1080p_mp4", "mp4_720p_mp4", "mp4_hd_mp4", "mp4_ld_mp4", "mp4_sd_mp4"} {
+		for _, object := range urlMaps {
+			add(object[key])
+		}
+	}
 	for _, key := range []string{"stream_url_hd", "mp4_hd_url", "stream_url", "mp4_sd_url", "video_url", "url"} {
 		add(media[key])
 		add(page[key])
@@ -56,10 +63,14 @@ func weiboResolverVideoURLs(mblog map[string]any) []string {
 		add(plugin.NestedValue(item, "play_info", "url"))
 		add(item["url"])
 	}
-	for _, raw := range []any{media["urls"], page["urls"]} {
-		object := plugin.MapValue(raw)
-		for _, value := range object {
-			add(value)
+	for _, object := range urlMaps {
+		keys := make([]string, 0, len(object))
+		for key := range object {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			add(object[key])
 		}
 	}
 	return result

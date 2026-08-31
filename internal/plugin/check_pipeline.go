@@ -127,6 +127,9 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 					failures = append(failures, failureText(platform.ID, "identity", failure))
 				}
 				card := session.UpdateCard(item, CloneJSONMap(content.value))
+				if preparer, ok := session.(UpdateCardPreparingSession); ok {
+					card = preparer.PrepareUpdateCard(ctx, card)
+				}
 				if handler.deliverUpdate(ctx, stateCtx, actions, item, update, card, avatars, &failures) {
 					sent++
 				}
