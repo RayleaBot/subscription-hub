@@ -540,6 +540,93 @@ func TestFetchDouyinPreviewUsesCompleteSharePageBeforeAccountAPI(t *testing.T) {
 	}
 }
 
+func TestFetchDouyinPreviewAnonymousDetailWithoutAccounts(t *testing.T) {
+	const awemeID = "7679356419690253583"
+	fake := newActions()
+	avatarURL := "https://p3-pc.douyinpic.com/aweme/100x100/aweme-avatar/fixture.jpeg?from=327834062"
+	fake.HTTPRoutes = []testkit.HTTPRoute{
+		{Path: "/4ZDtWeIBr4g/", Result: rayleabot.ActionResult{
+			"status_code": 302,
+			"headers":     map[string]any{"Location": "https://www.iesdouyin.com/share/video/" + awemeID + "/"},
+		}},
+		{Path: "/share/video/" + awemeID + "/", Result: rayleabot.ActionResult{
+			"status_code": 200,
+			"headers":     map[string]any{"Content-Type": "text/html"},
+			"body_text": douyinRouterDataPage(map[string]any{"loaderData": map[string]any{
+				"video_(id)/page": map[string]any{"itemId": awemeID},
+			}}),
+		}},
+		{Path: "/aweme/v1/web/aweme/detail/", Result: testkit.HTTPJSON(200, map[string]any{
+			"status_code": 0,
+			"aweme_detail": map[string]any{
+				"aweme_id": awemeID, "aweme_type": 0, "desc": "匿名链作品", "create_time": time.Now().Unix(),
+				"author": map[string]any{
+					"sec_uid": "MS4wLjABAAAAfixture", "nickname": "测试用户",
+					"avatar_thumb": map[string]any{"url_list": []any{avatarURL}},
+				},
+				"video": map[string]any{
+					"duration": 80000,
+					"cover":    map[string]any{"url_list": []any{"https://p3-pc-sign.douyinpic.com/fixture-cover.jpeg"}},
+				},
+			},
+		})},
+	}
+
+	update, err := fetchDouyinPreview(context.Background(), fake, &douyinPreviewRef{
+		Kind: "short", ID: "4ZDtWeIBr4g", URL: "https://v.douyin.com/4ZDtWeIBr4g/",
+	})
+	if err != nil {
+		t.Fatalf("fetchDouyinPreview() error = %v", err)
+	}
+	if plugin.StringScalar(update["id"]) != awemeID {
+		t.Fatalf("anonymous detail update = %#v", update)
+	}
+	author := plugin.MapValue(update["author"])
+	if plugin.StringScalar(author["avatar"]) != avatarURL {
+		t.Fatalf("anonymous detail avatar = %#v", author["avatar"])
+	}
+	for _, request := range fake.HTTPRequests[:2] {
+		if !strings.Contains(request.Headers["Cookie"], "ttwid=") {
+			t.Fatalf("share request missing anonymous ttwid: %#v", request.Headers)
+		}
+	}
+	detailRequest := fake.HTTPRequests[2]
+	if !strings.Contains(detailRequest.Headers["Cookie"], "ttwid=fixture-ttwid") || strings.Contains(detailRequest.Headers["Cookie"], "sessionid") {
+		t.Fatalf("anonymous detail request cookie = %q", detailRequest.Headers["Cookie"])
+	}
+	parsed, parseErr := url.Parse(detailRequest.URL)
+	if parseErr != nil {
+		t.Fatalf("parse anonymous detail URL: %v", parseErr)
+	}
+	if parsed.Query().Get("a_bogus") != "" {
+		t.Fatalf("anonymous detail request must stay unsigned: %s", detailRequest.URL)
+	}
+}
+
+func TestAnonymousTTWIDRegistersAndPersistsOnce(t *testing.T) {
+	fake := testkit.NewActions()
+	client := newDouyinClient(fake)
+	fake.HTTPRoutes = []testkit.HTTPRoute{{
+		Path: "/ttwid/union/register/", Result: rayleabot.ActionResult{
+			"status_code": 200,
+			"headers":     map[string]any{"Set-Cookie": "ttwid=registered-ttwid; Path=/; Domain=bytedance.com"},
+		},
+	}}
+	first := client.anonymousTTWID(context.Background())
+	if first != "registered-ttwid" {
+		t.Fatalf("anonymousTTWID() = %q", first)
+	}
+	if _, exists := fake.KV["source:douyin:anon_ttwid"]; !exists {
+		t.Fatalf("registered ttwid was not persisted to KV: %#v", fake.KV)
+	}
+	if len(fake.HTTPRequests) != 1 {
+		t.Fatalf("register requests = %#v", testkit.RequestURLs(fake))
+	}
+	if second := client.anonymousTTWID(context.Background()); second != "registered-ttwid" || len(fake.HTTPRequests) != 1 {
+		t.Fatalf("second anonymousTTWID() = %q with %d requests", second, len(fake.HTTPRequests))
+	}
+}
+
 func TestValidateAvatarSourceURLAllowsDouyinCDN(t *testing.T) {
 	for _, sourceURL := range []string{
 		"https://p3-pc.douyinpic.com/aweme/100x100/face.jpeg",
@@ -558,6 +645,20 @@ func TestValidateAvatarSourceURLAllowsDouyinCDN(t *testing.T) {
 		if _, _, err := plugin.ValidateAvatarSourceURL(sourceURL, avatarPolicy()); err == nil {
 			t.Fatalf("validateAvatarSourceURL(%q) accepted an undeclared host", sourceURL)
 		}
+	}
+}
+
+func TestInlineDouyinUpdateAvatarUsesSlowCDNBudget(t *testing.T) {
+	fake := newActions()
+	fake.HTTPDefault = testkit.AvatarHTTPResult()
+	data := map[string]any{"author": map[string]any{
+		"name": "测试用户", "avatar": "https://p3-pc.douyinpic.com/aweme/100x100/face.jpeg",
+	}}
+
+	newHandler(t).InlineUpdateAvatars(context.Background(), fake, data)
+
+	if len(fake.HTTPRequests) != 1 || fake.HTTPRequests[0].TimeoutSeconds != plugin.SlowAvatarTimeoutSeconds {
+		t.Fatalf("unexpected Douyin avatar request budget: %#v", fake.HTTPRequests)
 	}
 }
 

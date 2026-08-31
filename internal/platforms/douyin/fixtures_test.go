@@ -36,5 +36,8 @@ func newActions() *testkit.Actions {
 		}
 		return nil, nil, false
 	}
+	// 预置匿名 ttwid：生产环境首次注册后持久化；测试直接命中 KV，
+	// 避免每次分享页请求都额外触发 ttwid 注册端点。
+	actions.KV["source:douyin:anon_ttwid"] = map[string]any{"ttwid": "fixture-ttwid"}
 	return actions
 }

@@ -22,8 +22,10 @@ func TestPrepareResolverCardInlinesCoverBeforeRendering(t *testing.T) {
 	if got := plugin.StringScalar(items[0]["url"]); !strings.HasPrefix(got, "data:image/png;base64,") {
 		t.Fatalf("resolver cover was not inlined: %q", got)
 	}
-	if plugin.StringScalar(items[0]["resource_id"]) != "" {
-		t.Fatalf("resolver cover kept resource id: %#v", items[0])
+	for _, item := range items {
+		if plugin.StringScalar(item["resource_id"]) != "" {
+			t.Fatalf("resolver cover kept resource id: %#v", item)
+		}
 	}
 	if len(fake.HTTPRequests) != 1 || fake.HTTPRequests[0].TimeoutSeconds != douyinResolverCardImageTimeout {
 		t.Fatalf("resolver cover request = %#v", fake.HTTPRequests)
@@ -50,9 +52,12 @@ func TestPrepareResolverCardFallsBackWhenCoverTimesOut(t *testing.T) {
 
 func resolverCardFixture() plugin.CardRequest {
 	return plugin.CardRequest{
-		Data: map[string]any{"media_items": []map[string]any{{
-			"url": "assets/cover.svg", "fallback": "assets/cover.svg", "resource_id": "douyin-media-0",
-		}}},
+		Data: map[string]any{"media_items": []map[string]any{
+			{"url": "assets/cover.svg", "fallback": "assets/cover.svg", "resource_id": "douyin-media-0"},
+			{"url": "assets/grid.svg", "fallback": "assets/grid.svg", "resource_id": "douyin-media-1"},
+			{"url": "assets/grid.svg", "fallback": "assets/grid.svg", "resource_id": "douyin-media-2"},
+			{"url": "assets/grid.svg", "fallback": "assets/grid.svg", "resource_id": "douyin-media-3"},
+		}},
 		Resources: []plugin.RenderResource{{
 			ID: "douyin-media-0", URL: "https://p3-pc.douyinpic.com/aweme/cover.jpeg", Referer: douyinRenderResourceReferer,
 		}},

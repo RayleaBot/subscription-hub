@@ -126,6 +126,13 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		} else {
 			detailErr = err
 		}
+	} else {
+		detailErr = accErr
+	}
+	// 匿名链兜底：登录 CK 缺失或全部失败时，仅用匿名 ttwid 请求详情端点。
+	// 分享页与详情端点携带 ttwid 即返回完整数据，登录 CK 不是必要条件。
+	if update, err := fetchDouyinDetailAnonymous(ctx, client, ref); err == nil {
+		return update, nil
 	}
 	if shareBody == "" {
 		body, _, err := client.requestShareHTML(ctx, douyinSharePreviewURL(ref.Kind, ref.ID))
@@ -145,6 +152,20 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		return nil, accErr
 	}
 	return nil, errors.New("没有找到这条抖音作品")
+}
+
+func fetchDouyinDetailAnonymous(ctx context.Context, client *douyinClient, ref *douyinPreviewRef) (map[string]any, error) {
+	endpoint := douyinAwemeDetailAPIURL(ref.ID)
+	document, err := client.requestDetailJSONAnonymous(ctx, endpoint, ref.URL)
+	if err != nil {
+		return nil, err
+	}
+	for _, aweme := range douyinAwemesFromValue(document) {
+		if update := douyinPreviewUpdateFromAweme(aweme, ref); update != nil {
+			return update, nil
+		}
+	}
+	return nil, &douyinSourceError{Kind: "invalid_response", HTTPStatus: 200, Endpoint: douyinEndpointPath(endpoint)}
 }
 
 func fetchDouyinDetailAcrossAccounts(ctx context.Context, client *douyinClient, accounts []douyinAccount, ref *douyinPreviewRef) (map[string]any, error) {

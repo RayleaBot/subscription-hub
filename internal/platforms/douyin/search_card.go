@@ -10,7 +10,8 @@ import (
 
 const douyinSearchResultsTemplate = "douyin-search-results"
 
-const douyinSearchAvatarTimeoutSeconds = 6
+// douyinpic 头像 CDN 实测响应 3-7 秒，搜索与资料卡片取头像需要更长超时。
+const douyinSearchAvatarTimeoutSeconds = 8
 
 const douyinSearchFallbackAvatar = "assets/douyin-default-avatar.svg"
 

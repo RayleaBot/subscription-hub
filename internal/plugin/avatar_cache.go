@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -9,7 +10,9 @@ import (
 
 const UpdateAvatarTimeoutSeconds = 3
 
-const UpdateAvatarTotalTimeout = 4 * time.Second
+const SlowAvatarTimeoutSeconds = 8
+
+const UpdateAvatarTotalTimeout = 10 * time.Second
 
 type avatarCacheEntry struct {
 	ready chan struct{}
@@ -26,7 +29,7 @@ func (cache *AvatarCache) resolve(ctx context.Context, actions SourceActions, so
 		return ""
 	}
 	if cache == nil {
-		return InlineAvatar(ctx, actions, sourceURL, UpdateAvatarTimeoutSeconds, MaxUpdateCardAvatarBytes, policies...)
+		return InlineAvatar(ctx, actions, sourceURL, updateAvatarTimeoutSeconds(sourceURL), MaxUpdateCardAvatarBytes, policies...)
 	}
 	entry := &avatarCacheEntry{ready: make(chan struct{})}
 	actual, loaded := cache.entries.LoadOrStore(strings.TrimSpace(sourceURL), entry)
@@ -39,12 +42,24 @@ func (cache *AvatarCache) resolve(ctx context.Context, actions SourceActions, so
 			return ""
 		}
 	}
-	entry.value = InlineAvatar(ctx, actions, sourceURL, UpdateAvatarTimeoutSeconds, MaxUpdateCardAvatarBytes, policies...)
+	entry.value = InlineAvatar(ctx, actions, sourceURL, updateAvatarTimeoutSeconds(sourceURL), MaxUpdateCardAvatarBytes, policies...)
 	if entry.value == "" {
 		cache.entries.Delete(strings.TrimSpace(sourceURL))
 	}
 	close(entry.ready)
 	return entry.value
+}
+
+func updateAvatarTimeoutSeconds(sourceURL string) int {
+	parsed, err := url.Parse(strings.TrimSpace(sourceURL))
+	if err != nil {
+		return UpdateAvatarTimeoutSeconds
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "douyinpic.com" || strings.HasSuffix(host, ".douyinpic.com") {
+		return SlowAvatarTimeoutSeconds
+	}
+	return UpdateAvatarTimeoutSeconds
 }
 
 // InlineUpdateAvatars 并发内联卡片中的作者、原作者与订阅人头像。

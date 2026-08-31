@@ -33,7 +33,7 @@ const douyinRequestTimeoutSeconds = 10
 
 const douyinSearchTotalTimeout = 15 * time.Second
 
-const douyinDetailTotalTimeout = 15 * time.Second
+const douyinDetailTotalTimeout = 20 * time.Second
 
 const douyinRedirectMaxHops = 5
 
@@ -48,6 +48,8 @@ const douyinAwemePostURL = "https://www.douyin.com/aweme/v1/web/aweme/post/"
 const douyinAwemeDetailURL = "https://www.douyin.com/aweme/v1/web/aweme/detail/"
 
 const douyinTTWIDRegisterURL = "https://ttwid.bytedance.com/ttwid/union/register/"
+
+const douyinAnonTTWIDKey = "source:douyin:anon_ttwid"
 
 const douyinWebIDURL = "https://mcs.zijieapi.com/webid?aid=6383&sdk_version=5.1.18_zip&device_platform=web"
 
@@ -294,7 +296,13 @@ func (client *douyinClient) requestHTML(ctx context.Context, rawURL string, acco
 }
 
 func (client *douyinClient) requestShareHTML(ctx context.Context, rawURL string) (string, string, error) {
-	response, finalURL, err := client.requestFollowing(ctx, rawURL, douyinShareRequestHeaders(douyinWebReferer))
+	headers := douyinShareRequestHeaders(douyinWebReferer)
+	// 分享页 SSR 现在要求携带 ttwid 才返回作品数据；匿名 ttwid 即可，
+	// 与登录 CK 无关（实测无 Cookie 时页面不含任何作品信息）。
+	if ttwid := client.anonymousTTWID(ctx); ttwid != "" {
+		headers["Cookie"] = "ttwid=" + ttwid
+	}
+	response, finalURL, err := client.requestFollowing(ctx, rawURL, headers)
 	if err != nil {
 		return "", finalURL, err
 	}
@@ -584,6 +592,42 @@ func (client *douyinClient) bootstrapTTWID(ctx context.Context, cookie string) s
 		return ""
 	}
 	return douyinSetCookieValue(douyinResponseHeader(result, "Set-Cookie"), "ttwid")
+}
+
+// anonymousTTWID 返回共享的匿名 ttwid：优先读 KV 缓存的注册结果，缺失时
+// 通过 ttwid 联合注册端点获取并持久化（注册的 ttwid 有效期约一年）。
+// 分享页 SSR 与作品详情端点只有在携带 ttwid 时才返回完整数据，登录 CK 与
+// a_bogus 签名都不是必要条件（实测无签名 + 匿名 ttwid 即可通过）。
+// 注册失败返回空串，调用方按无 Cookie 请求回退。
+func (client *douyinClient) anonymousTTWID(ctx context.Context) string {
+	key := douyinAnonTTWIDKey
+	if result, err := client.actions.KVGet(ctx, key); err == nil {
+		if stored, exists := plugin.ActionStoredValue(result); exists {
+			if object := plugin.MapValue(stored); object != nil {
+				if ttwid := strings.TrimSpace(plugin.StringScalar(object["ttwid"])); ttwid != "" {
+					return ttwid
+				}
+			}
+		}
+	}
+	registered := client.bootstrapTTWID(ctx, "")
+	if registered == "" {
+		return ""
+	}
+	_, _ = client.actions.KVSet(ctx, key, map[string]any{"ttwid": registered})
+	return registered
+}
+
+// requestDetailJSONAnonymous 用匿名会话（仅匿名 ttwid，无登录 CK、无 a_bogus）
+// 请求作品详情端点。登录 CK 缺失或全部失效时，这条链仍然可以解析抖音链接，
+// 与 R-plugin 的无签名 HTTP 链一致。
+func (client *douyinClient) requestDetailJSONAnonymous(ctx context.Context, rawURL, referer string) (map[string]any, error) {
+	cookie := ""
+	if ttwid := client.anonymousTTWID(ctx); ttwid != "" {
+		cookie = "ttwid=" + ttwid
+	}
+	account := douyinAccount{Cookie: cookie}
+	return client.requestJSONURL(ctx, rawURL, rawURL, account, douyinSession{Cookie: cookie}, referer)
 }
 
 // bootstrapMsToken 从 mssdk 端点获取真实 msToken（与 f2 TokenManager.gen_real_msToken 同源）。
