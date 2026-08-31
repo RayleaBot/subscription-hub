@@ -360,6 +360,10 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	if frame := read("scheduled"); plugin.StringScalar(plugin.NestedValue(frame, "data", "skipped")) != "no_checkable_subscriptions" {
 		t.Fatalf("scheduler used a different check flow: %#v", frame)
 	}
+	write("event", "media-flush", event("scheduler.trigger", map[string]any{"action": "flush_deferred_media"}))
+	if frame := read("media-flush"); !plugin.BoolScalar(plugin.NestedValue(frame, "data", "media_flushed")) {
+		t.Fatalf("media scheduler used a different flow: %#v", frame)
+	}
 	write("shutdown", "shutdown", nil)
 	select {
 	case err := <-done:
@@ -372,8 +376,11 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	for frame := range frames {
 		t.Errorf("extra terminal reply: %#v", frame)
 	}
-	if len(actions.SchedulerRequests) != 1 {
+	if len(actions.SchedulerRequests) != 2 {
 		t.Fatalf("scheduler registrations = %d", len(actions.SchedulerRequests))
+	}
+	if plugin.StringScalar(actions.SchedulerRequests[0].Payload["action"]) != "check_subscriptions" || plugin.StringScalar(actions.SchedulerRequests[1].Payload["action"]) != "flush_deferred_media" {
+		t.Fatalf("scheduler payloads = %#v", actions.SchedulerRequests)
 	}
 	if len(actions.Renders) != 3 {
 		t.Fatalf("preview render count = %d", len(actions.Renders))

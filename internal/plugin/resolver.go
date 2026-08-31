@@ -22,6 +22,8 @@ type ResolverMediaSource struct {
 	MergeAudio bool
 }
 
+const resolverFailureSendTimeout = 10 * time.Second
+
 type ResolverMediaPlan struct {
 	Sources []ResolverMediaSource
 }
@@ -123,6 +125,20 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		}
 	}
 	if len(plan.Sources) > 0 {
+		if handler.deferMediaForBackground(platform, plan) {
+			if handler.enqueueDeferredMedia(event, platform, plan, current.Resolver.Media) {
+				// 通知不沿用事件剩余预算，避免事件 ctx 到期时本地动作未完成就返回终端帧。
+				noticeCtx, noticeCancel := context.WithTimeout(context.WithoutCancel(resolverCtx), resolverFailureSendTimeout)
+				defer noticeCancel()
+				_, _ = handler.hostActions(event).MessageSend(noticeCtx, rayleabot.MessageSendRequest{
+					TargetType: item.TargetType, TargetID: item.TargetID,
+					Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text("视频正在后台下载，完成后会自动发送。")}},
+				})
+				return event.Result(map[string]any{"handled": true, "card": true, "media": "deferred"})
+			}
+			handler.sendResolverFailure(resolverCtx, event, "后台下载队列已满，请稍后重新分享链接")
+			return event.Result(map[string]any{"handled": true, "card": true, "media": false})
+		}
 		release, gateErr := handler.mediaGate.acquire(resolverCtx, current.Resolver.Media.MediaConcurrency)
 		if gateErr != nil {
 			return gateErr
@@ -308,7 +324,11 @@ func resolverUpdateImages(update Update) []string {
 }
 
 func (handler *Handler) sendResolverFailure(ctx context.Context, event *rayleabot.EventContext, message string) {
-	_, _ = handler.hostActions(event).MessageSend(ctx, rayleabot.MessageSendRequest{
+	// 失败通知不能沿用事件剩余预算：事件 ctx 已到期时 SDK 会立刻放弃等待
+	// 本地动作响应，终端帧先于动作完成返回，宿主会判定协议违规并重启插件。
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolverFailureSendTimeout)
+	defer cancel()
+	_, _ = handler.hostActions(event).MessageSend(sendCtx, rayleabot.MessageSendRequest{
 		TargetType: NormalizedTargetType(event.Event.Target.Type), TargetID: event.Event.Target.ID,
 		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text(EnsureSentence(message))}},
 	})

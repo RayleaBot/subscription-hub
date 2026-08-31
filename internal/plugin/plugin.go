@@ -38,6 +38,12 @@ func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContex
 		return event.Result(map[string]any{"handled": true, "reloaded": true})
 	case "scheduler.trigger":
 		action := FirstText(event.Event.Payload["action"], NestedValue(event.Event.Payload, "payload", "action"))
+		if action == "flush_deferred_media" {
+			ctx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)
+			defer cancel()
+			handler.flushDeferredMedia(ctx, event)
+			return event.Result(map[string]any{"handled": true, "media_flushed": true})
+		}
 		if action != "" && action != "check_subscriptions" {
 			return event.Result(map[string]any{"handled": false})
 		}

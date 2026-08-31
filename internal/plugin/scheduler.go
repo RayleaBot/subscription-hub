@@ -11,25 +11,30 @@ import (
 
 const schedulerTaskID = "subscription-hub-check"
 const schedulerCron = "*/1 * * * *"
+const deferredMediaTaskID = "subscription-hub-media"
+const deferredMediaCron = "*/1 * * * *"
 
 func (handler *Handler) ensureScheduler(ctx context.Context, event *rayleabot.EventContext) bool {
 	if handler.schedulerRegistered.Load() {
 		return true
 	}
-	_, err := handler.hostActions(event).SchedulerCreate(ctx, rayleabot.SchedulerCreateRequest{
-		TaskID: schedulerTaskID, Cron: schedulerCron, EventType: "scheduler.trigger",
-		LogLabel: "订阅检查", Payload: map[string]any{"action": "check_subscriptions"},
-	})
-	if err != nil {
-		_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-			Level: "warn", Message: "订阅检查定时任务注册失败；自动检查不会按计划运行，请修复后重启插件。原因：" + err.Error(), Fields: map[string]any{"error": err.Error(), "task_id": schedulerTaskID, "cron": schedulerCron},
-		})
-		return false
+	tasks := []rayleabot.SchedulerCreateRequest{
+		{TaskID: schedulerTaskID, Cron: schedulerCron, EventType: "scheduler.trigger", LogLabel: "订阅检查", Payload: map[string]any{"action": "check_subscriptions"}},
+		{TaskID: deferredMediaTaskID, Cron: deferredMediaCron, EventType: "scheduler.trigger", LogLabel: "解析媒体发送", Payload: map[string]any{"action": "flush_deferred_media"}},
+	}
+	for _, task := range tasks {
+		if _, err := handler.hostActions(event).SchedulerCreate(ctx, task); err != nil {
+			_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+				Level: "warn", Message: task.LogLabel + "定时任务注册失败；请修复后重启插件。原因：" + err.Error(),
+				Fields: map[string]any{"error": err.Error(), "task_id": task.TaskID, "cron": task.Cron},
+			})
+			return false
+		}
 	}
 	handler.schedulerRegistered.Store(true)
 	_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-		Level: "info", Message: fmt.Sprintf("订阅检查定时任务已注册，计划 %s 运行；插件将按计划检查并推送更新。", schedulerCron),
-		Fields: map[string]any{"task_id": schedulerTaskID, "cron": schedulerCron, "log_label": "订阅检查"},
+		Level: "info", Message: fmt.Sprintf("订阅检查与解析媒体发送任务已注册，计划 %s 运行。", schedulerCron),
+		Fields: map[string]any{"task_id": schedulerTaskID, "media_task_id": deferredMediaTaskID, "cron": schedulerCron},
 	})
 	return true
 }

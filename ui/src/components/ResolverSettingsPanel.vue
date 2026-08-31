@@ -279,14 +279,14 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
         <div class="strategy-title"><h3>通用媒体</h3><p>控制直播录制、媒体发送方式和 FFmpeg 并发。</p></div>
         <div class="setting-grid setting-grid--three">
           <label class="number-field"><span>直播录制</span><div><input v-model.number="draft.media.live_record_seconds" type="number" min="5" max="50" /><em>秒</em></div></label>
-          <label class="number-field"><span>视频阈值</span><div><input v-model.number="draft.media.video_size_limit_mb" type="number" min="1" max="2048" /><em>MB</em></div></label>
+          <label class="number-field"><span>文件上传阈值</span><div><input v-model.number="draft.media.video_size_limit_mb" type="number" min="1" max="2048" /><em>MB</em></div></label>
           <label class="number-field"><span>媒体并发</span><div><input v-model.number="draft.media.media_concurrency" type="number" min="1" max="8" /><em>路</em></div></label>
           <label class="number-field"><span>图片转发阈值</span><div><input v-model.number="draft.media.image_forward_threshold" type="number" min="0" max="100" /><em>张</em></div></label>
           <label class="number-field"><span>合并转发分批</span><div><input v-model.number="draft.media.image_batch_size" type="number" min="1" max="100" /><em>张</em></div></label>
           <label class="select-field"><span>视频编码偏好</span><select v-model="draft.media.video_codec"><option value="auto">自动</option><option value="avc">AVC / H.264</option><option value="hevc">HEVC / H.265</option><option value="av1">AV1</option></select></label>
         </div>
         <div class="inline-toggles">
-          <label><input v-model="draft.media.upload_oversize" type="checkbox" />超限视频上传为群或私聊文件</label>
+          <label><input v-model="draft.media.upload_oversize" type="checkbox" />B站、微博超限视频上传为群或私聊文件；抖音始终发送视频</label>
           <label><input v-model="draft.media.compatibility_transcode" type="checkbox" />统一转码为 H.264 + AAC</label>
         </div>
       </section>

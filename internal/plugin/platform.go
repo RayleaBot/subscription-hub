@@ -153,6 +153,7 @@ type Handler struct {
 	resolverMu          sync.Mutex
 	resolverCooldowns   map[string]time.Time
 	mediaGate           resolverMediaGate
+	deferredMedia       *deferredMediaQueue
 }
 
 var platformIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -164,6 +165,7 @@ func NewHandler(options Options) (*Handler, error) {
 	handler := &Handler{
 		byID: map[string]Platform{}, commands: map[string]commandRoute{}, resolverCooldowns: map[string]time.Time{},
 		actions: options.Actions, now: options.Now, jitter: options.Jitter,
+		deferredMedia: newDeferredMediaQueue(),
 	}
 	if handler.now == nil {
 		handler.now = time.Now

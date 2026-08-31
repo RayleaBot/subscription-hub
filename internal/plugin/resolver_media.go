@@ -32,22 +32,47 @@ func (handler *Handler) deliverResolverMedia(ctx context.Context, event *rayleab
 	if err != nil {
 		return fmt.Errorf("创建临时目录：%w", err)
 	}
-	defer os.RemoveAll(tempRoot)
+	defer func() { _ = os.RemoveAll(tempRoot) }()
 
-	prepared := make([]preparedResolverMedia, 0, len(plan.Sources))
-	audioCache := map[string]string{}
-	for index, source := range plan.Sources {
-		item, err := prepareResolverMediaSource(ctx, tempRoot, index, source, settings, audioCache)
-		if err != nil {
-			return err
-		}
-		prepared = append(prepared, item)
+	prepared, err := prepareResolverMediaSources(ctx, tempRoot, plan.Sources, settings)
+	if err != nil {
+		return err
 	}
 	if len(prepared) == 0 {
 		return nil
 	}
+	actions := handler.hostActions(event)
+	return sendPreparedResolverMedia(ctx, actions, platform, prepared, settings, resolverSendTarget{
+		TargetType: NormalizedTargetType(event.Event.Target.Type),
+		TargetID:   event.Event.Target.ID,
+		Bot:        event.Bot,
+		ActorID:    event.Event.Actor.ID,
+	})
+}
+
+type resolverSendTarget struct {
+	TargetType string
+	TargetID   string
+	Bot        rayleabot.Bot
+	ActorID    string
+}
+
+func prepareResolverMediaSources(ctx context.Context, tempRoot string, sources []ResolverMediaSource, settings ResolverMediaSettings) ([]preparedResolverMedia, error) {
+	prepared := make([]preparedResolverMedia, 0, len(sources))
+	audioCache := map[string]string{}
+	for index, source := range sources {
+		item, err := prepareResolverMediaSource(ctx, tempRoot, index, source, settings, audioCache)
+		if err != nil {
+			return nil, err
+		}
+		prepared = append(prepared, item)
+	}
+	return prepared, nil
+}
+
+func sendPreparedResolverMedia(ctx context.Context, actions HostActions, platform string, prepared []preparedResolverMedia, settings ResolverMediaSettings, target resolverSendTarget) error {
 	if len(prepared) == 1 && prepared[0].Kind == "video" {
-		return handler.sendResolverVideo(ctx, event, prepared[0], settings)
+		return sendResolverVideo(ctx, actions, platform, target, prepared[0], settings)
 	}
 	allImages := true
 	for _, item := range prepared {
@@ -58,13 +83,13 @@ func (handler *Handler) deliverResolverMedia(ctx context.Context, event *rayleab
 		for _, item := range prepared {
 			segments = append(segments, rayleabot.Image(item.Path))
 		}
-		_, err := handler.hostActions(event).MessageSend(ctx, rayleabot.MessageSendRequest{
-			TargetType: NormalizedTargetType(event.Event.Target.Type), TargetID: event.Event.Target.ID,
+		_, err := actions.MessageSend(ctx, rayleabot.MessageSendRequest{
+			TargetType: target.TargetType, TargetID: target.TargetID,
 			Message: rayleabot.MessageOut{Segments: segments},
 		})
 		return err
 	}
-	return sendResolverForward(ctx, handler.hostActions(event), event, platform, prepared, settings.ImageBatchSize)
+	return sendResolverForward(ctx, actions, platform, prepared, settings.ImageBatchSize, target)
 }
 
 func prepareResolverMediaSource(ctx context.Context, tempRoot string, index int, source ResolverMediaSource, settings ResolverMediaSettings, audioCache map[string]string) (preparedResolverMedia, error) {
@@ -119,6 +144,11 @@ func prepareResolverMediaSource(ctx context.Context, tempRoot string, index int,
 }
 
 func downloadResolverFile(ctx context.Context, candidates []string, headers map[string]string, destination string, maximum int64) error {
+	// 抖音视频 CDN 可能拒绝标准 HTTP 下载链，改用插件已有的托管
+	// FFmpeg 媒体链；其他 CDN 继续使用 Go HTTP 客户端。
+	if douyinVideoDownloadHosts(candidates) {
+		return downloadResolverFileWithFFmpeg(ctx, candidates, headers, destination, maximum)
+	}
 	client := &http.Client{}
 	var lastErr error
 	for _, candidate := range candidates {
@@ -166,6 +196,64 @@ func downloadResolverFile(ctx context.Context, candidates []string, headers map[
 			continue
 		}
 		return nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("没有可用的媒体地址")
+	}
+	return lastErr
+}
+
+// douyinVideoDownloadHosts 判断候选 URL 是否指向抖音视频 CDN。
+func douyinVideoDownloadHosts(candidates []string) bool {
+	for _, candidate := range candidates {
+		parsed, err := url.Parse(strings.TrimSpace(candidate))
+		if err != nil {
+			continue
+		}
+		host := strings.ToLower(parsed.Hostname())
+		if host == "aweme.snssdk.com" || strings.HasSuffix(host, ".douyinvod.com") || strings.HasSuffix(host, ".zjcdn.com") {
+			return true
+		}
+	}
+	return false
+}
+
+// downloadResolverFileWithFFmpeg 用托管 FFmpeg 跟随媒体重定向并封装输出。
+func downloadResolverFileWithFFmpeg(ctx context.Context, candidates []string, headers map[string]string, destination string, maximum int64) error {
+	ffmpeg, err := resolverExecutable("RAYLEABOT_FFMPEG_PATH", "ffmpeg")
+	if err != nil {
+		return err
+	}
+	headerLines := make([]string, 0, len(headers))
+	for key, value := range headers {
+		headerLines = append(headerLines, key+": "+value)
+	}
+	var lastErr error
+	for _, candidate := range candidates {
+		_ = os.Remove(destination)
+		args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+		if len(headerLines) > 0 {
+			args = append(args, "-headers", strings.Join(headerLines, "\r\n")+"\r\n")
+		}
+		args = append(args, "-i", strings.TrimSpace(candidate), "-c", "copy", "-movflags", "+faststart", destination)
+		output, runErr := exec.CommandContext(ctx, ffmpeg, args...).CombinedOutput()
+		if runErr == nil {
+			info, statErr := os.Stat(destination)
+			if statErr != nil {
+				lastErr = statErr
+				continue
+			}
+			if info.Size() > maximum {
+				_ = os.Remove(destination)
+				return fmt.Errorf("媒体文件超过处理上限")
+			}
+			return nil
+		}
+		detail := DiagnosticExcerpt(string(output), 300)
+		if detail == "" {
+			detail = runErr.Error()
+		}
+		lastErr = fmt.Errorf("FFmpeg 下载失败：%s", detail)
 	}
 	if lastErr == nil {
 		lastErr = errors.New("没有可用的媒体地址")
@@ -252,40 +340,41 @@ func runResolverCommand(ctx context.Context, executable string, args ...string) 
 	return fmt.Errorf("FFmpeg 处理失败：%s", detail)
 }
 
-func (handler *Handler) sendResolverVideo(ctx context.Context, event *rayleabot.EventContext, media preparedResolverMedia, settings ResolverMediaSettings) error {
+func sendResolverVideo(ctx context.Context, actions HostActions, platform string, target resolverSendTarget, media preparedResolverMedia, settings ResolverMediaSettings) error {
 	info, err := os.Stat(media.Path)
 	if err != nil {
 		return err
 	}
-	if settings.UploadOversize && info.Size() > int64(settings.VideoSizeLimitMB)<<20 {
-		caller, ok := handler.hostActions(event).(GenericLocalActionCaller)
+	// 抖音解析结果必须保持视频消息；通用的超限文件策略仅用于其他平台。
+	if platform != "douyin" && settings.UploadOversize && info.Size() > int64(settings.VideoSizeLimitMB)<<20 {
+		caller, ok := actions.(GenericLocalActionCaller)
 		if !ok {
 			return errors.New("文件上传动作不可用")
 		}
 		action := "file.group.upload"
-		request := map[string]any{"group_id": event.Event.Target.ID, "file": media.Path, "name": media.Name}
-		if NormalizedTargetType(event.Event.Target.Type) == "private" {
+		request := map[string]any{"group_id": target.TargetID, "file": media.Path, "name": media.Name}
+		if target.TargetType == "private" {
 			action = "file.private.upload"
-			request = map[string]any{"user_id": event.Event.Target.ID, "file": media.Path, "name": media.Name}
+			request = map[string]any{"user_id": target.TargetID, "file": media.Path, "name": media.Name}
 		}
 		var result map[string]any
 		return caller.Call(ctx, action, request, &result)
 	}
-	_, err = handler.hostActions(event).MessageSend(ctx, rayleabot.MessageSendRequest{
-		TargetType: NormalizedTargetType(event.Event.Target.Type), TargetID: event.Event.Target.ID,
+	_, err = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
+		TargetType: target.TargetType, TargetID: target.TargetID,
 		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Passthrough("video", map[string]any{"file": media.Path})}},
 	})
 	return err
 }
 
-func sendResolverForward(ctx context.Context, actions HostActions, event *rayleabot.EventContext, platform string, media []preparedResolverMedia, batchSize int) error {
+func sendResolverForward(ctx context.Context, actions HostActions, platform string, media []preparedResolverMedia, batchSize int, target resolverSendTarget) error {
 	caller, ok := actions.(GenericLocalActionCaller)
 	if !ok {
 		return errors.New("合并转发动作不可用")
 	}
 	batchSize = boundedSetting(batchSize, 50, 1, 100)
-	name := FirstText(event.Bot.Nickname, resolverPlatformLabel(platform), "订阅与解析")
-	uin := FirstText(event.Bot.ID, event.Event.Actor.ID)
+	name := FirstText(target.Bot.Nickname, resolverPlatformLabel(platform), "订阅与解析")
+	uin := FirstText(target.Bot.ID, target.ActorID)
 	for offset := 0; offset < len(media); offset += batchSize {
 		end := offset + batchSize
 		if end > len(media) {
@@ -301,7 +390,7 @@ func sendResolverForward(ctx context.Context, actions HostActions, event *raylea
 			})
 		}
 		request := map[string]any{
-			"target_type": NormalizedTargetType(event.Event.Target.Type), "target_id": event.Event.Target.ID,
+			"target_type": target.TargetType, "target_id": target.TargetID,
 			"messages": nodes,
 		}
 		var result map[string]any
