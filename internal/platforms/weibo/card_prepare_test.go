@@ -13,7 +13,7 @@ func TestPrepareWeiboCardInlinesBoundedMainAndRepostMedia(t *testing.T) {
 	fake.HTTPDefault = testkit.AvatarHTTPResult()
 	data := map[string]any{
 		"media_items": []map[string]any{
-			{"url": "https://wx1.sinaimg.cn/orj360/main-1.jpg", "fallback": "assets/grid.svg"},
+			{"url": "https://wx1.sinaimg.cn/orj360/main-1.jpg", "fallback": "assets/grid.svg", "width": 1080, "height": 1800},
 			{"url": "https://wx2.sinaimg.cn/orj360/main-2.jpg", "fallback": "assets/grid.svg"},
 			{"url": "https://wx3.sinaimg.cn/orj360/main-3.jpg", "fallback": "assets/grid.svg"},
 		},
@@ -35,6 +35,9 @@ func TestPrepareWeiboCardInlinesBoundedMainAndRepostMedia(t *testing.T) {
 		url := plugin.StringScalar(item["url"])
 		if index < weiboCardMediaMaxItems && !strings.HasPrefix(url, "data:image/png;base64,") {
 			t.Fatalf("item %d was not inlined: %q", index, url)
+		}
+		if index == 0 && (plugin.IntScalar(item["width"]) != 1080 || plugin.IntScalar(item["height"]) != 1800) {
+			t.Fatalf("item %d lost intrinsic size: %#v", index, item)
 		}
 	}
 	if len(fake.HTTPRequests) != len(items) {

@@ -53,7 +53,7 @@
         {{ if .media_items }}
         <section class="media-grid {{ .media_grid_class }}" aria-label="微博图片">
           {{ range .media_items }}
-          <figure class="{{ .class }}">
+          <figure class="{{ .class }}{{ if and .width .height }} media-item--sized{{ end }}"{{ if and .width .height }} style="--media-aspect-ratio: {{ .width }} / {{ .height }};"{{ end }}>
             <img src="{{ if and .resource_id .url }}{{ .url }}{{ else }}assets/grid.svg{{ end }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ else if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
             {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
             {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}
@@ -85,7 +85,7 @@
           {{ if .media_items }}
           <div class="repost-media {{ .media_grid_class }}">
             {{ range .media_items }}
-            <figure class="{{ .class }}">
+            <figure class="{{ .class }}{{ if and .width .height }} media-item--sized{{ end }}"{{ if and .width .height }} style="--media-aspect-ratio: {{ .width }} / {{ .height }};"{{ end }}>
               <img src="{{ if and .resource_id .url }}{{ .url }}{{ else }}assets/grid.svg{{ end }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ else if .url }} data-media="{{ .url }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
               {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
               {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}

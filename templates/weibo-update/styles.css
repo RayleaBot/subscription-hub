@@ -270,12 +270,16 @@ h1 {
 }
 
 .media-grid--single .media-item:not(.media-item--wide) {
-  aspect-ratio: auto;
+  aspect-ratio: var(--media-aspect-ratio, auto);
 }
 
 .media-grid--single .media-item:not(.media-item--wide) img {
   height: auto;
   object-fit: contain;
+}
+
+.media-grid--single .media-item--sized:not(.media-item--wide) img {
+  height: 100%;
 }
 
 .media-item img {
@@ -422,12 +426,16 @@ h1 {
 }
 
 .repost-media.media-grid--single .media-item:not(.media-item--wide) {
-  aspect-ratio: auto;
+  aspect-ratio: var(--media-aspect-ratio, auto);
 }
 
 .repost-media.media-grid--single .media-item:not(.media-item--wide) img {
   height: auto;
   object-fit: contain;
+}
+
+.repost-media.media-grid--single .media-item--sized:not(.media-item--wide) img {
+  height: 100%;
 }
 
 .inline-link,

@@ -13,6 +13,8 @@ func TestPrepareWeiboUpdateResourcesUsesOriginalQualityFirst(t *testing.T) {
 		"media_items": []map[string]any{{
 			"url":      "https://wx2.sinaimg.cn/orj360/cover.jpg",
 			"fallback": "assets/cover.svg",
+			"width":    1080,
+			"height":   1800,
 		}},
 	}
 	resources := prepareWeiboUpdateResources(data)
@@ -38,7 +40,7 @@ func TestPrepareWeiboUpdateResourcesUsesOriginalQualityFirst(t *testing.T) {
 		}
 	}
 	item := plugin.MapSliceValue(data["media_items"])[0]
-	if plugin.StringScalar(item["resource_id"]) != "weibo-media-0" || plugin.StringScalar(item["url"]) != "assets/cover.svg" {
+	if plugin.StringScalar(item["resource_id"]) != "weibo-media-0" || plugin.StringScalar(item["url"]) != "assets/cover.svg" || plugin.IntScalar(item["width"]) != 1080 || plugin.IntScalar(item["height"]) != 1800 {
 		t.Fatalf("media item = %#v", item)
 	}
 }

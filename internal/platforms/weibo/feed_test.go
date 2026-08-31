@@ -764,37 +764,60 @@ func TestWeiboUpdateTemplatePreservesInlineAvatars(t *testing.T) {
 	}
 }
 
-func TestWeiboUpdateTemplatePreservesInlineMediaAndDuration(t *testing.T) {
-	source, err := os.ReadFile(testkit.RepositoryPath(t, "templates/weibo-update/template.html"))
-	if err != nil {
-		t.Fatalf("read update template: %v", err)
-	}
-	compiled, err := template.New("weibo-update").Funcs(template.FuncMap{
-		"safeHTML": func(value any) template.HTML { return template.HTML(plugin.StringScalar(value)) },
-	}).Parse(string(source))
-	if err != nil {
-		t.Fatalf("parse update template: %v", err)
-	}
-	const media = "data:image/jpeg;base64,fixture"
-	data := map[string]any{
-		"Stylesheet": template.CSS(""), "Theme": "default", "platform": "微博", "service": "视频",
-		"subscription": map[string]any{},
-		"media_items": []map[string]any{{
-			"url": media, "fallback": "assets/cover.svg", "class": "media-item media-item--wide media-item--video", "duration_text": "4:39",
-		}},
-	}
-	var output bytes.Buffer
-	if err := compiled.Execute(&output, data); err != nil {
-		t.Fatalf("execute update template: %v", err)
-	}
-	html := output.String()
-	if strings.Contains(html, "#ZgotmplZ") || !strings.Contains(html, `data-media="`+media+`"`) {
-		t.Fatalf("inline media was escaped: %s", html)
-	}
-	for _, marker := range []string{`data-fallback="assets/cover.svg"`, `<span class="duration-badge">4:39</span>`, "image.dataset.avatar || image.dataset.media"} {
-		if !strings.Contains(html, marker) {
-			t.Fatalf("update template missing %q: %s", marker, html)
-		}
+func TestWeiboMediaTemplatesReserveIntrinsicSizeBeforeLoad(t *testing.T) {
+	for _, templateID := range []string{"weibo-update", "weibo-resolver"} {
+		t.Run(templateID, func(t *testing.T) {
+			source, err := os.ReadFile(testkit.RepositoryPath(t, "templates/"+templateID+"/template.html"))
+			if err != nil {
+				t.Fatalf("read template: %v", err)
+			}
+			compiled, err := template.New(templateID).Funcs(template.FuncMap{
+				"safeHTML": func(value any) template.HTML { return template.HTML(plugin.StringScalar(value)) },
+			}).Parse(string(source))
+			if err != nil {
+				t.Fatalf("parse template: %v", err)
+			}
+			const media = "data:image/jpeg;base64,fixture"
+			data := map[string]any{
+				"Stylesheet": template.CSS(""), "Theme": "default", "platform": "微博", "service": "图片",
+				"subscription": map[string]any{},
+				"media_items": []map[string]any{{
+					"url": media, "fallback": "assets/grid.svg", "class": "media-item", "width": 1080, "height": 1800, "duration_text": "4:39",
+				}},
+			}
+			var output bytes.Buffer
+			if err := compiled.Execute(&output, data); err != nil {
+				t.Fatalf("execute template: %v", err)
+			}
+			html := output.String()
+			if strings.Contains(html, "#ZgotmplZ") || !strings.Contains(html, `data-media="`+media+`"`) {
+				t.Fatalf("inline media was escaped: %s", html)
+			}
+			for _, marker := range []string{
+				`class="media-item media-item--sized"`,
+				`style="--media-aspect-ratio: 1080 / 1800;"`,
+				`data-fallback="assets/grid.svg"`,
+				`<span class="duration-badge">4:39</span>`,
+				"image.dataset.avatar || image.dataset.media",
+			} {
+				if !strings.Contains(html, marker) {
+					t.Fatalf("template missing %q: %s", marker, html)
+				}
+			}
+			stylesheet, err := os.ReadFile(testkit.RepositoryPath(t, "templates/"+templateID+"/styles.css"))
+			if err != nil {
+				t.Fatalf("read stylesheet: %v", err)
+			}
+			for _, marker := range []string{
+				"aspect-ratio: var(--media-aspect-ratio, auto);",
+				".media-grid--single .media-item--sized:not(.media-item--wide) img",
+				".repost-media.media-grid--single .media-item--sized:not(.media-item--wide) img",
+			} {
+				if !strings.Contains(string(stylesheet), marker) {
+					t.Fatalf("stylesheet missing %q", marker)
+				}
+			}
+		})
 	}
 }
 
