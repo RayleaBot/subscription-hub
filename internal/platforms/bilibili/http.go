@@ -431,8 +431,8 @@ func bilibiliTraceID(headers map[string]any) string {
 func friendlyBilibiliSourceError(label string, err error) string {
 	var sourceErr *bilibiliSourceError
 	if !errors.As(err, &sourceErr) {
-		if plugin.IsHTTPActionCapabilityError(err) {
-			return label + "：请检查插件 http.request 能力与 http_hosts 配置。"
+		if plugin.IsHTTPActionPermissionError(err) {
+			return label + "：请检查插件 http.request 权限与宿主网络安全策略。"
 		}
 		return label + "。"
 	}

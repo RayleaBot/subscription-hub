@@ -13,3 +13,15 @@ func TestBilibiliDynamicServiceMapping(t *testing.T) {
 		}
 	}
 }
+
+func TestBilibiliArticleUsesColumnLabel(t *testing.T) {
+	if got := New().Services.Label("article"); got != "专栏" {
+		t.Fatalf("catalog article label = %q, want 专栏", got)
+	}
+	if got := bilibiliServiceLabel("article"); got != "专栏" {
+		t.Fatalf("render article label = %q, want 专栏", got)
+	}
+	if got := dynamicCategory("article"); got != "专栏动态" {
+		t.Fatalf("article category = %q, want 专栏动态", got)
+	}
+}

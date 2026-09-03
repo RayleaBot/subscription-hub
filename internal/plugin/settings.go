@@ -16,15 +16,7 @@ const maximumDeliveryMaxAgeMinutes = 24 * 60
 func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.EventContext) (Settings, error) {
 	current := Settings{Enabled: true, DeliveryMaxAgeMinutes: defaultDeliveryMaxAgeMinutes, Subscriptions: []Subscription{}}
 	_ = json.Unmarshal(assets.DefaultConfigJSON, &current)
-	result, err := handler.hostActions(event).ConfigRead(ctx, "enabled", "delivery_max_age_minutes", "subscriptions", "resolver")
-	if err != nil {
-		_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-			Level: "warn", Message: "订阅设置读取失败；本次使用内置默认设置，已保存配置未被修改。原因：" + err.Error(), Fields: map[string]any{"error": err.Error(), "fallback": "built_in_defaults"},
-		})
-		handler.ensureScheduler(ctx, event)
-		return current, nil
-	}
-	values, _ := result["values"].(map[string]any)
+	values := event.Config
 	if enabled, ok := values["enabled"].(bool); ok {
 		current.Enabled = enabled
 	}

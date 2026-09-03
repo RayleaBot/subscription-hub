@@ -16,10 +16,10 @@ permissions:
   contents: read
 
 env:
-  RAYLEABOT_SDK_REF: sdk/go/v0.3.0
-  GO_VERSION: 1.25.12
-  NODE_VERSION: 24.18.0
-  PNPM_VERSION: 11.11.0
+  RAYLEABOT_SDK_REF: sdk/go/v0.4.0
+  GO_VERSION: 1.26.6
+  NODE_VERSION: 26.7.0
+  PNPM_VERSION: 11.22.0
 
 jobs:
   test:
@@ -138,7 +138,7 @@ jobs:
       - name: Build signed-catalog artifact input
         env:
           RAYLEA_PLUGIN_BUILD_USE_WORKSPACE: '1'
-        run: go run ./tools/build -target "${{ matrix.target }}" -out dist
+        run: go run github.com/RayleaBot/RayleaBot/sdk/go/cmd/raylea-plugin build-go --plugin . --backend ./cmd/subscription-hub --target "${{ matrix.target }}" --out dist
 
       - name: Upload platform package
         uses: actions/upload-artifact@v4

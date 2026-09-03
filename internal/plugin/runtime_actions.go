@@ -26,7 +26,6 @@ type HostActions interface {
 
 type RuntimeActions interface {
 	HostActions
-	ConfigRead(context.Context, ...string) (rayleabot.ActionResult, error)
 	ConfigWrite(context.Context, map[string]any) (rayleabot.ActionResult, error)
 	SchedulerCreate(context.Context, rayleabot.SchedulerCreateRequest) (rayleabot.ActionResult, error)
 }

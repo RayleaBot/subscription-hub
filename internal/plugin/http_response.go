@@ -45,13 +45,13 @@ func DecodeHTTPDocument(result rayleabot.ActionResult) map[string]any {
 	return document
 }
 
-func IsHTTPActionCapabilityError(err error) bool {
+func IsHTTPActionPermissionError(err error) bool {
 	var actionErr *rayleabot.ActionError
 	if errors.As(err, &actionErr) {
-		if actionErr.Code == "plugin.capability_violation" {
+		if actionErr.Code == "plugin.permission_denied" {
 			return true
 		}
 	}
 	text := strings.ToLower(fmt.Sprint(err))
-	return strings.Contains(text, "capability") || strings.Contains(text, "http_hosts")
+	return strings.Contains(text, "permission")
 }

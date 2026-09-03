@@ -35,18 +35,6 @@ type ResolveRequest struct {
 	Cookie   string `json:"cookie"`
 }
 
-func (fake *Actions) ConfigRead(ctx context.Context, keys ...string) (rayleabot.ActionResult, error) {
-	fake.mu.Lock()
-	defer fake.mu.Unlock()
-	values := map[string]any{}
-	for _, key := range keys {
-		if value, ok := fake.Config[key]; ok {
-			values[key] = value
-		}
-	}
-	return rayleabot.ActionResult{"values": values}, nil
-}
-
 func (fake *Actions) ConfigWrite(ctx context.Context, values map[string]any) (rayleabot.ActionResult, error) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
@@ -64,7 +52,7 @@ func (fake *Actions) SchedulerCreate(ctx context.Context, request rayleabot.Sche
 }
 
 func SubscriptionEvent(args ...string) *rayleabot.EventContext {
-	return &rayleabot.EventContext{Event: rayleabot.Event{
+	return &rayleabot.EventContext{Config: map[string]any{}, Event: rayleabot.Event{
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": args},

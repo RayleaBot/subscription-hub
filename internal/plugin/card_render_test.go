@@ -79,8 +79,8 @@ func TestCardRenderFailureReasonMapsHostErrors(t *testing.T) {
 	if got := cardRenderFailureReason(&rayleabot.ActionError{Code: "platform.render_input_too_large", Message: "render input exceeds the configured size limit"}); got != "渲染数据过大" {
 		t.Fatalf("too large reason = %q", got)
 	}
-	if got := cardRenderFailureReason(&rayleabot.ActionError{Code: "plugin.capability_violation", Message: "plugin render template belongs to another plugin"}); got != "卡片模板不可用" {
-		t.Fatalf("capability reason = %q", got)
+	if got := cardRenderFailureReason(&rayleabot.ActionError{Code: "plugin.permission_denied", Message: "plugin render template belongs to another plugin"}); got != "卡片模板不可用" {
+		t.Fatalf("permission reason = %q", got)
 	}
 	if got := cardRenderFailureReason(&rayleabot.ActionError{Code: "platform.render_timeout", Message: "render execution timed out"}); got != "渲染超时" {
 		t.Fatalf("timeout reason = %q", got)

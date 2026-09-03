@@ -7,7 +7,7 @@ import (
 )
 
 var bilibiliServiceLabels = map[string]string{
-	"live": "直播", "video": "视频", "image_text": "图文", "article": "文章", "repost": "转发", "all": "全部",
+	"live": "直播", "video": "视频", "image_text": "图文", "article": "专栏", "repost": "转发", "all": "全部",
 }
 
 func buildBilibiliRenderData(item plugin.Subscription, update map[string]any) map[string]any {

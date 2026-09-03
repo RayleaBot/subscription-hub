@@ -14,12 +14,19 @@ import {
   normalizeSettings,
   normalizeResolverSettings,
   normalizeTargets,
+  serviceLabel,
+  servicesText,
   targetMap,
   validateRows,
   validateSettings,
 } from '../src/model'
 
 describe('subscription settings model', () => {
+  it('uses 专栏 as the Bilibili article label', () => {
+    expect(serviceLabel('article', 'bilibili')).toBe('专栏')
+    expect(servicesText(['article'], 'bilibili')).toBe('专栏')
+  })
+
   it('defaults delivery freshness to 30 minutes and preserves valid changes', () => {
     expect(normalizeSettings({}).delivery_max_age_minutes).toBe(30)
     const settings = normalizeSettings({ delivery_max_age_minutes: 90 })

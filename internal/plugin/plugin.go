@@ -15,11 +15,7 @@ func Run(ctx context.Context, platforms ...Platform) error {
 	if err != nil {
 		return err
 	}
-	return rayleabot.Run(ctx, rayleabot.Options{
-		PluginID:              "raylea.subscription-hub",
-		Subscriptions:         []string{"plugin.started", "config.changed", "scheduler.trigger", "management.action", "message.group", "message.private"},
-		MaxConcurrentHandlers: 4,
-	}, handler)
+	return rayleabot.Run(ctx, rayleabot.Options{}, handler)
 }
 
 func (handler *Handler) hostActions(event *rayleabot.EventContext) RuntimeActions {

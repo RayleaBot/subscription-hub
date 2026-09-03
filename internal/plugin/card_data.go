@@ -254,7 +254,7 @@ func BuildMediaItems(images []map[string]any, duration, service string) []map[st
 		isLong := width > 0 && height > width*2
 		labels := make([]string, 0, 2)
 		classes := []string{"media-item"}
-		if service == "视频" || service == "直播" || service == "文章" {
+		if service == "视频" || service == "直播" || service == "专栏" {
 			classes = append(classes, "media-item--wide")
 		}
 		if isGIF {
@@ -273,7 +273,7 @@ func BuildMediaItems(images []map[string]any, duration, service string) []map[st
 			classes = append(classes, "media-item--video")
 		}
 		fallback := "assets/grid.svg"
-		if service == "视频" || service == "直播" || service == "文章" {
+		if service == "视频" || service == "直播" || service == "专栏" {
 			fallback = "assets/cover.svg"
 		}
 		result = append(result, map[string]any{

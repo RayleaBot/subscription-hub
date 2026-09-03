@@ -251,6 +251,10 @@ func newHandler(t testing.TB) *plugin.Handler {
 
 func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testing.T) {
 	actions := testkit.NewActions()
+	actions.Config = map[string]any{
+		"enabled": true, "delivery_max_age_minutes": 30,
+		"subscriptions": []any{}, "resolver": map[string]any{},
+	}
 	actions.HTTPDefault = testkit.AvatarHTTPResult()
 	handler, err := plugin.NewHandler(plugin.Options{Platforms: platforms(), Actions: actions, Jitter: func() time.Duration { return 0 }})
 	if err != nil {
@@ -269,8 +273,7 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	done := make(chan error, 1)
 	go func() {
 		done <- rayleabot.Run(ctx, rayleabot.Options{
-			PluginID: "raylea.subscription-hub", Stdin: inputReader, Stdout: outputWriter,
-			Stderr: io.Discard, MaxConcurrentHandlers: 1,
+			Stdin: inputReader, Stdout: outputWriter, Stderr: io.Discard,
 		}, handler)
 		_ = inputReader.Close()
 		_ = outputWriter.Close()
@@ -298,7 +301,16 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	encoder := json.NewEncoder(inputWriter)
 	write := func(kind, id string, event *rayleabot.Event) {
 		t.Helper()
-		frame := map[string]any{"protocol_version": "1", "type": kind, "plugin_id": "raylea.subscription-hub", "request_id": id}
+		frame := map[string]any{"type": kind, "request_id": id}
+		if kind == "init" {
+			frame["protocol_version"] = "2"
+			frame["plugin_id"] = "raylea.subscription-hub"
+			frame["config"] = actions.Config
+			frame["effective_permissions"] = []string{"message.send", "scheduler.create", "render.image"}
+			frame["super_admins"] = []string{"7"}
+			frame["command_prefixes"] = []string{"/"}
+			frame["concurrency"] = 1
+		}
 		if event != nil {
 			frame["event"] = event
 		}
@@ -338,10 +350,12 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	if !plugin.BoolScalar(plugin.NestedValue(resolved, "data", "exact")) || plugin.StringScalar(plugin.NestedValue(resolved, "data", "user", "uid")) != "42" {
 		t.Fatalf("management resolution = %#v", resolved)
 	}
-	write("event", "subscribe", event("message", map[string]any{"command": "订阅网易云音乐推送", "args": []string{"音乐人", "https://music.163.com/#/artist?id=42"}}))
+	write("event", "subscribe", event("message.group", map[string]any{"command": "订阅网易云音乐推送", "args": []string{"音乐人", "https://music.163.com/#/artist?id=42"}}))
 	if frame := read("subscribe"); frame["action"] != "message.send" {
 		t.Fatalf("subscription reply = %#v", frame)
 	}
+	write("event", "config-refresh", event("config.changed", map[string]any{"config": actions.Config, "changed_keys": []string{"subscriptions"}}))
+	read("config-refresh")
 	write("event", "check", event("management.action", map[string]any{"action": "subscription.check_now"}))
 	if frame := read("check"); plugin.StringScalar(plugin.NestedValue(frame, "data", "skipped")) != "no_checkable_subscriptions" {
 		t.Fatalf("NetEase gained a check capability: %#v", frame)
@@ -351,7 +365,7 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	}
 	for index, preview := range []string{"b站 视频", "微博 图片", "抖音 直播"} {
 		id := fmt.Sprintf("preview-%d", index)
-		write("event", id, event("message", map[string]any{"command": "预览订阅卡片", "args": []string{preview}}))
+		write("event", id, event("message.group", map[string]any{"command": "预览订阅卡片", "args": []string{preview}}))
 		if frame := read(id); frame["action"] != "message.send" {
 			t.Fatalf("preview reply = %#v", frame)
 		}

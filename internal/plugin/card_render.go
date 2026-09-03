@@ -184,7 +184,7 @@ func cardRenderFailureReason(err error) string {
 	var actionErr *rayleabot.ActionError
 	if errors.As(err, &actionErr) {
 		switch actionErr.Code {
-		case "plugin.capability_violation":
+		case "plugin.permission_denied":
 			return "卡片模板不可用"
 		case "platform.render_timeout":
 			return "渲染超时"

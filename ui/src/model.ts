@@ -20,7 +20,7 @@ export const PLATFORM_OPTIONS = [
 }>
 
 export const PLATFORM_SERVICE_LABELS: Record<Platform, Record<string, string>> = {
-  bilibili: { all: '全部', live: '直播', video: '视频', image_text: '图文', article: '文章', repost: '转发' },
+  bilibili: { all: '全部', live: '直播', video: '视频', image_text: '图文', article: '专栏', repost: '转发' },
   weibo: { all: '全部', post: '微博', image: '图片', video: '视频', repost: '转发' },
   douyin: { all: '全部', video: '视频', image_text: '图文', live: '直播' },
   netease_music: { all: '全部', song: '歌曲', album: '专辑', playlist: '歌单', artist: '音乐人' },

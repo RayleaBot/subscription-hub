@@ -102,12 +102,12 @@ RayleaBot 官方插件 · `raylea.subscription-hub`
 
 | 平台 | 可选类型 |
 | --- | --- |
-| Bilibili | `直播` `视频` `图文` `文章` `转发` |
+| Bilibili | `直播` `视频` `图文` `专栏` `转发` |
 | 微博 | `微博` `图片` `视频` `转发` |
 | 抖音 | `视频` `图文` `直播` |
 | 网易云音乐 | `歌曲` `专辑` `歌单` `音乐人` |
 
-Bilibili 的「图文」也可写成「动态」，「文章」也可写成「专栏」。对象可以是 UID、昵称或主页链接。抖音订阅支持主页链接、抖音号、昵称或完整 `sec_uid`；优先使用主页链接或完整 `sec_uid`，昵称和抖音号需要联网解析，可能受到抖音网页安全验证限制。
+Bilibili 的「图文」也可写成「动态」。对象可以是 UID、昵称或主页链接。抖音订阅支持主页链接、抖音号、昵称或完整 `sec_uid`；优先使用主页链接或完整 `sec_uid`，昵称和抖音号需要联网解析，可能受到抖音网页安全验证限制。
 
 ```text
 你：/b站搜索up 永雏塔菲
@@ -142,7 +142,7 @@ Bilibili 的「图文」也可写成「动态」，「文章」也可写成「�
 | `/立即检查订阅` | 超级管理员 | 立刻检查并推送新内容 |
 | `/预览订阅卡片 [类型或链接]` | 超级管理员 | 预览 Bilibili / 微博 / 抖音推送卡片 |
 
-预览可用 Bilibili 的 `直播`、`视频`、`图文`、`文章`、`转发`，微博的 `微博`、`图片`、`视频`、`转发`，抖音的 `视频`、`图文`、`直播`。单独写 `视频` 或 `转发` 时预览 Bilibili；微博写成 `微博 视频`、`微博 转发`，抖音写成 `抖音 直播`、`抖音 图文`。也可以直接跟 Bilibili、微博或抖音链接。
+预览可用 Bilibili 的 `直播`、`视频`、`图文`、`专栏`、`转发`，微博的 `微博`、`图片`、`视频`、`转发`，抖音的 `视频`、`图文`、`直播`。单独写 `视频` 或 `转发` 时预览 Bilibili；微博写成 `微博 视频`、`微博 转发`，抖音写成 `抖音 直播`、`抖音 图文`。也可以直接跟 Bilibili、微博或抖音链接。
 
 ## 管理页
 
@@ -212,8 +212,8 @@ plugin-subscription-hub/
   internal/assets/default_config.json 默认开关与投递时效
   ui/                                Vue 管理页
   templates/                         推送与资料卡片模板
-  tools/build/                       组装后端、UI、默认配置与模板
-  info.json
+  LICENSES/                         随 artifact 发布的第三方许可证
+  info.json                         manifest v3、权限、内联默认配置与命令分组
 ```
 
 ### 本地联调
@@ -222,10 +222,9 @@ plugin-subscription-hub/
 
 ```json
 {
-  "workspace_version": "1",
+  "workspace_version": "2",
   "plugins": [
     {
-      "id": "raylea.subscription-hub",
       "path": "../RayleaBotPlugins/plugin-subscription-hub"
     }
   ]
@@ -252,7 +251,8 @@ pnpm --dir ui install --frozen-lockfile
 pnpm --dir ui typecheck
 pnpm --dir ui test
 pnpm --dir ui build
-go run ./tools/build -target windows-x64
+$env:RAYLEA_PLUGIN_BUILD_USE_WORKSPACE = "1"
+go run github.com/RayleaBot/RayleaBot/sdk/go/cmd/raylea-plugin build-go --plugin . --backend ./cmd/subscription-hub --target windows-x64 --out dist
 ```
 
 ### 发布

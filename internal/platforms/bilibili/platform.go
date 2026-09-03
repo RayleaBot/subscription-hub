@@ -8,7 +8,7 @@ import (
 
 var catalog = plugin.NewServiceCatalog(
 	[]string{"live", "video", "image_text", "article", "repost"},
-	map[string]string{"all": "全部", "live": "直播", "video": "视频", "image_text": "图文", "article": "文章", "repost": "转发"},
+	map[string]string{"all": "全部", "live": "直播", "video": "视频", "image_text": "图文", "article": "专栏", "repost": "转发"},
 	map[string]string{"全部": "all", "全量": "all", "所有": "all", "直播": "live", "视频": "video", "图文": "image_text", "动态": "image_text", "文章": "article", "专栏": "article", "转发": "repost"})
 
 func New() plugin.Platform {

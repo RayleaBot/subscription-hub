@@ -140,7 +140,7 @@ func dynamicCategory(service string) string {
 	case "image_text":
 		return "图文动态"
 	case "article":
-		return "文章动态"
+		return "专栏动态"
 	case "repost":
 		return "转发动态"
 	default:
@@ -162,7 +162,7 @@ func dynamicTitle(major, description map[string]any, service, itemType, authorNa
 	case service == "video":
 		action = "发布新视频"
 	case service == "article":
-		action = "发布新文章"
+		action = "发布新专栏"
 	case service == "repost":
 		action = "转发动态"
 	case itemType == "DYNAMIC_TYPE_WORD":

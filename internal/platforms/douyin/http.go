@@ -960,8 +960,8 @@ func douyinErrorLogFields(err error) map[string]any {
 func friendlyDouyinSourceError(label string, err error) string {
 	var sourceErr *douyinSourceError
 	if !errors.As(err, &sourceErr) {
-		if plugin.IsHTTPActionCapabilityError(err) {
-			return label + "：请检查插件 http.request 能力与 http_hosts 配置。"
+		if plugin.IsHTTPActionPermissionError(err) {
+			return label + "：请检查插件 http.request 权限与宿主网络安全策略。"
 		}
 		if err != nil && strings.Contains(err.Error(), "没有可用的抖音账号") {
 			return label + "：" + strings.TrimSpace(err.Error()) + "。"

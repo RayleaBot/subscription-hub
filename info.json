@@ -1,519 +1,594 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅与解析",
-  "version": "0.3.0",
-  "manifest_version": "2",
-  "plugin_protocol_version": "1",
-  "min_core_version": "0.3.2",
-  "runtime": "go",
-  "entry": "bin/subscription-hub",
-  "platforms": ["windows-x64", "linux-x64", "macos-arm64"],
+  "version": "0.4.0",
+  "manifest_version": "3",
   "license": "MIT",
-  "description": "订阅平台内容，并解析 B站、微博与抖音链接",
-  "author": "raylea",
-  "management_ui": {
-    "pages": [
-      {
-        "id": "subscriptions",
-        "label": "订阅设置",
-        "entry": "ui/index.html"
-      },
-      {
-        "id": "resolver-groups",
-        "label": "群聊解析",
-        "entry": "ui/index.html"
-      },
-      {
-        "id": "resolver-users",
-        "label": "用户解析",
-        "entry": "ui/index.html"
-      },
-      {
-        "id": "resolver-strategy",
-        "label": "防抖与媒体策略",
-        "entry": "ui/index.html"
-      }
-    ]
-  },
-  "render_templates": [
-    {
-      "path": "templates/bilibili-update"
-    },
-    {
-      "path": "templates/bilibili-resolver"
-    },
-    {
-      "path": "templates/bilibili-user-card"
-    },
-    {
-      "path": "templates/bilibili-search-results"
-    },
-    {
-      "path": "templates/weibo-search-results"
-    },
-    {
-      "path": "templates/weibo-user-card"
-    },
-    {
-      "path": "templates/weibo-update"
-    },
-    {
-      "path": "templates/weibo-resolver"
-    },
-    {
-      "path": "templates/douyin-search-results"
-    },
-    {
-      "path": "templates/douyin-user-card"
-    },
-    {
-      "path": "templates/douyin-update"
-    },
-    {
-      "path": "templates/douyin-resolver"
-    },
-    {
-      "path": "templates/resolver-help"
-    }
-  ],
-  "capabilities": [
-    "event.subscribe",
-    "message.send",
-    "message.forward.send",
-    "file.group.upload",
-    "file.private.upload",
-    "render.image",
-    "storage.kv",
-    "config.read",
-    "config.write",
-    "logger.write",
-    "http.request",
-    "scheduler.create",
-    "thirdparty.account.read",
-    "thirdparty.account.validate",
-    "thirdparty.resolve",
-    "friend.list",
-    "group.list",
-    "user.info.get",
-    "group.member.get"
-  ],
-  "capability_parameters": {
-    "http_hosts": [
-      "api.bilibili.com",
-      "api.live.bilibili.com",
-      "i0.hdslb.com",
-      "i1.hdslb.com",
-      "i2.hdslb.com",
-      "p.qlogo.cn",
-      "q1.qlogo.cn",
-      "m.weibo.cn",
-      "s.weibo.com",
-      "tva1.sinaimg.cn",
-      "tva2.sinaimg.cn",
-      "tva3.sinaimg.cn",
-      "tva4.sinaimg.cn",
-      "tvax1.sinaimg.cn",
-      "tvax2.sinaimg.cn",
-      "tvax3.sinaimg.cn",
-      "tvax4.sinaimg.cn",
-      "wx1.sinaimg.cn",
-      "wx2.sinaimg.cn",
-      "wx3.sinaimg.cn",
-      "wx4.sinaimg.cn",
-      "douyin.com",
-      "douyinpic.com",
-      "iesdouyin.com",
-      "amemv.com",
-      "ttwid.bytedance.com",
-      "mcs.zijieapi.com",
-      "mssdk.bytedance.com"
-    ],
-    "third_party_account_platforms": [
+  "min_core_version": "0.4.0",
+  "metadata": {
+    "description": "订阅平台内容，并解析 B站、微博与抖音链接",
+    "author": "raylea",
+    "repo": "https://github.com/RayleaBot/plugin-subscription-hub",
+    "keywords": [
+      "subscription",
       "bilibili",
       "weibo",
       "douyin",
-      "netease_music"
+      "resolver"
     ]
+  },
+  "concurrency": 4,
+  "events": [
+    "plugin.started",
+    "config.changed",
+    "scheduler.trigger",
+    "management.action",
+    "message.group",
+    "message.private"
+  ],
+  "permissions": {
+    "message.send": true,
+    "message.forward.send": true,
+    "file.group.upload": true,
+    "file.private.upload": true,
+    "render.image": true,
+    "http.request": true,
+    "scheduler.create": true,
+    "thirdparty.account.read": {
+      "platforms": [
+        "bilibili",
+        "weibo",
+        "douyin",
+        "netease_music"
+      ]
+    },
+    "thirdparty.account.validate": {
+      "platforms": [
+        "bilibili",
+        "weibo",
+        "douyin",
+        "netease_music"
+      ]
+    },
+    "thirdparty.resolve": {
+      "platforms": [
+        "douyin"
+      ]
+    },
+    "friend.list": true,
+    "group.list": true,
+    "user.info.get": true,
+    "group.member.get": true
+  },
+  "default_config": {
+    "enabled": true,
+    "delivery_max_age_minutes": 30,
+    "subscriptions": [],
+    "resolver": {
+      "targets": [],
+      "cooldowns": {
+        "same_link_enabled": true,
+        "same_link_seconds": 10,
+        "same_platform_enabled": false,
+        "same_platform_seconds": 10
+      },
+      "media": {
+        "live_record_seconds": 30,
+        "video_size_limit_mb": 70,
+        "upload_oversize": true,
+        "image_forward_threshold": 0,
+        "image_batch_size": 50,
+        "media_concurrency": 1,
+        "video_codec": "auto",
+        "compatibility_transcode": false,
+        "bilibili_max_duration_seconds": 480,
+        "bilibili_resolution": 480,
+        "bilibili_smart_resolution": false,
+        "bilibili_file_size_limit_mb": 100,
+        "bilibili_min_resolution": 360,
+        "bilibili_bangumi_direct": false,
+        "bilibili_bangumi_resolution": 480,
+        "bilibili_bangumi_max_seconds": 1800,
+        "douyin_max_duration_seconds": 480,
+        "douyin_resolution": 1080,
+        "douyin_merge_bgm": true
+      }
+    }
   },
   "commands": [
     {
+      "id": "resolver-help",
       "name": "解析帮助",
       "description": "查看当前群聊或私聊的解析开关与冷却状态",
       "usage": "/解析帮助",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "解析帮助"
+        ]
+      }
     },
     {
+      "id": "enable-bilibili-resolver",
       "name": "开启B站解析",
       "description": "为当前群聊或私聊开启 B站链接解析",
       "usage": "/开启B站解析",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "开启B站解析"
+        ]
+      }
     },
     {
+      "id": "disable-bilibili-resolver",
       "name": "关闭B站解析",
       "description": "为当前群聊或私聊关闭 B站链接解析",
       "usage": "/关闭B站解析",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "关闭B站解析"
+        ]
+      }
     },
     {
+      "id": "enable-weibo-resolver",
       "name": "开启微博解析",
       "description": "为当前群聊或私聊开启微博链接解析",
       "usage": "/开启微博解析",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "开启微博解析"
+        ]
+      }
     },
     {
+      "id": "disable-weibo-resolver",
       "name": "关闭微博解析",
       "description": "为当前群聊或私聊关闭微博链接解析",
       "usage": "/关闭微博解析",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "关闭微博解析"
+        ]
+      }
     },
     {
+      "id": "enable-douyin-resolver",
       "name": "开启抖音解析",
       "description": "为当前群聊或私聊开启抖音链接解析",
       "usage": "/开启抖音解析",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "开启抖音解析"
+        ]
+      }
     },
     {
+      "id": "disable-douyin-resolver",
       "name": "关闭抖音解析",
       "description": "为当前群聊或私聊关闭抖音链接解析",
       "usage": "/关闭抖音解析",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "关闭抖音解析"
+        ]
+      }
     },
     {
+      "id": "subscription-status",
       "name": "订阅状态",
       "description": "查看订阅与解析插件状态",
       "usage": "/订阅状态",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "订阅状态"
+        ]
+      }
     },
     {
+      "id": "subscribe-bilibili",
       "name": "订阅b站推送",
       "description": "订阅当前群聊或私聊的指定 Bilibili 用户更新，类型可选，不填表示全部类型",
-      "usage": "/订阅b站推送 [直播|视频|图文|文章|转发] UID或昵称",
-      "permission": "super_admin"
+      "usage": "/订阅b站推送 [直播|视频|图文|专栏|转发] UID或昵称",
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "订阅b站推送"
+        ]
+      }
     },
     {
+      "id": "unsubscribe-bilibili",
       "name": "取消b站推送",
       "description": "取消当前群聊或私聊的指定 Bilibili 用户订阅，类型可选，不填表示全部类型",
-      "usage": "/取消b站推送 [直播|视频|图文|文章|转发] UID或昵称",
-      "permission": "super_admin"
+      "usage": "/取消b站推送 [直播|视频|图文|专栏|转发] UID或昵称",
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "取消b站推送"
+        ]
+      }
     },
     {
+      "id": "subscribe-weibo",
       "name": "订阅微博推送",
       "description": "订阅当前群聊或私聊的指定微博账号更新，类型可选，不填表示全部类型",
       "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或昵称",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "订阅微博推送"
+        ]
+      }
     },
     {
+      "id": "unsubscribe-weibo",
       "name": "取消微博推送",
       "description": "取消当前群聊或私聊的指定微博账号订阅，类型可选，不填表示全部类型",
       "usage": "/取消微博推送 [微博|图片|视频|转发] UID或昵称",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "取消微博推送"
+        ]
+      }
     },
     {
+      "id": "subscribe-douyin",
       "name": "订阅抖音推送",
       "description": "订阅当前群聊或私聊的指定抖音账号更新，类型可选，不填表示全部类型，支持昵称、主页链接、抖音号或完整 sec_uid",
       "usage": "/订阅抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "订阅抖音推送"
+        ]
+      }
     },
     {
+      "id": "unsubscribe-douyin",
       "name": "取消抖音推送",
       "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型，支持昵称、主页链接、抖音号或完整 sec_uid",
       "usage": "/取消抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "取消抖音推送"
+        ]
+      }
     },
     {
+      "id": "subscribe-netease-music",
       "name": "订阅网易云音乐推送",
       "description": "订阅当前群聊或私聊的指定网易云音乐对象更新，类型可选，不填表示全部类型",
       "usage": "/订阅网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "订阅网易云音乐推送"
+        ]
+      }
     },
     {
+      "id": "unsubscribe-netease-music",
       "name": "取消网易云音乐推送",
       "description": "取消当前群聊或私聊的指定网易云音乐对象订阅，类型可选，不填表示全部类型",
       "usage": "/取消网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "取消网易云音乐推送"
+        ]
+      }
     },
     {
+      "id": "search-bilibili-user",
       "name": "b站搜索up",
-      "aliases": ["b站搜索UP", "B站搜索up", "B站搜索UP"],
       "description": "按昵称关键词搜索 Bilibili UP 主并以图片展示候选账号资料与 UID",
       "usage": "/b站搜索up UP昵称关键词",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "b站搜索up",
+          "b站搜索UP",
+          "B站搜索up",
+          "B站搜索UP"
+        ]
+      }
     },
     {
+      "id": "search-weibo-user",
       "name": "微博搜索博主",
       "description": "按昵称关键词搜索微博博主并以图片展示候选账号资料与 UID",
       "usage": "/微博搜索博主 昵称关键词",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "微博搜索博主"
+        ]
+      }
     },
     {
+      "id": "search-douyin-user",
       "name": "抖音搜索用户",
       "description": "尝试按昵称关键词搜索抖音用户；平台要求安全验证时使用主页链接订阅",
       "usage": "/抖音搜索用户 昵称关键词",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "抖音搜索用户"
+        ]
+      }
     },
     {
+      "id": "list-subscriptions",
       "name": "订阅列表",
       "description": "查看当前群聊或私聊的订阅列表",
       "usage": "/订阅列表",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-bilibili-subscriptions",
       "name": "b站订阅列表",
       "description": "查看当前群聊或私聊的 Bilibili 订阅列表",
       "usage": "/b站订阅列表",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "b站订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-weibo-subscriptions",
       "name": "微博订阅列表",
       "description": "查看当前群聊或私聊的微博订阅列表",
       "usage": "/微博订阅列表",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "微博订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-douyin-subscriptions",
       "name": "抖音订阅列表",
       "description": "查看当前群聊或私聊的抖音订阅列表",
       "usage": "/抖音订阅列表",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "抖音订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-netease-music-subscriptions",
       "name": "网易云音乐订阅列表",
       "description": "查看当前群聊或私聊的网易云音乐订阅列表",
       "usage": "/网易云音乐订阅列表",
-      "permission": "everyone"
+      "permission": "everyone",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "网易云音乐订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-all-subscriptions",
       "name": "全部订阅列表",
       "description": "查看所有群聊和私聊的订阅列表",
       "usage": "/全部订阅列表",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "全部订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-all-bilibili-subscriptions",
       "name": "全部b站订阅列表",
       "description": "查看所有群聊和私聊的 Bilibili 订阅列表",
       "usage": "/全部b站订阅列表",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "全部b站订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-all-weibo-subscriptions",
       "name": "全部微博订阅列表",
       "description": "查看所有群聊和私聊的微博订阅列表",
       "usage": "/全部微博订阅列表",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "全部微博订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-all-douyin-subscriptions",
       "name": "全部抖音订阅列表",
       "description": "查看所有群聊和私聊的抖音订阅列表",
       "usage": "/全部抖音订阅列表",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "全部抖音订阅列表"
+        ]
+      }
     },
     {
+      "id": "list-all-netease-music-subscriptions",
       "name": "全部网易云音乐订阅列表",
       "description": "查看所有群聊和私聊的网易云音乐订阅列表",
       "usage": "/全部网易云音乐订阅列表",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "全部网易云音乐订阅列表"
+        ]
+      }
     },
     {
+      "id": "check-subscriptions",
       "name": "立即检查订阅",
       "description": "立即检查订阅更新",
       "usage": "/立即检查订阅",
-      "permission": "super_admin"
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "立即检查订阅"
+        ]
+      }
     },
     {
+      "id": "preview-subscription-card",
       "name": "预览订阅卡片",
       "description": "使用示例类型或 Bilibili / 微博 / 抖音链接预览订阅推送卡片",
-      "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|抖音|图片|Bilibili、微博或抖音链接]",
-      "permission": "super_admin"
+      "usage": "/预览订阅卡片 [直播|视频|图文|专栏|转发|微博|抖音|图片|Bilibili、微博或抖音链接]",
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "预览订阅卡片"
+        ]
+      }
+    }
+  ],
+  "command_groups": [
+    {
+      "id": "resolver-management",
+      "title": "解析管理",
+      "commands": [
+        "resolver-help",
+        "enable-bilibili-resolver",
+        "disable-bilibili-resolver",
+        "enable-weibo-resolver",
+        "disable-weibo-resolver",
+        "enable-douyin-resolver",
+        "disable-douyin-resolver"
+      ]
+    },
+    {
+      "id": "subscription-management",
+      "title": "订阅管理",
+      "commands": [
+        "subscription-status",
+        "subscribe-bilibili",
+        "unsubscribe-bilibili",
+        "subscribe-weibo",
+        "unsubscribe-weibo",
+        "subscribe-douyin",
+        "unsubscribe-douyin",
+        "subscribe-netease-music",
+        "unsubscribe-netease-music"
+      ]
+    },
+    {
+      "id": "account-search",
+      "title": "账号搜索",
+      "commands": [
+        "search-bilibili-user",
+        "search-weibo-user",
+        "search-douyin-user"
+      ]
+    },
+    {
+      "id": "subscription-lists",
+      "title": "订阅列表",
+      "commands": [
+        "list-subscriptions",
+        "list-bilibili-subscriptions",
+        "list-weibo-subscriptions",
+        "list-douyin-subscriptions",
+        "list-netease-music-subscriptions",
+        "list-all-subscriptions",
+        "list-all-bilibili-subscriptions",
+        "list-all-weibo-subscriptions",
+        "list-all-douyin-subscriptions",
+        "list-all-netease-music-subscriptions"
+      ]
+    },
+    {
+      "id": "check-and-preview",
+      "title": "检查与预览",
+      "commands": [
+        "check-subscriptions",
+        "preview-subscription-card"
+      ]
     }
   ],
   "help": {
     "title": "订阅与解析",
-    "summary": "订阅平台内容，并按会话解析 B站、微博与抖音链接",
-    "groups": [
+    "summary": "订阅平台内容，并按会话解析 B站、微博与抖音链接"
+  },
+  "management_ui": {
+    "entry": "ui/index.html",
+    "pages": [
       {
-        "title": "订阅操作",
-        "items": [
-          {
-            "title": "解析帮助",
-            "description": "查看当前群聊或私聊的 B站、微博、抖音解析状态，以及冷却和媒体策略摘要。",
-            "usage": "/解析帮助",
-            "command": "解析帮助"
-          },
-          {
-            "title": "订阅状态",
-            "description": "查看启用状态、订阅数量和最近检查结果。",
-            "usage": "/订阅状态",
-            "command": "订阅状态"
-          },
-          {
-            "title": "订阅 Bilibili",
-            "description": "为当前群聊或私聊订阅指定 Bilibili 用户的更新，类型可选，不填表示全部类型。",
-            "usage": "/订阅b站推送 [直播|视频|图文|文章|转发] UID或昵称",
-            "command": "订阅b站推送"
-          },
-          {
-            "title": "订阅微博",
-            "description": "为当前群聊或私聊订阅指定微博账号的更新，类型可选，不填表示全部类型。",
-            "usage": "/订阅微博推送 [微博|图片|视频|转发] UID或昵称",
-            "command": "订阅微博推送"
-          },
-          {
-            "title": "订阅抖音",
-            "description": "为当前群聊或私聊订阅指定抖音账号的更新，类型可选，不填表示全部类型。支持昵称、主页链接、抖音号或完整 sec_uid；昵称搜索受平台安全验证限制时优先使用主页链接。",
-            "usage": "/订阅抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
-            "command": "订阅抖音推送"
-          },
-          {
-            "title": "订阅网易云音乐",
-            "description": "为当前群聊或私聊订阅指定网易云音乐对象的更新，类型可选，不填表示全部类型。",
-            "usage": "/订阅网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
-            "command": "订阅网易云音乐推送"
-          },
-          {
-            "title": "搜索 Bilibili UP",
-            "description": "按昵称关键词搜索 Bilibili UP 主，以图片展示候选账号的资料与 UID。",
-            "usage": "/b站搜索up UP昵称关键词",
-            "command": "b站搜索up"
-          },
-          {
-            "title": "搜索微博博主",
-            "description": "按昵称关键词搜索微博博主，以图片展示候选账号的资料与 UID。",
-            "usage": "/微博搜索博主 昵称关键词",
-            "command": "微博搜索博主"
-          },
-          {
-            "title": "搜索抖音用户",
-            "description": "尝试按昵称关键词搜索抖音用户，以图片展示候选账号的资料与来源标识。平台要求安全验证时使用主页链接订阅。",
-            "usage": "/抖音搜索用户 昵称关键词",
-            "command": "抖音搜索用户"
-          }
-        ]
+        "id": "subscriptions",
+        "label": "订阅设置"
       },
       {
-        "title": "取消订阅",
-        "items": [
-          {
-            "title": "取消 Bilibili",
-            "description": "取消当前群聊或私聊的指定 Bilibili 用户订阅，类型可选，不填表示全部类型。",
-            "usage": "/取消b站推送 [直播|视频|图文|文章|转发] UID或昵称",
-            "command": "取消b站推送"
-          },
-          {
-            "title": "取消微博",
-            "description": "取消当前群聊或私聊的指定微博账号订阅，类型可选，不填表示全部类型。",
-            "usage": "/取消微博推送 [微博|图片|视频|转发] UID或昵称",
-            "command": "取消微博推送"
-          },
-          {
-            "title": "取消抖音",
-            "description": "取消当前群聊或私聊的指定抖音账号订阅，类型可选，不填表示全部类型。支持昵称、主页链接、抖音号或完整 sec_uid。",
-            "usage": "/取消抖音推送 [视频|图文|直播] 主页链接、抖音号、昵称或完整 sec_uid",
-            "command": "取消抖音推送"
-          },
-          {
-            "title": "取消网易云音乐",
-            "description": "取消当前群聊或私聊的指定网易云音乐对象订阅，类型可选，不填表示全部类型。",
-            "usage": "/取消网易云音乐推送 [歌曲|专辑|歌单|音乐人] ID或主页标识",
-            "command": "取消网易云音乐推送"
-          }
-        ]
+        "id": "resolver-groups",
+        "label": "群聊解析"
       },
       {
-        "title": "订阅列表",
-        "items": [
-          {
-            "title": "当前订阅",
-            "description": "查看当前群聊或私聊绑定的订阅。",
-            "usage": "/订阅列表",
-            "command": "订阅列表"
-          },
-          {
-            "title": "当前 Bilibili",
-            "description": "查看当前群聊或私聊绑定的 Bilibili 订阅。",
-            "usage": "/b站订阅列表",
-            "command": "b站订阅列表"
-          },
-          {
-            "title": "当前微博",
-            "description": "查看当前群聊或私聊绑定的微博订阅。",
-            "usage": "/微博订阅列表",
-            "command": "微博订阅列表"
-          },
-          {
-            "title": "当前抖音",
-            "description": "查看当前群聊或私聊绑定的抖音订阅。",
-            "usage": "/抖音订阅列表",
-            "command": "抖音订阅列表"
-          },
-          {
-            "title": "当前网易云音乐",
-            "description": "查看当前群聊或私聊绑定的网易云音乐订阅。",
-            "usage": "/网易云音乐订阅列表",
-            "command": "网易云音乐订阅列表"
-          },
-          {
-            "title": "全部订阅",
-            "description": "查看所有群聊和私聊的订阅。",
-            "usage": "/全部订阅列表",
-            "command": "全部订阅列表"
-          },
-          {
-            "title": "全部 Bilibili",
-            "description": "查看所有群聊和私聊的 Bilibili 订阅。",
-            "usage": "/全部b站订阅列表",
-            "command": "全部b站订阅列表"
-          },
-          {
-            "title": "全部微博",
-            "description": "查看所有群聊和私聊的微博订阅。",
-            "usage": "/全部微博订阅列表",
-            "command": "全部微博订阅列表"
-          },
-          {
-            "title": "全部抖音",
-            "description": "查看所有群聊和私聊的抖音订阅。",
-            "usage": "/全部抖音订阅列表",
-            "command": "全部抖音订阅列表"
-          },
-          {
-            "title": "全部网易云音乐",
-            "description": "查看所有群聊和私聊的网易云音乐订阅。",
-            "usage": "/全部网易云音乐订阅列表",
-            "command": "全部网易云音乐订阅列表"
-          }
-        ]
+        "id": "resolver-users",
+        "label": "用户解析"
       },
       {
-        "title": "维护与预览",
-        "items": [
-          {
-            "title": "立即检查订阅",
-            "description": "立即检查已启用订阅并推送新内容。",
-            "usage": "/立即检查订阅",
-            "command": "立即检查订阅"
-          },
-          {
-            "title": "预览订阅卡片",
-            "description": "使用内置示例类型，或使用 Bilibili / 微博 / 抖音链接生成订阅推送图片。微博的视频和转发写成「微博 视频」「微博 转发」，抖音的直播和图文写成「抖音 直播」「抖音 图文」。",
-            "usage": "/预览订阅卡片 [直播|视频|图文|文章|转发|微博|抖音|图片|Bilibili、微博或抖音链接]",
-            "command": "预览订阅卡片"
-          }
-        ]
-      },
-      {
-        "title": "配置说明",
-        "items": [
-          {
-            "title": "Bilibili / 微博 / 抖音账号",
-            "description": "平台 Cookie 在 Web 三方账号页面配置。Bilibili 动态检查会自动关注订阅的 up 主（每 6 小时复核一次关注状态），删除订阅后停止维护，该行为没有独立开关。微博与抖音检查按订阅账号读取最新作品列表，不需要关注订阅对象。",
-            "permission": "super_admin"
-          },
-          {
-            "title": "订阅检查",
-            "description": "订阅状态和立即检查入口在订阅与解析插件管理页查看。",
-            "permission": "super_admin"
-          }
-        ]
+        "id": "resolver-strategy",
+        "label": "防抖与媒体策略"
       }
     ]
-  },
-  "default_config_file": "default_config.json"
+  }
 }

@@ -210,7 +210,7 @@ func previewArticleUpdate(document map[string]any, canonicalURL, articleID strin
 	}
 	appendBilibiliImage(&images, data["banner_url"])
 	return map[string]any{
-		"id": articleID, "service": "article", "category": "专栏文章", "title": plugin.FirstText(data["title"], "Bilibili 专栏"),
+		"id": articleID, "service": "article", "category": "专栏", "title": plugin.FirstText(data["title"], "Bilibili 专栏"),
 		"summary": plugin.TruncateRunes(plugin.FirstText(data["summary"], data["desc"]), 420), "url": canonicalURL,
 		"pub_ts": plugin.IntScalar(data["publish_time"]), "created_at": plugin.FormatTime(plugin.IntScalar(data["publish_time"]), ""),
 		"author": map[string]any{"name": plugin.FirstText(data["author_name"], plugin.NestedValue(data, "author", "name")), "uid": plugin.FirstText(data["mid"], plugin.NestedValue(data, "author", "mid"))},
@@ -432,7 +432,7 @@ func sampleBilibiliUpdate(service string, now time.Time) map[string]any {
 		base["title"], base["summary"] = "图文动态示例", "这里展示图文动态正文、图片九宫格、UP 主信息和订阅人身份。"
 		base["images"] = []map[string]any{{"url": "https://i0.hdslb.com/bfs/new_dyn/sample-1.jpg"}, {"url": "https://i0.hdslb.com/bfs/new_dyn/sample-2.jpg"}, {"url": "https://i0.hdslb.com/bfs/new_dyn/sample-3.jpg"}}
 	case "article":
-		base["title"], base["summary"], base["url"] = "专栏文章示例", "文章摘要会显示在卡片正文区域，封面图显示在图片区域。", "https://www.bilibili.com/read/cv10001"
+		base["title"], base["summary"], base["url"] = "专栏示例", "专栏摘要会显示在卡片正文区域，封面图显示在图片区域。", "https://www.bilibili.com/read/cv10001"
 	case "repost":
 		base["title"], base["summary"] = "转发动态示例", "转发评论会显示在主卡片正文中。"
 		base["original"] = map[string]any{
