@@ -163,6 +163,7 @@ function nextRowID(): string {
 }
 
 function rowVisible(row: SubscriptionRow): boolean {
+  if (row.edit_mode) return true
   const query = search.value.trim().toLowerCase()
   if (query) {
     const targetText = row.targets.flatMap((target) => [
@@ -463,7 +464,9 @@ function hydrateResolverAvatarURLs(sources: string[]) {
 
 function revalidateAvatarURLs(): Promise<void> {
   avatarGeneration += 1
-  const sources = currentAvatarURLs()
+  const sources = isSubscriptionsPage.value
+    ? currentAvatarURLs()
+    : [...avatarDataURLs.value.keys()]
   const activeSources = new Set(sources)
   const next = readCachedAvatarDataURLs(sources)
   for (const [source, dataURL] of avatarDataURLs.value) {
@@ -769,7 +772,7 @@ function errorMessage(error: unknown, fallback: string): string {
         <label class="field" for="service-filter-input">
           <span>类型</span>
           <select id="service-filter-input" v-model="serviceFilter" name="service_filter" autocomplete="off">
-            <option value="all">全部类型</option><option value="live">直播</option><option value="video">视频</option><option value="image_text">图文</option><option value="article">文章</option><option value="repost">转发</option><option value="post">微博</option><option value="image">图片</option><option value="song">歌曲</option><option value="album">专辑</option><option value="playlist">歌单</option><option value="artist">音乐人</option>
+            <option value="all">全部类型</option><option value="live">直播</option><option value="video">视频</option><option value="image_text">图文</option><option value="article">专栏</option><option value="repost">转发</option><option value="post">微博</option><option value="image">图片</option><option value="song">歌曲</option><option value="album">专辑</option><option value="playlist">歌单</option><option value="artist">音乐人</option>
           </select>
         </label>
       </div>
