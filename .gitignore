@@ -1,6 +1,7 @@
 /.rayleabot/
 /dist/
 /go.work
+/go.work.sum
 /ui/dist/
 /ui/node_modules/
 *.log

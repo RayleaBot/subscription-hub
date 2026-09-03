@@ -135,7 +135,7 @@ jobs:
             cp -R .rayleabot/core/sdk/vue .rayleabot/sdk/vue
           fi
 
-      - name: Build signed-catalog artifact input
+      - name: Build plugin artifact
         env:
           RAYLEA_PLUGIN_BUILD_USE_WORKSPACE: '1'
         run: go run github.com/RayleaBot/RayleaBot/sdk/go/cmd/raylea-plugin build-go --plugin . --backend ./cmd/subscription-hub --target "${{ matrix.target }}" --out dist
