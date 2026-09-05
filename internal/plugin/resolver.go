@@ -127,8 +127,7 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 	if len(plan.Sources) > 0 {
 		if handler.deferMediaForBackground(platform, plan) {
 			if handler.enqueueDeferredMedia(event, platform, plan, current.Resolver.Media) {
-				// 通知不沿用事件剩余预算，避免事件 ctx 到期时本地动作未完成就返回终端帧。
-				noticeCtx, noticeCancel := context.WithTimeout(context.WithoutCancel(resolverCtx), resolverFailureSendTimeout)
+				noticeCtx, noticeCancel := context.WithTimeout(resolverCtx, resolverFailureSendTimeout)
 				defer noticeCancel()
 				_, _ = handler.hostActions(event).MessageSend(noticeCtx, rayleabot.MessageSendRequest{
 					TargetType: item.TargetType, TargetID: item.TargetID,
@@ -146,7 +145,11 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		mediaErr := handler.deliverResolverMedia(resolverCtx, event, platform, update, plan, current.Resolver.Media)
 		release()
 		if mediaErr != nil {
-			handler.sendResolverFailure(resolverCtx, event, "媒体发送失败："+mediaErr.Error())
+			if mediaOutcomeUncertain(mediaErr) {
+				handler.sendResolverFailure(resolverCtx, event, "媒体发送结果未确认，可能仍会送达；文件保留 24 小时，未自动重发")
+			} else {
+				handler.sendResolverFailure(resolverCtx, event, "媒体发送失败："+mediaErr.Error())
+			}
 			return event.Result(map[string]any{"handled": true, "card": true, "media": false})
 		}
 	}
@@ -324,9 +327,10 @@ func resolverUpdateImages(update Update) []string {
 }
 
 func (handler *Handler) sendResolverFailure(ctx context.Context, event *rayleabot.EventContext, message string) {
-	// 失败通知不能沿用事件剩余预算：事件 ctx 已到期时 SDK 会立刻放弃等待
-	// 本地动作响应，终端帧先于动作完成返回，宿主会判定协议违规并重启插件。
-	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolverFailureSendTimeout)
+	if ctx.Err() != nil {
+		return
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, resolverFailureSendTimeout)
 	defer cancel()
 	_, _ = handler.hostActions(event).MessageSend(sendCtx, rayleabot.MessageSendRequest{
 		TargetType: NormalizedTargetType(event.Event.Target.Type), TargetID: event.Event.Target.ID,

@@ -27,12 +27,27 @@ type preparedResolverMedia struct {
 	Name string
 }
 
-func (handler *Handler) deliverResolverMedia(ctx context.Context, event *rayleabot.EventContext, platform string, update Update, plan ResolverMediaPlan, settings ResolverMediaSettings) error {
-	tempRoot, err := os.MkdirTemp("", "raylea-resolver-*")
+func (handler *Handler) deliverResolverMedia(ctx context.Context, event *rayleabot.EventContext, platform string, update Update, plan ResolverMediaPlan, settings ResolverMediaSettings) (sendErr error) {
+	job := &deferredMediaJob{}
+	dispatched := false
+	if !handler.deferredMedia.push(job) {
+		return errors.New("媒体资源保留配额已满，请稍后再试")
+	}
+	defer func() {
+		if dispatched && mediaOutcomeUncertain(sendErr) {
+			job.retain()
+		} else {
+			handler.deferredMedia.remove(job)
+			job.cleanup()
+		}
+	}()
+	tempRoot, err := handler.deferredMedia.createTemp()
 	if err != nil {
 		return fmt.Errorf("创建临时目录：%w", err)
 	}
-	defer func() { _ = os.RemoveAll(tempRoot) }()
+	job.mu.Lock()
+	job.tempRoot = tempRoot
+	job.mu.Unlock()
 
 	prepared, err := prepareResolverMediaSources(ctx, tempRoot, plan.Sources, settings)
 	if err != nil {
@@ -42,6 +57,10 @@ func (handler *Handler) deliverResolverMedia(ctx context.Context, event *rayleab
 		return nil
 	}
 	actions := handler.hostActions(event)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	dispatched = true
 	return sendPreparedResolverMedia(ctx, actions, platform, prepared, settings, resolverSendTarget{
 		TargetType: NormalizedTargetType(event.Event.Target.Type),
 		TargetID:   event.Event.Target.ID,
@@ -395,6 +414,9 @@ func sendResolverForward(ctx context.Context, actions HostActions, platform stri
 		}
 		var result map[string]any
 		if err := caller.Call(ctx, "message.forward.send", request, &result); err != nil {
+			if offset > 0 {
+				return &partialMediaSendError{err}
+			}
 			return err
 		}
 	}

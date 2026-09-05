@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -28,11 +29,12 @@ type deferredMediaJob struct {
 	Sources    []ResolverMediaSource
 	Settings   ResolverMediaSettings
 
-	mu       sync.Mutex
-	prepared []preparedResolverMedia
-	tempRoot string
-	failed   string
-	attempts int
+	mu          sync.Mutex
+	prepared    []preparedResolverMedia
+	tempRoot    string
+	failed      string
+	attempts    int
+	retainUntil time.Time
 }
 
 func (job *deferredMediaJob) cleanup() {
@@ -70,18 +72,25 @@ func (job *deferredMediaJob) bumpAttempts() bool {
 // deferredMediaQueue 保存在事件预算内放不下的媒体任务：下载在后台
 // 进行，发送由下一次 scheduler.trigger 事件执行。所有读写都加锁。
 type deferredMediaQueue struct {
+	root    string
 	mu      sync.Mutex
 	flushMu sync.Mutex
 	jobs    []*deferredMediaJob
 }
 
-func newDeferredMediaQueue() *deferredMediaQueue {
-	return &deferredMediaQueue{}
+func newDeferredMediaQueue(root string) *deferredMediaQueue {
+	if root == "" {
+		root = filepath.Join(os.TempDir(), "raylea-subscription-media")
+	}
+	queue := &deferredMediaQueue{root: root}
+	queue.loadRetained()
+	return queue
 }
 
 func (queue *deferredMediaQueue) push(job *deferredMediaJob) bool {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
+	queue.pruneRetainedLocked(time.Now())
 	if len(queue.jobs) >= deferredMediaMaxJobs {
 		return false
 	}
@@ -92,10 +101,11 @@ func (queue *deferredMediaQueue) push(job *deferredMediaJob) bool {
 func (queue *deferredMediaQueue) readyJobs() []*deferredMediaJob {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
+	queue.pruneRetainedLocked(time.Now())
 	ready := make([]*deferredMediaJob, 0, len(queue.jobs))
 	for _, job := range queue.jobs {
 		job.mu.Lock()
-		completed := job.failed != "" || len(job.prepared) > 0
+		completed := job.retainUntil.IsZero() && (job.failed != "" || len(job.prepared) > 0)
 		job.mu.Unlock()
 		if completed {
 			ready = append(ready, job)
@@ -161,7 +171,7 @@ func (handler *Handler) downloadDeferredMedia(job *deferredMediaJob) {
 		return
 	}
 	defer release()
-	tempRoot, err := os.MkdirTemp("", "raylea-deferred-*")
+	tempRoot, err := handler.deferredMedia.createTemp()
 	if err != nil {
 		job.markFailed("创建临时目录：" + err.Error())
 		return
@@ -213,19 +223,20 @@ func (handler *Handler) flushDeferredMedia(ctx context.Context, event *rayleabot
 			// 仅限流可安全重试（动作已被宿主明确拒绝）。超时不重试：
 			// 插件放弃等待后宿主可能仍完成发送，重试会造成重复发送。
 			var actionErr *rayleabot.ActionError
-			if errors.As(err, &actionErr) && actionErr.Code == "platform.rate_limited" && job.bumpAttempts() {
+			var partial *partialMediaSendError
+			if !errors.As(err, &partial) && errors.As(err, &actionErr) && actionErr.Code == "platform.rate_limited" && job.bumpAttempts() {
 				continue
+			}
+			if mediaOutcomeUncertain(err) {
+				job.retain()
+				if ctx.Err() == nil {
+					_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: "媒体发送结果未确认；文件保留 24 小时，不自动重发。", Fields: actionErrorLogFields(err)})
+				}
+				return
 			}
 			handler.deferredMedia.remove(job)
 			job.cleanup()
 			message := "媒体发送失败：" + err.Error()
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-				message = "视频发送超时，可能未送达；若未收到视频请稍后重新分享链接。"
-				noticeCtx, noticeCancel := context.WithTimeout(context.WithoutCancel(ctx), resolverFailureSendTimeout)
-				handler.sendDeferredFailure(noticeCtx, actions, job, message)
-				noticeCancel()
-				return
-			}
 			handler.sendDeferredFailure(flushCtx, actions, job, message)
 			continue
 		}
@@ -235,6 +246,9 @@ func (handler *Handler) flushDeferredMedia(ctx context.Context, event *rayleabot
 }
 
 func (handler *Handler) sendDeferredFailure(ctx context.Context, actions HostActions, job *deferredMediaJob, reason string) {
+	if ctx.Err() != nil {
+		return
+	}
 	message := EnsureSentence(reason)
 	_, _ = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
 		TargetType: job.TargetType, TargetID: job.TargetID,

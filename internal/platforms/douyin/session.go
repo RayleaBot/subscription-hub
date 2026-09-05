@@ -74,7 +74,7 @@ func (session *session) UserCard(ctx context.Context, action string, item plugin
 }
 func (session *session) Poll(ctx, stateCtx context.Context, items []plugin.Subscription, notBefore time.Time) plugin.PollResult {
 	result := newDouyinSource(session.actions).PollSinceWithStateContext(ctx, stateCtx, items, notBefore)
-	return plugin.PollResult{Checked: result.Checked, Updates: result.Updates, Errors: result.Errors, ReadyUIDs: result.ReadyUIDs, Summary: map[string]any{"accounts": result.AccountCount, "feed_ok": result.FeedOK}}
+	return plugin.PollResult{Checked: result.Checked, Updates: result.Updates, Errors: result.Errors, PauseReasons: result.PauseReasons, FailureKinds: result.FailureKinds, ReadyUIDs: result.ReadyUIDs, Summary: map[string]any{"accounts": result.AccountCount, "feed_ok": result.FeedOK, "paused": result.Paused}}
 }
 func (session *session) Prepare(ctx context.Context, update plugin.Update) (plugin.Update, error) {
 	return plugin.CloneJSONMap(update), nil

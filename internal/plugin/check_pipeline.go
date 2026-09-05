@@ -11,8 +11,18 @@ import (
 )
 
 func (handler *Handler) Check(ctx context.Context, actions HostActions, current Settings) map[string]any {
-	handler.checkMu.Lock()
-	defer handler.checkMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)
+	defer cancel()
+	select {
+	case handler.checkGate <- struct{}{}:
+		defer func() { <-handler.checkGate }()
+	case <-ctx.Done():
+		return map[string]any{"handled": true, "skipped": "check_canceled", "degraded": true, "errors": []string{SubscriptionCheckIncompleteMessage}}
+	}
+	return handler.checkWithBudget(ctx, actions, current)
+}
+
+func (handler *Handler) checkWithBudget(ctx context.Context, actions HostActions, current Settings) map[string]any {
 	checkCtx, stateCtx, cancel := newSubscriptionCheckContexts(ctx)
 	defer cancel()
 	return handler.check(checkCtx, stateCtx, actions, current, handler.now())
@@ -36,7 +46,8 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 	}
 	deliveryMaxAge := time.Duration(NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)) * time.Minute
 	source := map[string]any{}
-	failures := []string{}
+	failures := checkFailures{}
+	pauses := []string{}
 	sent, checked := 0, 0
 	avatars := &AvatarCache{}
 	identities := newSubscriberIdentityCache(ctx)
@@ -52,14 +63,27 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 		}
 		session, ok := platform.NewSession(sourceBoundary(actions)).(CheckSession)
 		if !ok {
-			failures = append(failures, failureText(platform.ID, "source", "订阅源不支持检查。"))
+			failures.add(platform.ID, "source", "订阅源不支持检查。", nil)
 			continue
 		}
 		polled := session.Poll(ctx, stateCtx, subscriptions, now.Add(-deliveryMaxAge))
 		checked += polled.Checked
 		source[platform.ID] = polled.Summary
+		pauses = append(pauses, polled.PauseReasons...)
+		if BoolScalar(polled.Summary["paused"]) {
+			result["paused"] = true
+		}
 		for _, failure := range polled.Errors {
-			failures = append(failures, failureText(platform.ID, "source", failure))
+			failures.messages = append(failures.messages, failureText(platform.ID, "source", failure))
+		}
+		if len(polled.Errors) > 0 {
+			kinds := polled.FailureKinds
+			if len(kinds) == 0 {
+				kinds = []string{"upstream"}
+			}
+			for _, kind := range kinds {
+				failures.addCause(platform.ID, "source", kind)
+			}
 		}
 		for _, item := range subscriptions {
 			if ctx.Err() != nil {
@@ -73,7 +97,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 				initialized, baselineAt, stateErr = ReadBaseline(ctx, actions, platform.Baseline.KeyPrefix+item.ID)
 			}
 			if stateErr != nil {
-				failures = append(failures, failureText(platform.ID, "state", stateErr.Error()))
+				failures.add(platform.ID, "state", stateErr.Error(), stateErr)
 			}
 			for _, update := range polled.Updates {
 				if ctx.Err() != nil {
@@ -90,13 +114,13 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 				if !exempt && (!initialized || updateAtOrBeforeBaseline(update, baselineAt)) {
 					if err := markUpdateSeen(stateCtx, actions, item, update, handler.now()); err != nil {
 						historyRecorded = false
-						failures = append(failures, failureText(platform.ID, "state", err.Error()))
+						failures.add(platform.ID, "state", err.Error(), err)
 					}
 					continue
 				}
 				seen, err := updateSeen(ctx, actions, item, update)
 				if err != nil {
-					failures = append(failures, failureText(platform.ID, "state", err.Error()))
+					failures.add(platform.ID, "state", err.Error(), err)
 					continue
 				}
 				if seen {
@@ -104,7 +128,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 				}
 				if staleSubscriptionUpdate(update, now, deliveryMaxAge) {
 					if err := markUpdateSeen(stateCtx, actions, item, update, handler.now()); err != nil {
-						failures = append(failures, failureText(platform.ID, "state", err.Error()))
+						failures.add(platform.ID, "state", err.Error(), err)
 					}
 					logStaleUpdate(ctx, actions, item, update, now)
 					continue
@@ -116,7 +140,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 					prepared[key] = content
 				}
 				if content.err != nil {
-					failures = append(failures, failureText(platform.ID, "prepare", content.err.Error()))
+					failures.add(platform.ID, "prepare", content.err.Error(), content.err)
 				}
 				if content.value == nil || ctx.Err() != nil {
 					continue
@@ -124,7 +148,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 				identityFailures := []string{}
 				item = refreshSubscribersForDelivery(ctx, actions, item, identities, &identityFailures)
 				for _, failure := range identityFailures {
-					failures = append(failures, failureText(platform.ID, "identity", failure))
+					failures.add(platform.ID, "identity", failure, nil)
 				}
 				card := session.UpdateCard(item, CloneJSONMap(content.value))
 				if preparer, ok := session.(UpdateCardPreparingSession); ok {
@@ -145,7 +169,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 					value = map[string]any{"initialized": true, "baseline_at": now.Unix()}
 				}
 				if _, err := actions.KVSet(stateCtx, platform.Baseline.KeyPrefix+item.ID, value); err != nil {
-					failures = append(failures, failureText(platform.ID, "state", err.Error()))
+					failures.add(platform.ID, "state", err.Error(), err)
 				}
 			}
 		}
@@ -153,14 +177,17 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 	if ctx.Err() == nil {
 		trimSeenKeys(stateCtx, actions, current.Subscriptions)
 	} else {
-		failures = append(failures, failureText("subscription", "timeout", SubscriptionCheckIncompleteMessage))
+		failures.add("subscription", "timeout", SubscriptionCheckIncompleteMessage, ctx.Err())
 	}
 	result["checked"], result["sent"], result["source"] = checked, sent, source
-	result["errors"], result["degraded"] = DedupeStrings(failures), len(failures) > 0
+	result["paused_only"] = len(failures.messages) == 0 && len(pauses) > 0
+	result["errors"], result["degraded"] = DedupeStrings(append(append([]string(nil), failures.messages...), pauses...)), len(failures.messages) > 0 || BoolScalar(result["paused"])
 	if err := rememberSubscriptionCheck(stateCtx, actions, result, handler.now()); err != nil {
-		failures = append(failures, failureText("subscription", "state", err.Error()))
-		result["errors"], result["degraded"] = DedupeStrings(failures), true
+		result["paused_only"] = false
+		failures.add("subscription", "state", err.Error(), err)
+		result["errors"], result["degraded"] = DedupeStrings(failures.messages), true
 	}
+	result["failure_causes"] = failures.keys()
 	return result
 }
 
@@ -173,17 +200,30 @@ func usesBaseline(platform Platform, item Subscription) bool {
 	return false
 }
 
-func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions HostActions, item Subscription, update Update, card CardRequest, avatars *AvatarCache, failures *[]string) bool {
+func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions HostActions, item Subscription, update Update, card CardRequest, avatars *AvatarCache, failures *checkFailures) bool {
 	if ctx.Err() != nil {
 		return false
 	}
 	fields := map[string]any{"platform": item.Platform, "stage": "render", "subscription_id": item.ID, "target_type": item.TargetType, "target_id": item.TargetID}
 	imagePath, err := handler.renderCard(ctx, actions, card, avatars, fields)
 	if err != nil {
-		*failures = append(*failures, failureText(item.Platform, "render", "订阅图片生成失败："+err.Error()))
+		failures.add(item.Platform, "render", "订阅图片生成失败："+err.Error(), err)
 		return false
 	}
 	if ctx.Err() != nil {
+		return false
+	}
+	// Persist the deduplication guard before exposing a send to the host. A
+	// canceled waiter or process exit cannot prove that the message was unsent.
+	key := SubscriptionUpdateKey(item, update)
+	if _, err := actions.KVSet(stateCtx, key, map[string]any{"ts": handler.now().Unix(), "delivery": "unconfirmed"}); err != nil {
+		failures.add(item.Platform, "state", "发送前去重记录保存失败，本条未发送："+err.Error(), err)
+		return false
+	}
+	if ctx.Err() != nil {
+		if _, err := actions.KVDelete(stateCtx, key); err != nil {
+			failures.add(item.Platform, "state", err.Error(), err)
+		}
 		return false
 	}
 	_, err = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
@@ -191,12 +231,20 @@ func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions Hos
 		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Image(imagePath)}},
 	})
 	if err != nil {
-		*failures = append(*failures, failureText(item.Platform, "send", "订阅推送失败："+err.Error()))
-		logSubscriptionFailure(stateCtx, actions, "订阅推送失败", item, err)
+		label := "订阅推送失败"
+		if mediaOutcomeUncertain(err) {
+			label = "订阅推送结果未确认，未自动重发"
+		} else {
+			if _, clearErr := actions.KVDelete(stateCtx, key); clearErr != nil {
+				failures.add(item.Platform, "state", clearErr.Error(), clearErr)
+			}
+		}
+		failures.add(item.Platform, "send", label+"："+err.Error(), err)
+		logSubscriptionFailure(stateCtx, actions, label, item, err)
 		return false
 	}
 	if err := markUpdateSeen(stateCtx, actions, item, update, handler.now()); err != nil {
-		*failures = append(*failures, failureText(item.Platform, "state", err.Error()))
+		failures.add(item.Platform, "state", err.Error(), err)
 	}
 	return true
 }

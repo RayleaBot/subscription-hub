@@ -18,6 +18,15 @@ func (handler *Handler) ensureScheduler(ctx context.Context, event *rayleabot.Ev
 	if handler.schedulerRegistered.Load() {
 		return true
 	}
+	select {
+	case handler.schedulerGate <- struct{}{}:
+		defer func() { <-handler.schedulerGate }()
+	case <-ctx.Done():
+		return false
+	}
+	if handler.schedulerRegistered.Load() {
+		return true
+	}
 	tasks := []rayleabot.SchedulerCreateRequest{
 		{TaskID: schedulerTaskID, Cron: schedulerCron, EventType: "scheduler.trigger", LogLabel: "订阅检查", Payload: map[string]any{"action": "check_subscriptions"}},
 		{TaskID: deferredMediaTaskID, Cron: deferredMediaCron, EventType: "scheduler.trigger", LogLabel: "解析媒体发送", Payload: map[string]any{"action": "flush_deferred_media"}},
@@ -25,7 +34,7 @@ func (handler *Handler) ensureScheduler(ctx context.Context, event *rayleabot.Ev
 	for _, task := range tasks {
 		if _, err := handler.hostActions(event).SchedulerCreate(ctx, task); err != nil {
 			_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-				Level: "warn", Message: task.LogLabel + "定时任务注册失败；请修复后重启插件。原因：" + err.Error(),
+				Level: "warn", Message: task.LogLabel + "定时任务注册未完成；后续事件将重试注册。原因：" + err.Error(),
 				Fields: map[string]any{"error": err.Error(), "task_id": task.TaskID, "cron": task.Cron},
 			})
 			return false
@@ -33,7 +42,7 @@ func (handler *Handler) ensureScheduler(ctx context.Context, event *rayleabot.Ev
 	}
 	handler.schedulerRegistered.Store(true)
 	_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-		Level: "info", Message: fmt.Sprintf("订阅检查与解析媒体发送任务已注册，计划 %s 运行。", schedulerCron),
+		Level: "info", Message: fmt.Sprintf("订阅检查与解析媒体发送任务已注册，每分钟检查一次，共 %d 项任务。", len(tasks)),
 		Fields: map[string]any{"task_id": schedulerTaskID, "media_task_id": deferredMediaTaskID, "cron": schedulerCron},
 	})
 	return true

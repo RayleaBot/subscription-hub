@@ -33,15 +33,21 @@ func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContex
 		_, _ = handler.loadSettings(ctx, event)
 		return event.Result(map[string]any{"handled": true, "reloaded": true})
 	case "scheduler.trigger":
+		ctx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)
+		defer cancel()
 		action := FirstText(event.Event.Payload["action"], NestedValue(event.Event.Payload, "payload", "action"))
 		if action == "flush_deferred_media" {
-			ctx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)
-			defer cancel()
 			handler.flushDeferredMedia(ctx, event)
 			return event.Result(map[string]any{"handled": true, "media_flushed": true})
 		}
 		if action != "" && action != "check_subscriptions" {
 			return event.Result(map[string]any{"handled": false})
+		}
+		select {
+		case handler.checkGate <- struct{}{}:
+			defer func() { <-handler.checkGate }()
+		default:
+			return event.Result(map[string]any{"handled": true, "skipped": "check_in_progress"})
 		}
 		if delay := handler.jitter(); delay > 0 {
 			timer := time.NewTimer(delay)
@@ -52,14 +58,12 @@ func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContex
 				return ctx.Err()
 			}
 		}
-		ctx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)
-		defer cancel()
 		current, err := handler.loadSettings(ctx, event)
 		if err != nil {
 			return err
 		}
-		result := handler.Check(ctx, handler.hostActions(event), current)
-		logSubscriptionCheck(ctx, handler.hostActions(event), result)
+		result := handler.checkWithBudget(ctx, handler.hostActions(event), current)
+		handler.logCheck(ctx, handler.hostActions(event), result)
 		return event.Result(result)
 	case "management.action":
 		return handler.handleManagementAction(ctx, event)

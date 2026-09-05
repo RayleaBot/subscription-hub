@@ -24,12 +24,17 @@ type douyinSourceResult struct {
 	Errors       []string
 	AccountCount int
 	FeedOK       bool
+	Paused       bool
+	PauseReasons []string
+	FailureKinds []string
 	ReadyUIDs    map[string]bool
 	accounts     []douyinAccount
 }
 
 type douyinSource struct {
-	client *douyinClient
+	client       *douyinClient
+	pauseReasons []string
+	failureKinds []string
 }
 
 func newDouyinSource(actions plugin.SourceActions) *douyinSource {
@@ -45,6 +50,8 @@ func (source *douyinSource) pollSince(ctx context.Context, subscriptions []plugi
 }
 
 func (source *douyinSource) PollSinceWithStateContext(ctx, stateCtx context.Context, subscriptions []plugin.Subscription, notBefore time.Time) douyinSourceResult {
+	source.pauseReasons = nil
+	source.failureKinds = nil
 	uids := watchedDouyinUIDs(subscriptions)
 	result := douyinSourceResult{
 		Checked: len(uids), Updates: []map[string]any{}, Errors: []string{}, FeedOK: true,
@@ -58,6 +65,7 @@ func (source *douyinSource) PollSinceWithStateContext(ctx, stateCtx context.Cont
 	result.AccountCount = len(accounts)
 	if err != nil {
 		result.Errors = append(result.Errors, plugin.EnsureSentence(err.Error()))
+		result.FailureKinds = []string{"account_read"}
 		return result
 	}
 	result.accounts = append([]douyinAccount(nil), accounts...)
@@ -67,11 +75,13 @@ func (source *douyinSource) PollSinceWithStateContext(ctx, stateCtx context.Cont
 		if ctx.Err() != nil {
 			result.FeedOK = false
 			result.Errors = append(result.Errors, plugin.SubscriptionCheckIncompleteMessage)
+			source.failureKinds = append(source.failureKinds, plugin.FirstText(douyinErrorLogFields(ctx.Err())["kind"], "request"))
 			break
 		}
 		resolvedUID, resolveErr := source.resolveWatchUID(ctx, uid)
 		if resolveErr != nil {
 			result.Errors = append(result.Errors, friendlyDouyinSourceError("抖音用户解析失败", resolveErr))
+			source.failureKinds = append(source.failureKinds, plugin.FirstText(douyinErrorLogFields(resolveErr)["kind"], "resolve"))
 			continue
 		}
 		uidNotBefore := time.Time{}
@@ -79,6 +89,9 @@ func (source *douyinSource) PollSinceWithStateContext(ctx, stateCtx context.Cont
 			uidNotBefore = notBefore
 		}
 		updates, failures, ready, complete := source.pollUser(ctx, resolvedUID, accounts)
+		if !ready {
+			result.PauseReasons = append(result.PauseReasons, source.pauseReasons...)
+		}
 		result.ReadyUIDs[uid] = ready
 		result.ReadyUIDs[resolvedUID] = ready
 		if !complete {
@@ -100,6 +113,9 @@ func (source *douyinSource) PollSinceWithStateContext(ctx, stateCtx context.Cont
 		}
 	}
 	result.Errors = plugin.DedupeStrings(result.Errors)
+	result.FailureKinds = plugin.DedupeStrings(source.failureKinds)
+	result.PauseReasons = plugin.DedupeStrings(result.PauseReasons)
+	result.Paused = len(result.PauseReasons) > 0
 	return result
 }
 
@@ -165,14 +181,12 @@ func (source *douyinSource) resolveWatchUID(ctx context.Context, uid string) (st
 
 func (source *douyinSource) pollUser(ctx context.Context, secUID string, accounts []douyinAccount) ([]map[string]any, []string, bool, bool) {
 	failures := make([]string, 0)
-	skipped := make([]time.Duration, 0)
 	for _, account := range accounts {
 		if ctx.Err() != nil {
 			failures = append(failures, plugin.SubscriptionCheckIncompleteMessage)
 			return nil, plugin.DedupeStrings(failures), false, false
 		}
 		if delay := source.cooldownRemaining(ctx, "feed", account); delay > 0 {
-			skipped = append(skipped, delay)
 			continue
 		}
 		updates, live, liveObserved, err := source.fetchUserUpdates(ctx, secUID, account)
@@ -190,19 +204,6 @@ func (source *douyinSource) pollUser(ctx context.Context, secUID string, account
 			updates = append(updates, liveUpdate)
 		}
 		return updates, nil, true, true
-	}
-	if len(skipped) > 0 && len(failures) == 0 {
-		minimum := skipped[0]
-		for _, delay := range skipped[1:] {
-			if delay < minimum {
-				minimum = delay
-			}
-		}
-		minutes := int((minimum + time.Minute - 1) / time.Minute)
-		if minutes < 1 {
-			minutes = 1
-		}
-		failures = append(failures, fmt.Sprintf("抖音检查因认证失败、平台风控或限流暂停，剩余约 %d 分钟。", minutes))
 	}
 	return nil, plugin.DedupeStrings(failures), false, false
 }
@@ -335,6 +336,20 @@ func (source *douyinSource) cooldownRemaining(ctx context.Context, scope string,
 	if remaining < 0 {
 		return 0
 	}
+	if remaining > 0 {
+		reason := "上次请求未完成"
+		switch plugin.StringScalar(plugin.NestedValue(stored, "kind")) {
+		case "auth":
+			reason = "认证请求被拒绝，请查看服务器凭据检查结果"
+		case "session_blocked":
+			reason = "平台接口拒绝当前会话，不能据此判断 CK 失效"
+		case "risk_control":
+			reason = "平台风控拦截"
+		case "rate_limit":
+			reason = "平台限流"
+		}
+		source.pauseReasons = append(source.pauseReasons, fmt.Sprintf("抖音检查已暂停：%s；预计 %s 后重试。", reason, until.Local().Format("15:04:05")))
+	}
 	return remaining
 }
 
@@ -371,8 +386,9 @@ func (source *douyinSource) recordError(ctx context.Context, scope string, accou
 	for key, value := range fields {
 		payload[key] = value
 	}
+	source.failureKinds = append(source.failureKinds, scope+":"+plugin.FirstText(payload["error_code"], payload["kind"], "request"))
 	message := fmt.Sprintf("抖音账号 %s 的订阅源检查未完成；本轮不会使用该来源更新。%s", account.key(), strings.TrimSpace(source.friendlyError(err)))
-	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: payload})
+	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: message, Fields: payload})
 }
 
 func (source *douyinSource) friendlyError(err error) string {

@@ -59,7 +59,7 @@ func newWorkflowHandler(t testing.TB, platforms ...Platform) *Handler {
 	if len(platforms) == 0 {
 		platforms = []Platform{workflowPlatform("fixture", &workflowSession{})}
 	}
-	handler, err := NewHandler(Options{Platforms: platforms, Now: func() time.Time { return workflowNow }, Jitter: func() time.Duration { return 0 }})
+	handler, err := NewHandler(Options{MediaTempRoot: t.TempDir(), Platforms: platforms, Now: func() time.Time { return workflowNow }, Jitter: func() time.Duration { return 0 }})
 	if err != nil {
 		t.Fatal(err)
 	}

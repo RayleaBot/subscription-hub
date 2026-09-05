@@ -103,11 +103,13 @@ func (result Resolution) ManagementResult(platform, query string) map[string]any
 }
 
 type PollResult struct {
-	Checked   int
-	Updates   []Update
-	Errors    []string
-	Summary   map[string]any
-	ReadyUIDs map[string]bool
+	PauseReasons []string
+	FailureKinds []string
+	Checked      int
+	Updates      []Update
+	Errors       []string
+	Summary      map[string]any
+	ReadyUIDs    map[string]bool
 }
 
 type CardRequest struct {
@@ -137,10 +139,12 @@ type AvatarPolicy struct {
 }
 
 type Options struct {
-	Platforms []Platform
-	Actions   RuntimeActions
-	Now       func() time.Time
-	Jitter    func() time.Duration
+	// MediaTempRoot isolates owned media leases; empty selects the process temp directory.
+	MediaTempRoot string
+	Platforms     []Platform
+	Actions       RuntimeActions
+	Now           func() time.Time
+	Jitter        func() time.Duration
 }
 
 type commandRoute struct{ platform, operation string }
@@ -153,7 +157,10 @@ type Handler struct {
 	now                 func() time.Time
 	jitter              func() time.Duration
 	schedulerRegistered atomic.Bool
-	checkMu             sync.Mutex
+	checkGate           chan struct{}
+	schedulerGate       chan struct{}
+	checkLogMu          sync.Mutex
+	checkLogs           map[string]checkLogState
 	resolverMu          sync.Mutex
 	resolverCooldowns   map[string]time.Time
 	mediaGate           resolverMediaGate
@@ -169,7 +176,8 @@ func NewHandler(options Options) (*Handler, error) {
 	handler := &Handler{
 		byID: map[string]Platform{}, commands: map[string]commandRoute{}, resolverCooldowns: map[string]time.Time{},
 		actions: options.Actions, now: options.Now, jitter: options.Jitter,
-		deferredMedia: newDeferredMediaQueue(),
+		deferredMedia: newDeferredMediaQueue(options.MediaTempRoot),
+		checkGate:     make(chan struct{}, 1), schedulerGate: make(chan struct{}, 1),
 	}
 	if handler.now == nil {
 		handler.now = time.Now

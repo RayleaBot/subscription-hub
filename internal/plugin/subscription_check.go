@@ -55,7 +55,11 @@ func logSubscriptionFailure(ctx context.Context, actions HostActions, message st
 	if err != nil {
 		reason = DiagnosticExcerpt(err.Error(), 240)
 	}
-	completeMessage := fmt.Sprintf("%s：平台 %s，订阅 %s，目标 %s %s；本条更新未送达。原因：%s", message, item.Platform, item.ID, item.TargetType, item.TargetID, reason)
+	outcome := "本条更新未送达"
+	if mediaOutcomeUncertain(err) {
+		outcome = "本条更新可能仍会送达，已保留去重记录，未自动重发"
+	}
+	completeMessage := fmt.Sprintf("%s：平台 %s，订阅 %s，目标 %s %s；%s。原因：%s", message, item.Platform, item.ID, item.TargetType, item.TargetID, outcome, reason)
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: completeMessage, Fields: fields})
 }
 
@@ -72,16 +76,98 @@ func rememberSubscriptionCheck(ctx context.Context, actions HostActions, result 
 	return err
 }
 
-func logSubscriptionCheck(ctx context.Context, actions HostActions, result map[string]any) {
+func logSubscriptionCheck(ctx context.Context, actions HostActions, result map[string]any, repeats ...int) {
 	failures := stringSlice(result["errors"])
 	checked, sent := IntScalar(result["checked"]), IntScalar(result["sent"])
 	fields := map[string]any{"checked": checked, "sent": sent, "failure_count": len(failures)}
+	if causes := stringSlice(result["failure_causes"]); len(causes) > 0 {
+		fields["failure_causes"] = causes
+	}
+	if counts, ok := result["failure_counts"].(map[string]int); ok {
+		fields["failure_counts"] = counts
+	}
+	if len(repeats) > 0 && repeats[0] > 0 {
+		fields["repeat_count"] = repeats[0]
+	}
+	if BoolScalar(result["paused_only"]) {
+		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: "订阅检查包含退避中的来源，本轮未重复请求这些来源。", Fields: fields})
+		return
+	}
 	if len(failures) > 0 {
 		fields["errors"] = failures
 		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: subscriptionCheckLogMessage(checked, sent, failures), Fields: fields})
 		return
 	}
-	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "info", Message: fmt.Sprintf("订阅检查完成：检查 %d 个订阅源，推送 %d 条更新；未发现异常。", checked, sent), Fields: fields})
+	level := "debug"
+	if sent > 0 {
+		level = "info"
+	}
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: level, Message: fmt.Sprintf("订阅检查完成：检查 %d 个订阅源，推送 %d 条更新。", checked, sent), Fields: fields})
+}
+
+func (handler *Handler) logCheck(ctx context.Context, actions HostActions, result map[string]any) {
+	if ctx.Err() != nil {
+		return
+	}
+	if BoolScalar(result["paused_only"]) {
+		logSubscriptionCheck(ctx, actions, result)
+		return
+	}
+	handler.checkLogMu.Lock()
+	failures := len(stringSlice(result["errors"]))
+	count := 0
+	counts := make(map[string]int)
+	if failures > 0 {
+		if handler.checkLogs == nil {
+			handler.checkLogs = make(map[string]checkLogState)
+		}
+		causes := stringSlice(result["failure_causes"])
+		if len(causes) == 0 {
+			causes = []string{"subscription:check:unspecified"}
+		}
+		now := handler.now()
+		for _, cause := range DedupeStrings(causes) {
+			if _, exists := handler.checkLogs[cause]; !exists && len(handler.checkLogs) >= 1024 {
+				var oldest string
+				for key, entry := range handler.checkLogs {
+					if oldest == "" || entry.emitted.Before(handler.checkLogs[oldest].emitted) {
+						oldest = key
+					}
+				}
+				delete(handler.checkLogs, oldest)
+			}
+			state := handler.checkLogs[cause]
+			state.total++
+			state.pending++
+			if state.emitted.IsZero() || now.Sub(state.emitted) >= 5*time.Minute {
+				counts[cause] = state.pending
+				count += state.pending
+				state.pending, state.emitted = 0, now
+			}
+			handler.checkLogs[cause] = state
+		}
+	}
+	recovered := failures == 0 && !BoolScalar(result["paused"]) && StringScalar(result["skipped"]) == "" && len(handler.checkLogs) > 0
+	if recovered {
+		for cause, state := range handler.checkLogs {
+			counts[cause] = state.total
+			count += state.total
+		}
+		handler.checkLogs = nil
+	}
+	handler.checkLogMu.Unlock()
+	if failures > 0 && count == 0 {
+		return
+	}
+	if recovered {
+		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "info", Message: "订阅检查已恢复，本轮检查已完成。", Fields: map[string]any{"repeat_count": count, "failure_counts": counts}})
+	}
+	logged := make(map[string]any, len(result)+1)
+	for key, value := range result {
+		logged[key] = value
+	}
+	logged["failure_counts"] = counts
+	logSubscriptionCheck(ctx, actions, logged, count)
 }
 
 func subscriptionCheckLogMessage(checked, sent int64, failures []string) string {
@@ -107,6 +193,10 @@ func subscriptionCheckLogMessage(checked, sent int64, failures []string) string 
 
 func subscriptionCheckSummary(result map[string]any) string {
 	switch StringScalar(result["skipped"]) {
+	case "check_in_progress":
+		return "已有订阅检查正在执行，本轮已跳过。"
+	case "check_canceled":
+		return "等待订阅检查时已取消，本轮未执行。"
 	case "disabled":
 		return "订阅功能未启用。"
 	case "no_checkable_subscriptions", "no_bilibili_subscriptions":
