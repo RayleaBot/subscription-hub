@@ -57,9 +57,9 @@ func logSubscriptionFailure(ctx context.Context, actions HostActions, message st
 	}
 	outcome := "本条更新未送达"
 	if mediaOutcomeUncertain(err) {
-		outcome = "本条更新可能仍会送达，已保留去重记录，未自动重发"
+		outcome = "未确认是否送达，不自动重发"
 	}
-	completeMessage := fmt.Sprintf("%s：平台 %s，订阅 %s，目标 %s %s；%s。原因：%s", message, item.Platform, item.ID, item.TargetType, item.TargetID, outcome, reason)
+	completeMessage := fmt.Sprintf("%s（%s）；%s：%s", message, FirstText(item.Name, item.UID, item.ID), outcome, reason)
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: completeMessage, Fields: fields})
 }
 
@@ -90,19 +90,24 @@ func logSubscriptionCheck(ctx context.Context, actions HostActions, result map[s
 		fields["repeat_count"] = repeats[0]
 	}
 	if BoolScalar(result["paused_only"]) {
-		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: "订阅检查包含退避中的来源，本轮未重复请求这些来源。", Fields: fields})
+		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: "部分订阅检查暂停，等待重试。", Fields: fields})
 		return
 	}
 	if len(failures) > 0 {
 		fields["errors"] = failures
-		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: subscriptionCheckLogMessage(checked, sent, failures), Fields: fields})
+		message := subscriptionCheckLogMessage(checked, sent, failures)
+		if platforms := stringSlice(result["failure_platforms"]); len(platforms) > 0 {
+			fields["failure_platforms"] = platforms
+			message = strings.Join(platforms, "、") + message
+		}
+		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: fields})
 		return
 	}
 	level := "debug"
 	if sent > 0 {
 		level = "info"
 	}
-	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: level, Message: fmt.Sprintf("订阅检查完成：检查 %d 个订阅源，推送 %d 条更新。", checked, sent), Fields: fields})
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: level, Message: fmt.Sprintf("订阅检查完成：检查 %d 个账号，推送 %d 条更新。", checked, sent), Fields: fields})
 }
 
 func (handler *Handler) logCheck(ctx context.Context, actions HostActions, result map[string]any) {
@@ -160,35 +165,27 @@ func (handler *Handler) logCheck(ctx context.Context, actions HostActions, resul
 		return
 	}
 	if recovered {
-		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "info", Message: "订阅检查已恢复，本轮检查已完成。", Fields: map[string]any{"repeat_count": count, "failure_counts": counts}})
+		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "info", Message: fmt.Sprintf("订阅检查已恢复：检查 %d 个账号，推送 %d 条更新。", IntScalar(result["checked"]), IntScalar(result["sent"])), Fields: map[string]any{"repeat_count": count, "failure_counts": counts, "checked": IntScalar(result["checked"]), "sent": IntScalar(result["sent"]), "failure_count": 0}})
+		return
 	}
 	logged := make(map[string]any, len(result)+1)
 	for key, value := range result {
 		logged[key] = value
 	}
 	logged["failure_counts"] = counts
+	var platforms []string
+	for _, cause := range stringSlice(result["failure_causes"]) {
+		id, _, _ := strings.Cut(cause, ":")
+		if platform, ok := handler.byID[id]; ok {
+			platforms = append(platforms, FirstText(platform.Name, platform.ID))
+		}
+	}
+	logged["failure_platforms"] = DedupeStrings(platforms)
 	logSubscriptionCheck(ctx, actions, logged, count)
 }
 
 func subscriptionCheckLogMessage(checked, sent int64, failures []string) string {
-	visible := failures
-	if len(visible) > 3 {
-		visible = visible[:3]
-	}
-	reasons := make([]string, 0, len(visible))
-	for _, failure := range visible {
-		if text := strings.TrimSpace(strings.TrimRight(failure, "。；")); text != "" {
-			reasons = append(reasons, text)
-		}
-	}
-	message := fmt.Sprintf("订阅检查降级：检查 %d 个订阅源，推送 %d 条更新；发现 %d 类异常", checked, sent, len(failures))
-	if len(reasons) > 0 {
-		message += "：" + strings.Join(reasons, "；")
-	}
-	if remaining := len(failures) - len(visible); remaining > 0 {
-		message += fmt.Sprintf("；另有 %d 类异常保留在日志详情中", remaining)
-	}
-	return message + "。"
+	return fmt.Sprintf("订阅检查未全部完成：检查 %d 个账号，推送 %d 条更新，%d 项异常。", checked, sent, len(failures))
 }
 
 func subscriptionCheckSummary(result map[string]any) string {

@@ -375,8 +375,8 @@ func (source *bilibiliSource) recordError(ctx context.Context, scope string, acc
 		label = scope
 	}
 	reason := strings.TrimSpace(source.friendlyError(label, err))
-	message := fmt.Sprintf("Bilibili 账号 %s 的%s订阅源检查未完成；本轮不会使用该来源更新。%s", account.key(), label, reason)
-	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: payload})
+	message := fmt.Sprintf("B站账号 %s 检查失败：%s", account.key(), reason)
+	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: message, Fields: payload})
 }
 
 func (source *bilibiliSource) friendlyError(label string, err error) string {

@@ -160,7 +160,7 @@ func refreshSubscribersForDelivery(ctx context.Context, actions HostActions, ite
 	*failures = append(*failures, "订阅人身份实时刷新失败，已使用保存信息。")
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 		Level:   "warn",
-		Message: fmt.Sprintf("订阅 %s 的 %d 名订阅人中有 %d 名身份刷新失败；本次推送将继续使用已保存信息。", item.ID, len(item.Subscribers), failed),
+		Message: fmt.Sprintf("%d 名订阅人的资料更新失败，继续使用已保存的资料。", failed),
 		Fields: map[string]any{
 			"subscription_id":  item.ID,
 			"target_type":      item.TargetType,

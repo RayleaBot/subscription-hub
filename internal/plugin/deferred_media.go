@@ -230,7 +230,7 @@ func (handler *Handler) flushDeferredMedia(ctx context.Context, event *rayleabot
 			if mediaOutcomeUncertain(err) {
 				job.retain()
 				if ctx.Err() == nil {
-					_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: "媒体发送结果未确认；文件保留 24 小时，不自动重发。", Fields: actionErrorLogFields(err)})
+					_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: "未确认媒体是否送达，不自动重发。", Fields: actionErrorLogFields(err)})
 				}
 				return
 			}
@@ -255,7 +255,7 @@ func (handler *Handler) sendDeferredFailure(ctx context.Context, actions HostAct
 		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text(message)}},
 	})
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-		Level: "warn", Message: "抖音后台媒体任务未能发送。",
+		Level: "warn", Message: "抖音媒体发送未完成：" + message,
 		Fields: map[string]any{"platform": job.Platform, "target": job.TargetType + ":" + job.TargetID},
 	})
 }

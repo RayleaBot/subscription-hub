@@ -164,7 +164,7 @@ func TestCooldownRemainsVisibleWithoutRepeatedWarningOrFalseRecovery(t *testing.
 		t.Fatalf("cooldown levels = %#v", actions.Logs)
 	}
 	handler.logCheck(t.Context(), actions, map[string]any{"errors": []string{}, "checked": 1})
-	if len(actions.Logs) != 4 || actions.Logs[2].Level != "info" {
+	if len(actions.Logs) != 3 || actions.Logs[2].Level != "info" || IntScalar(actions.Logs[2].Fields["checked"]) != 1 {
 		t.Fatal("actual recovery not recorded")
 	}
 }
@@ -193,7 +193,7 @@ func TestCheckWarningsAggregateByStructuredCauseAndKeepNewFailuresVisible(t *tes
 		t.Fatal("summary did not represent suppressed and current occurrences exactly once")
 	}
 	handler.logCheck(t.Context(), actions, map[string]any{"errors": []string{}, "checked": 1})
-	if len(actions.Logs) != 5 || IntScalar(actions.Logs[3].Fields["repeat_count"]) != 4 {
+	if len(actions.Logs) != 4 || IntScalar(actions.Logs[3].Fields["repeat_count"]) != 4 {
 		t.Fatal("recovery lost occurrence counts")
 	}
 }

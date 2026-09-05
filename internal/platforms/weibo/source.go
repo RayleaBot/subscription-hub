@@ -372,8 +372,8 @@ func (source *weiboSource) recordError(ctx context.Context, scope string, accoun
 	for key, value := range fields {
 		payload[key] = value
 	}
-	message := fmt.Sprintf("微博账号 %s 的订阅源检查未完成；本轮不会使用该来源更新。%s", account.key(), strings.TrimSpace(source.friendlyError(err)))
-	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: payload})
+	message := fmt.Sprintf("微博账号 %s 检查失败：%s", account.key(), strings.TrimSpace(source.friendlyError(err)))
+	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: message, Fields: payload})
 }
 
 func (source *weiboSource) friendlyError(err error) string {

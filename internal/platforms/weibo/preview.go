@@ -250,7 +250,7 @@ func logWeiboPreviewFailure(ctx context.Context, actions plugin.SourceActions, m
 	if ref != nil && strings.TrimSpace(ref.ID) != "" {
 		weiboID = strings.TrimSpace(ref.ID)
 	}
-	completeMessage := fmt.Sprintf("%s：微博 %s；本次无法生成预览。", message, weiboID)
+	completeMessage := fmt.Sprintf("%s（%s）", message, weiboID)
 	if err != nil {
 		completeMessage += strings.TrimSpace(friendlyWeiboSourceError("原因", err))
 	} else if strings.TrimSpace(reason) != "" {

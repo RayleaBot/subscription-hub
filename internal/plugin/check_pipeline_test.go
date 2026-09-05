@@ -431,10 +431,8 @@ func TestSubscriptionCheckLogKeepsCompleteFailuresAndReadableSummary(t *testing.
 		t.Fatalf("log count = %d, want 1", len(actions.Logs))
 	}
 	entry := actions.Logs[0]
-	for _, expected := range []string{"检查 12 个订阅源", "推送 2 条更新", "发现 4 类异常", "抖音检查因平台风控暂停", "另有 1 类异常"} {
-		if !strings.Contains(entry.Message, expected) {
-			t.Fatalf("message %q does not contain %q", entry.Message, expected)
-		}
+	if entry.Level != "warn" || IntScalar(entry.Fields["checked"]) != 12 || IntScalar(entry.Fields["sent"]) != 2 {
+		t.Fatalf("wrong check result log: %#v", entry)
 	}
 	if IntScalar(entry.Fields["failure_count"]) != int64(len(failures)) || len(stringSlice(entry.Fields["errors"])) != len(failures) {
 		t.Fatalf("structured failures were truncated: %#v", entry.Fields)

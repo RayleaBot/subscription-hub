@@ -144,7 +144,7 @@ func logCardRenderFailure(ctx context.Context, actions HostActions, template str
 	if reason == "" {
 		reason = "渲染结果没有图片路径"
 	}
-	message := fmt.Sprintf("订阅卡片模板 %s 生成图片失败；本次卡片不会发送。原因：%s。", strings.TrimSpace(template), reason)
+	message := fmt.Sprintf("订阅卡片生成失败（%s）：%s。", strings.TrimSpace(template), reason)
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: message, Fields: fields})
 }
 

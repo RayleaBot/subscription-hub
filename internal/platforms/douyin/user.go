@@ -3,7 +3,6 @@ package douyin
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -182,7 +181,7 @@ func searchDouyinWithActions(ctx context.Context, actions plugin.SourceActions, 
 			clearDouyinSearchPause(ctx, actions)
 			return resolved, nil
 		} else if resolveErr != nil {
-			logDouyinFailure(ctx, actions, "抖音宿主浏览器解析失败", resolveErr)
+			logDouyinFailure(ctx, actions, "抖音用户查找失败", resolveErr)
 		}
 	}
 	searchErr := jsonErr
@@ -362,9 +361,9 @@ func logDouyinEmptySearchResult(ctx context.Context, actions plugin.SourceAction
 	endpointPath := douyinEndpointPath(endpoint)
 	statusCode := plugin.IntScalar(document["status_code"])
 	statusMessage := plugin.DiagnosticExcerpt(douyinDocumentMessage(document), 120)
-	message := fmt.Sprintf("抖音搜索接口 %s 返回成功响应，但没有匹配用户；状态码 %d，本次不会据此判断 CK 失效，建议改用用户主页链接或完整 sec_uid。", endpointPath, statusCode)
+	message := "未找到匹配的抖音用户，请尝试用户主页链接。"
 	if statusMessage != "" {
-		message = fmt.Sprintf("抖音搜索接口 %s 返回成功响应，但没有匹配用户；状态码 %d，平台信息：%s。本次不会据此判断 CK 失效，建议改用用户主页链接或完整 sec_uid。", endpointPath, statusCode, statusMessage)
+		message += "平台提示：" + statusMessage
 	}
 	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 		Level:   "info",

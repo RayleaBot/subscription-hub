@@ -213,7 +213,7 @@ func TestWeiboSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	if _, exists := fake.KV["source:weibo:cooldown:feed:primary"]; !exists {
 		t.Fatalf("risk-controlled account did not enter cooldown: %#v", fake.KV)
 	}
-	if len(fake.Logs) == 0 || !strings.Contains(fake.Logs[0].Message, "订阅源检查未完成") || !strings.Contains(fake.Logs[0].Message, "风控拦截") {
+	if len(fake.Logs) == 0 || fake.Logs[0].Level != "debug" || plugin.StringScalar(fake.Logs[0].Fields["kind"]) != "risk_control" {
 		t.Fatalf("risk-control failure was not logged: %#v", fake.Logs)
 	}
 }
