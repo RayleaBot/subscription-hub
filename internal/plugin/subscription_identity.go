@@ -12,9 +12,8 @@ func CurrentTargetName(event *rayleabot.EventContext) string {
 	name := strings.TrimSpace(event.Event.Target.Name)
 	onebot := MapValue(event.Event.Payload["onebot"])
 	sender := MapValue(onebot["sender"])
-	if name == "" && NormalizedTargetType(event.Event.Target.Type) == "group" {
-		name = StringScalar(onebot["group_name"])
-	}
+	// Group names arrive only as Target.Name: payload.onebot is a closed
+	// projection and never carries group_name.
 	if name == "" && NormalizedTargetType(event.Event.Target.Type) == "private" {
 		name = FirstText(event.Event.Actor.Nickname, sender["nickname"])
 	}

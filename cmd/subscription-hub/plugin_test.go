@@ -162,13 +162,20 @@ func TestNonBilibiliSubscriptionKeepsOriginalSubjectName(t *testing.T) {
 	}
 }
 
-func TestCurrentTargetNameFallsBackToOneBotAndPrivateActor(t *testing.T) {
+func TestCurrentTargetNameUsesTargetNameAndPrivateActor(t *testing.T) {
 	group := &rayleabot.EventContext{Event: rayleabot.Event{
-		Target:  rayleabot.Target{Type: "group", ID: "100"},
-		Payload: map[string]any{"onebot": map[string]any{"group_name": "测试群"}},
+		Target: rayleabot.Target{Type: "group", ID: "100", Name: "测试群"},
 	}}
 	if got := plugin.CurrentTargetName(group); got != "测试群" {
 		t.Fatalf("group target name = %q", got)
+	}
+	// payload.onebot is a closed projection without group_name, so a group
+	// event that carries no Target.Name has no other source for one.
+	unnamed := &rayleabot.EventContext{Event: rayleabot.Event{
+		Target: rayleabot.Target{Type: "group", ID: "100"},
+	}}
+	if got := plugin.CurrentTargetName(unnamed); got != "" {
+		t.Fatalf("unnamed group target name = %q", got)
 	}
 	private := &rayleabot.EventContext{Event: rayleabot.Event{
 		Actor: rayleabot.Actor{Nickname: "柒柒"}, Target: rayleabot.Target{Type: "private", ID: "7"},
