@@ -215,7 +215,7 @@ func (source *douyinSource) fetchUserUpdates(ctx context.Context, secUID string,
 	document, jsonErr := source.client.requestJSON(ctx, douyinAwemePostAPIURL(secUID), account, douyinUserPageURL(secUID))
 	if jsonErr == nil {
 		for _, aweme := range douyinAwemesFromValue(document) {
-			if update := normalizeDouyinAweme(aweme); update != nil {
+			if update := normalizeDouyinAweme(source.client.actions.TimeLocation(), aweme); update != nil {
 				updates = append(updates, update)
 			}
 		}
@@ -243,7 +243,7 @@ func (source *douyinSource) fetchUserUpdates(ctx context.Context, secUID string,
 		return nil, nil, false, htmlErr
 	}
 	for _, aweme := range douyinAwemesFromPage(body) {
-		if update := normalizeDouyinAweme(aweme); update != nil {
+		if update := normalizeDouyinAweme(source.client.actions.TimeLocation(), aweme); update != nil {
 			updates = append(updates, update)
 		}
 	}
@@ -308,7 +308,7 @@ func (source *douyinSource) liveTransition(ctx context.Context, secUID string, l
 	if previousOn && plugin.StringScalar(previous["session"]) == session {
 		return nil
 	}
-	update := normalizeDouyinLive(live, secUID)
+	update := normalizeDouyinLive(source.client.actions.TimeLocation(), live, secUID)
 	if update == nil {
 		return nil
 	}
@@ -348,7 +348,7 @@ func (source *douyinSource) cooldownRemaining(ctx context.Context, scope string,
 		case "rate_limit":
 			reason = "平台限流"
 		}
-		source.pauseReasons = append(source.pauseReasons, fmt.Sprintf("抖音检查已暂停：%s；预计 %s 后重试。", reason, until.Local().Format("15:04:05")))
+		source.pauseReasons = append(source.pauseReasons, fmt.Sprintf("抖音检查已暂停：%s；预计 %s 后重试。", reason, until.In(source.client.actions.TimeLocation()).Format("15:04:05")))
 	}
 	return remaining
 }

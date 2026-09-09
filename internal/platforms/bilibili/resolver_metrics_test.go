@@ -2,12 +2,13 @@ package bilibili
 
 import (
 	"testing"
+	"time"
 
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
 
 func TestBilibiliVideoPreviewBuildsResolverMetrics(t *testing.T) {
-	update, err := previewVideoUpdate(map[string]any{"data": map[string]any{
+	update, err := previewVideoUpdate(time.UTC, map[string]any{"data": map[string]any{
 		"bvid": "BV1Metrics", "title": "测试视频", "duration": 768,
 		"owner": map[string]any{"mid": 42, "name": "测试 UP"},
 		"stat": map[string]any{

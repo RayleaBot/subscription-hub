@@ -8,7 +8,7 @@ import (
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
 
-func normalizeDouyinAweme(aweme map[string]any) map[string]any {
+func normalizeDouyinAweme(location *time.Location, aweme map[string]any) map[string]any {
 	if aweme == nil {
 		return nil
 	}
@@ -29,7 +29,7 @@ func normalizeDouyinAweme(aweme map[string]any) map[string]any {
 		"id": id, "platform": "douyin", "uid": uid, "service": service,
 		"category": douyinServiceCategory(service), "title": title,
 		"summary": summary, "url": douyinAwemeURL(aweme, id, service),
-		"pub_ts": pubTS, "created_at": plugin.FormatTime(pubTS, ""),
+		"pub_ts": pubTS, "created_at": plugin.FormatTime(location, pubTS, ""),
 		"duration_text": duration,
 		"author": map[string]any{
 			"name": plugin.FirstText(name, uid), "uid": uid,
@@ -42,7 +42,7 @@ func normalizeDouyinAweme(aweme map[string]any) map[string]any {
 	}
 }
 
-func normalizeDouyinLive(live map[string]any, secUID string) map[string]any {
+func normalizeDouyinLive(location *time.Location, live map[string]any, secUID string) map[string]any {
 	if live == nil {
 		return nil
 	}
@@ -68,7 +68,7 @@ func normalizeDouyinLive(live map[string]any, secUID string) map[string]any {
 		"id": "live:" + id, "platform": "douyin", "uid": uid, "service": "live",
 		"category": douyinServiceCategory("live"), "title": title,
 		"summary": title, "url": liveURL,
-		"pub_ts": pubTS, "created_at": plugin.FormatTime(pubTS, ""),
+		"pub_ts": pubTS, "created_at": plugin.FormatTime(location, pubTS, ""),
 		"author": map[string]any{
 			"name": plugin.FirstText(name, uid), "uid": uid,
 			"unique_id": plugin.FirstText(user["unique_id"], user["short_id"]),

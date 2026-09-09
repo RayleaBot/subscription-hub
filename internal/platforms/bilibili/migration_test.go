@@ -367,7 +367,7 @@ func TestDynamicNormalizationKeepsRichOpusContent(t *testing.T) {
 			},
 		},
 	}}}}
-	updates := dynamicUpdates(document)
+	updates := dynamicUpdates(time.UTC, document)
 	if len(updates) != 1 {
 		t.Fatalf("updates = %#v", updates)
 	}

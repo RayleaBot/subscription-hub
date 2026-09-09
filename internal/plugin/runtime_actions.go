@@ -3,11 +3,13 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
 type SourceActions interface {
+	TimeLocation() *time.Location
 	HTTPRequest(context.Context, rayleabot.HTTPRequest) (rayleabot.ActionResult, error)
 	ThirdPartyAccountRead(context.Context, rayleabot.ThirdPartyAccountReadRequest) (rayleabot.ActionResult, error)
 	KVGet(context.Context, string) (rayleabot.ActionResult, error)

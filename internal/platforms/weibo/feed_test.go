@@ -117,7 +117,7 @@ func TestWeiboFeedDoesNotTreatSeenUpdateAsPagingBoundary(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	first := plugin.Subscription{ID: "paged-first", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(first)] = true
-	boundary := normalizeWeiboMblog(weiboTextMblog("boundary", first.UID, "部分目标已推送", now.Add(-time.Minute).Unix()), 0)
+	boundary := normalizeWeiboMblog(time.UTC, weiboTextMblog("boundary", first.UID, "部分目标已推送", now.Add(-time.Minute).Unix()), 0)
 	fake.KV[plugin.SubscriptionUpdateKey(first, boundary)] = true
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		weiboFeedPageResult("next-page", weiboTextMblog("boundary", first.UID, "部分目标已推送", now.Add(-time.Minute).Unix())),
@@ -462,6 +462,13 @@ func TestWeiboFeedSavesContinuationWhenCheckIsInterrupted(t *testing.T) {
 }
 
 func TestWeiboSubscriptionCheckExpiresStaleMblog(t *testing.T) {
+	for _, plainTime := range []bool{false, true} {
+		t.Run(fmt.Sprintf("plain_time=%v", plainTime), func(t *testing.T) { checkExpiresStaleMblog(t, plainTime) })
+	}
+}
+
+func checkExpiresStaleMblog(t *testing.T, plainTime bool) {
+	t.Helper()
 	fake := testkit.NewActions()
 	fake.Accounts = fixtureWeiboAccounts("primary")
 	now := time.Now().Truncate(time.Second)
@@ -471,9 +478,14 @@ func TestWeiboSubscriptionCheckExpiresStaleMblog(t *testing.T) {
 	}
 	fake.KV[weiboFeedSourceKey(item)] = true
 	current := plugin.Settings{Enabled: true, DeliveryMaxAgeMinutes: 5, Subscriptions: []plugin.Subscription{item}}
-	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedResult(weiboTextMblog(
+	mblog := weiboTextMblog(
 		"delayed", "6000000001", "过期微博", now.Add(-6*time.Minute).Unix(),
-	))}
+	)
+	if plainTime {
+		delete(mblog, "created_timestamp")
+		mblog["created_at"] = now.Add(-6 * time.Minute).In(plugin.ChinaLocation).Format("2006-01-02 15:04:05")
+	}
+	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedResult(mblog)}
 	result := checkAt(t, context.Background(), fake, current, now)
 	if plugin.IntScalar(result["sent"]) != 0 || plugin.BoolScalar(result["degraded"]) {
 		t.Fatalf("expired weibo result = %#v", result)
@@ -634,7 +646,7 @@ func TestWeiboPlainTextPreservesLineBreaksAndEscapedText(t *testing.T) {
 }
 
 func TestWeiboNormalizationClassifiesServicesAndSkipsAds(t *testing.T) {
-	updates := weiboFeedUpdates(map[string]any{"ok": 1, "data": map[string]any{"cards": []any{
+	updates := weiboFeedUpdates(time.UTC, map[string]any{"ok": 1, "data": map[string]any{"cards": []any{
 		map[string]any{"card_type": 9, "mblog": weiboTextMblog("post-1", "6000000001", "文字微博", 1700000000)},
 		map[string]any{"card_type": 9, "mblog": weiboImageMblog("image-1", "6000000001", "图片微博", 1700000000)},
 		map[string]any{"card_type": 9, "mblog": weiboVideoMblog("video-1", "6000000001", "视频微博", 1700000000)},
@@ -672,7 +684,7 @@ func TestWeiboNormalizationPrefersLargeImageAndFormatsDecimalDuration(t *testing
 	page := plugin.MapValue(mblog["page_info"])
 	page["media_info"] = map[string]any{"duration": "279.498"}
 
-	update := normalizeWeiboMblog(mblog, 0)
+	update := normalizeWeiboMblog(time.UTC, mblog, 0)
 	images := plugin.ImageMaps(update["images"], 9)
 	if len(images) != 1 || plugin.StringScalar(images[0]["url"]) != "https://wx2.sinaimg.cn/mw2000/huge.jpg" {
 		t.Fatalf("large image was not preferred: %#v", images)
@@ -683,7 +695,7 @@ func TestWeiboNormalizationPrefersLargeImageAndFormatsDecimalDuration(t *testing
 }
 
 func TestWeiboRenderDataKeepsAuthorSummaryImagesAndDropsUndeclaredHosts(t *testing.T) {
-	update := normalizeWeiboMblog(weiboRepostMblog("repost-1", "6000000001", "转发微博", 1700000000), 0)
+	update := normalizeWeiboMblog(time.UTC, weiboRepostMblog("repost-1", "6000000001", "转发微博", 1700000000), 0)
 	if update == nil {
 		t.Fatal("expected normalized repost")
 	}
@@ -695,7 +707,7 @@ func TestWeiboRenderDataKeepsAuthorSummaryImagesAndDropsUndeclaredHosts(t *testi
 	if original == nil || plugin.StringScalar(original["summary"]) != "原微博正文" {
 		t.Fatalf("original was lost: %#v", original)
 	}
-	undeclared := normalizeWeiboMblog(map[string]any{
+	undeclared := normalizeWeiboMblog(time.UTC, map[string]any{
 		"mid": "pic-bad", "created_timestamp": 1700000000, "text": "未声明图片",
 		"user": map[string]any{"id": 6000000001, "screen_name": "测试博主"},
 		"pics": []any{map[string]any{"url": "https://example.test/skip.jpg"}},

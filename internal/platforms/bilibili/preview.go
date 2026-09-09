@@ -83,7 +83,7 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 		if err != nil {
 			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 视频预览失败", err))
 		}
-		return previewVideoUpdate(document, ref.URL)
+		return previewVideoUpdate(actions.TimeLocation(), document, ref.URL)
 	case "bangumi_ep", "bangumi_season":
 		query := url.Values{}
 		if ref.Kind == "bangumi_ep" {
@@ -101,14 +101,14 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 		if err != nil {
 			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 专栏预览失败", err))
 		}
-		return previewArticleUpdate(document, ref.URL, ref.ID)
+		return previewArticleUpdate(actions.TimeLocation(), document, ref.URL, ref.ID)
 	case "opus":
 		endpoint = bilibiliOpusDetailURL + "?" + url.Values{"id": []string{ref.ID}}.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
 		if err != nil {
 			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 动态预览失败", err))
 		}
-		return previewDynamicUpdate(document, ref.URL)
+		return previewDynamicUpdate(actions.TimeLocation(), document, ref.URL)
 	case "dynamic":
 		values := url.Values{"id": []string{ref.ID}, "features": []string{"itemOpusStyle,opusBigCover,onlyfansVote,decorationCard,onlyfansAssetsV2,forwardListHidden,ugcDelete"}}
 		endpoint = bilibiliDynamicURL + "?" + values.Encode()
@@ -116,7 +116,7 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 		if err != nil {
 			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 动态预览失败", err))
 		}
-		return previewDynamicUpdate(document, ref.URL)
+		return previewDynamicUpdate(actions.TimeLocation(), document, ref.URL)
 	case "live":
 		endpoint = bilibiliLiveRoomURL + "?" + url.Values{"room_id": []string{ref.ID}}.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, true, "", false)
@@ -128,13 +128,13 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 		if uid != "" {
 			statusDocument, _ = client.requestJSON(ctx, "GET", bilibiliLiveStatusEndpoint([]string{uid}), account, false, true, "", false)
 		}
-		return previewLiveUpdate(document, statusDocument, ref.URL, ref.ID)
+		return previewLiveUpdate(actions.TimeLocation(), document, statusDocument, ref.URL, ref.ID)
 	default:
 		return nil, errors.New("暂不支持这个 Bilibili 链接")
 	}
 }
 
-func previewVideoUpdate(document map[string]any, canonicalURL string) (map[string]any, error) {
+func previewVideoUpdate(location *time.Location, document map[string]any, canonicalURL string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
 		return nil, errors.New("Bilibili 视频预览失败：响应格式不正确")
@@ -153,7 +153,7 @@ func previewVideoUpdate(document map[string]any, canonicalURL string) (map[strin
 		"id": id, "service": "video", "category": dynamicCategory("video"),
 		"title": firstCleanText(data["title"], "Bilibili 视频预览"), "summary": plugin.TruncateRunes(firstCleanText(data["desc"], data["dynamic"]), 420),
 		"url": canonicalURL, "pub_ts": plugin.IntScalar(plugin.FirstNonNil(data["pubdate"], data["ctime"])),
-		"created_at":    plugin.FormatTime(plugin.IntScalar(plugin.FirstNonNil(data["pubdate"], data["ctime"])), ""),
+		"created_at":    plugin.FormatTime(location, plugin.IntScalar(plugin.FirstNonNil(data["pubdate"], data["ctime"])), ""),
 		"duration_text": plugin.FormatVideoDuration(plugin.IntScalar(data["duration"])),
 		"author":        map[string]any{"name": plugin.CleanText(owner["name"]), "avatar": plugin.NormalizeMediaURL(owner["face"]), "uid": plugin.CleanText(owner["mid"])},
 		"images":        images, "duration_seconds": plugin.IntScalar(data["duration"]), "stats": mergeBilibiliStats(data["stat"]), "_resolver_video": data,
@@ -199,7 +199,7 @@ func previewBangumiUpdate(document map[string]any, canonicalURL string, ref *bil
 	}, nil
 }
 
-func previewArticleUpdate(document map[string]any, canonicalURL, articleID string) (map[string]any, error) {
+func previewArticleUpdate(location *time.Location, document map[string]any, canonicalURL, articleID string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
 		return nil, errors.New("Bilibili 专栏预览失败：响应格式不正确")
@@ -212,13 +212,13 @@ func previewArticleUpdate(document map[string]any, canonicalURL, articleID strin
 	return map[string]any{
 		"id": articleID, "service": "article", "category": "专栏", "title": plugin.FirstText(data["title"], "Bilibili 专栏"),
 		"summary": plugin.TruncateRunes(plugin.FirstText(data["summary"], data["desc"]), 420), "url": canonicalURL,
-		"pub_ts": plugin.IntScalar(data["publish_time"]), "created_at": plugin.FormatTime(plugin.IntScalar(data["publish_time"]), ""),
+		"pub_ts": plugin.IntScalar(data["publish_time"]), "created_at": plugin.FormatTime(location, plugin.IntScalar(data["publish_time"]), ""),
 		"author": map[string]any{"name": plugin.FirstText(data["author_name"], plugin.NestedValue(data, "author", "name")), "uid": plugin.FirstText(data["mid"], plugin.NestedValue(data, "author", "mid"))},
 		"images": images, "stats": mergeBilibiliStats(data["stats"], data["stat"]),
 	}, nil
 }
 
-func previewDynamicUpdate(document map[string]any, canonicalURL string) (map[string]any, error) {
+func previewDynamicUpdate(location *time.Location, document map[string]any, canonicalURL string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
 		return nil, errors.New("Bilibili 动态预览失败：响应格式不正确")
@@ -246,9 +246,9 @@ func previewDynamicUpdate(document map[string]any, canonicalURL string) (map[str
 	if item == nil {
 		return nil, errors.New("Bilibili 动态预览失败：未识别到可预览的动态内容")
 	}
-	update := normalizeDynamicItem(item, 0)
+	update := normalizeDynamicItem(location, item, 0)
 	if update == nil {
-		update = normalizeOpusDetailItem(item, canonicalURL)
+		update = normalizeOpusDetailItem(location, item, canonicalURL)
 	}
 	if update == nil {
 		return nil, errors.New("Bilibili 动态预览失败：未识别到可预览的动态内容")
@@ -257,7 +257,7 @@ func previewDynamicUpdate(document map[string]any, canonicalURL string) (map[str
 	return update, nil
 }
 
-func normalizeOpusDetailItem(item map[string]any, canonicalURL string) map[string]any {
+func normalizeOpusDetailItem(location *time.Location, item map[string]any, canonicalURL string) map[string]any {
 	modules := plugin.SliceValue(item["modules"])
 	if len(modules) == 0 {
 		return nil
@@ -321,7 +321,7 @@ func normalizeOpusDetailItem(item map[string]any, canonicalURL string) map[strin
 	return map[string]any{
 		"id": id, "type": plugin.FirstText(item["type"], "DYNAMIC_TYPE_DRAW"), "service": "image_text", "category": dynamicCategory("image_text"),
 		"title": title, "summary": plugin.TruncateRunes(strings.Join(summaryParts, "\n"), 420), "summary_html": strings.Join(htmlParts, "<br>"),
-		"url": canonicalURL, "pub_ts": pubTS, "created_at": plugin.FormatTime(pubTS, plugin.StringScalar(author["pub_time"])),
+		"url": canonicalURL, "pub_ts": pubTS, "created_at": plugin.FormatTime(location, pubTS, plugin.StringScalar(author["pub_time"])),
 		"author": map[string]any{"name": authorName, "avatar": plugin.NormalizeMediaURL(author["avatar"]), "uid": plugin.FirstText(author["uid"], basic["uid"])},
 		"images": images, "topic": topic, "is_pinned": false, "original": nil, "stats": stats,
 	}
@@ -376,7 +376,7 @@ func opusDetailContent(content map[string]any) (string, string, []map[string]any
 	return strings.Join(textParts, "\n"), strings.Join(htmlParts, "<br>"), images
 }
 
-func previewLiveUpdate(document, statusDocument map[string]any, canonicalURL, roomID string) (map[string]any, error) {
+func previewLiveUpdate(location *time.Location, document, statusDocument map[string]any, canonicalURL, roomID string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
 		return nil, errors.New("Bilibili 直播间预览失败：响应格式不正确")
@@ -395,7 +395,7 @@ func previewLiveUpdate(document, statusDocument map[string]any, canonicalURL, ro
 	if len(images) == 0 {
 		images = liveCoverImages(statusEntry)
 	}
-	startedAt := plugin.FormatTime(pubTS, "")
+	startedAt := plugin.FormatTime(location, pubTS, "")
 	authorName := firstCleanText(statusEntry["uname"], data["uname"], data["name"], uid, roomID)
 	statusLabel := "未开播"
 	if status == 1 {

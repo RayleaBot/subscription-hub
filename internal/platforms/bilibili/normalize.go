@@ -16,7 +16,7 @@ var bilibiliBVIDPattern = regexp.MustCompile(`^BV[0-9A-Za-z]+$`)
 
 var bilibiliClassPattern = regexp.MustCompile(`[^0-9A-Za-z_-]+`)
 
-func dynamicUpdates(document map[string]any) []map[string]any {
+func dynamicUpdates(location *time.Location, document map[string]any) []map[string]any {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
 		return nil
@@ -25,14 +25,14 @@ func dynamicUpdates(document map[string]any) []map[string]any {
 	items = append(items, plugin.SliceValue(data["cards"])...)
 	updates := make([]map[string]any, 0, len(items))
 	for _, raw := range items {
-		if update := normalizeDynamicItem(plugin.MapValue(raw), 0); update != nil {
+		if update := normalizeDynamicItem(location, plugin.MapValue(raw), 0); update != nil {
 			updates = append(updates, update)
 		}
 	}
 	return updates
 }
 
-func normalizeDynamicItem(item map[string]any, depth int) map[string]any {
+func normalizeDynamicItem(location *time.Location, item map[string]any, depth int) map[string]any {
 	if item == nil {
 		return nil
 	}
@@ -62,7 +62,7 @@ func normalizeDynamicItem(item map[string]any, depth int) map[string]any {
 	}
 	original := map[string]any(nil)
 	if itemType == "DYNAMIC_TYPE_FORWARD" && depth < 2 {
-		original = normalizeDynamicItem(plugin.MapValue(item["orig"]), depth+1)
+		original = normalizeDynamicItem(location, plugin.MapValue(item["orig"]), depth+1)
 	}
 	if service == "repost" && original != nil {
 		if summary == "" {
@@ -82,7 +82,7 @@ func normalizeDynamicItem(item map[string]any, depth int) map[string]any {
 		"category": dynamicCategory(service), "title": title,
 		"summary": summary, "summary_html": summaryHTML,
 		"url":    dynamicJumpURL(basic, major, dynamicID),
-		"pub_ts": pubTS, "created_at": plugin.FormatTime(pubTS, plugin.StringScalar(authorModule["pub_time"])),
+		"pub_ts": pubTS, "created_at": plugin.FormatTime(location, pubTS, plugin.StringScalar(authorModule["pub_time"])),
 		"duration_text": dynamicDuration(major, service),
 		"author":        author, "images": dynamicImages(major, service),
 		"topic": topic, "is_pinned": plugin.CleanText(tagModule["text"]) == "置顶",
@@ -552,7 +552,7 @@ func appendBilibiliImage(images *[]map[string]any, value any) {
 	*images = append(*images, image)
 }
 
-func liveUpdate(document map[string]any, uid string) map[string]any {
+func liveUpdate(location *time.Location, document map[string]any, uid string) map[string]any {
 	entry := plugin.MapValue(plugin.NestedValue(document, "data", uid))
 	if entry == nil {
 		return nil
@@ -564,7 +564,7 @@ func liveUpdate(document map[string]any, uid string) map[string]any {
 		title = "直播间状态更新"
 	}
 	pubTS := liveStartTimestamp(entry)
-	startedAt := plugin.FormatTime(pubTS, "")
+	startedAt := plugin.FormatTime(location, pubTS, "")
 	statusLabel := "已下播"
 	if status == 1 {
 		statusLabel = "直播中"
@@ -602,7 +602,7 @@ func liveStartTimestamp(entry map[string]any) int64 {
 			continue
 		}
 		for _, layout := range []string{"2006-01-02 15:04:05", "2006-01-02 15:04"} {
-			if parsed, err := time.ParseInLocation(layout, text, time.Local); err == nil {
+			if parsed, err := time.ParseInLocation(layout, text, plugin.ChinaLocation); err == nil {
 				return parsed.Unix()
 			}
 		}

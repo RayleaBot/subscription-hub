@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
 type Actions struct {
+	Location           *time.Location
 	mu                 sync.Mutex
 	Accounts           rayleabot.ActionResult
 	HTTPRoutes         []HTTPRoute
@@ -37,12 +39,15 @@ type Actions struct {
 
 func NewActions() *Actions {
 	return &Actions{
+		Location:     time.FixedZone("Asia/Shanghai", 8*60*60),
 		KV:           map[string]any{},
 		Config:       map[string]any{},
 		GroupMembers: map[string]rayleabot.ActionResult{},
 		GroupErrors:  map[string]error{},
 	}
 }
+
+func (fake *Actions) TimeLocation() *time.Location { return fake.Location }
 
 func (fake *Actions) ThirdPartyAccountRead(context.Context, rayleabot.ThirdPartyAccountReadRequest) (rayleabot.ActionResult, error) {
 	fake.mu.Lock()

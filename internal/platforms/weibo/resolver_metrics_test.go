@@ -2,6 +2,7 @@ package weibo
 
 import (
 	"testing"
+	"time"
 
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
@@ -11,7 +12,7 @@ func TestWeiboPreviewBuildsResolverMetrics(t *testing.T) {
 	mblog["reposts_count"] = 12000
 	mblog["comments_count"] = 8600
 	mblog["attitudes_count"] = 96000
-	update := normalizeWeiboMblog(mblog, 0)
+	update := normalizeWeiboMblog(time.UTC, mblog, 0)
 	data := buildWeiboRenderData(plugin.Subscription{Platform: "weibo", UID: "6000000001", Name: "测试博主"}, update)
 	metrics := plugin.MapSliceValue(data["metrics"])
 	if len(metrics) != 3 {

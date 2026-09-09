@@ -21,7 +21,7 @@ func TestWeiboNormalizationUsesEmbeddedLongText(t *testing.T) {
 	mblog["isLongText"] = true
 	mblog["longText"] = map[string]any{"longTextContent": "完整第一行<br>完整第二行"}
 
-	update := normalizeWeiboMblog(mblog, 0)
+	update := normalizeWeiboMblog(time.UTC, mblog, 0)
 	if got := plugin.StringScalar(update["summary"]); got != "完整第一行\n完整第二行" {
 		t.Fatalf("embedded long text = %q", got)
 	}
@@ -31,7 +31,7 @@ func TestWeiboNormalizationUsesEmbeddedLongText(t *testing.T) {
 }
 
 func TestWeiboNormalizationDetectsTerminalFullTextLink(t *testing.T) {
-	update := normalizeWeiboMblog(weiboTextMblog(
+	update := normalizeWeiboMblog(time.UTC, weiboTextMblog(
 		"long-link", "6000000001", `摘要…<a href="/status/long-link">全文</a>`, 1700000000,
 	), 0)
 	if !plugin.BoolScalar(update["needs_long_text"]) {
@@ -41,7 +41,7 @@ func TestWeiboNormalizationDetectsTerminalFullTextLink(t *testing.T) {
 
 func TestWeiboLongTextResolverSkipsShortUpdates(t *testing.T) {
 	fake := testkit.NewActions()
-	update := normalizeWeiboMblog(weiboTextMblog("short", "6000000001", "短微博", 1700000000), 0)
+	update := normalizeWeiboMblog(time.UTC, weiboTextMblog("short", "6000000001", "短微博", 1700000000), 0)
 
 	prepared, degraded := newWeiboLongTextResolver(fake, nil).Prepare(context.Background(), update)
 	if degraded || plugin.StringScalar(prepared["summary"]) != "短微博" || len(fake.HTTPRequests) != 0 {

@@ -81,12 +81,22 @@ func FormatVideoDuration(seconds int64) string {
 	return fmt.Sprintf("%d:%02d", minutes, remaining)
 }
 
-func FormatTime(timestamp int64, fallback string) string {
+func FormatTime(location *time.Location, timestamp int64, fallback string) string {
 	if timestamp > 0 {
-		return time.Unix(timestamp, 0).Local().Format("2006年01月02日 15:04")
+		return time.Unix(timestamp, 0).In(location).Format("2006年01月02日 15:04")
 	}
 	return strings.TrimSpace(fallback)
 }
+
+// ChinaLocation is used for platform date strings that omit their UTC offset.
+// Display formatting uses the host location independently of this source zone.
+var ChinaLocation = func() *time.Location {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		panic(err)
+	}
+	return location
+}()
 
 func TruncateRunes(value string, limit int) string {
 	value = CleanText(value)

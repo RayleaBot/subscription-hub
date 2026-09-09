@@ -169,7 +169,7 @@ func (source *bilibiliSource) pollDynamics(ctx context.Context, uids []string, a
 			watched[uid] = true
 		}
 		updates := make([]map[string]any, 0)
-		for _, update := range dynamicUpdates(document) {
+		for _, update := range dynamicUpdates(source.client.actions.TimeLocation(), document) {
 			uid := plugin.StringScalar(plugin.NestedValue(update, "author", "uid"))
 			if !watched[uid] {
 				continue
@@ -286,7 +286,7 @@ func (source *bilibiliSource) ensureFollowing(ctx context.Context, account bilib
 func (source *bilibiliSource) liveTransitions(ctx context.Context, document map[string]any, uids []string) []map[string]any {
 	updates := make([]map[string]any, 0)
 	for _, uid := range uids {
-		update := liveUpdate(document, uid)
+		update := liveUpdate(source.client.actions.TimeLocation(), document, uid)
 		if update == nil {
 			continue
 		}

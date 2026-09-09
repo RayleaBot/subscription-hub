@@ -201,7 +201,7 @@ func (source *weiboSource) pollUserFeed(ctx, stateCtx context.Context, uid strin
 			if !usingResume {
 				freshPages++
 			}
-			pageUpdates := weiboFeedUpdates(document)
+			pageUpdates := weiboFeedUpdates(source.client.actions.TimeLocation(), document)
 			for _, update := range pageUpdates {
 				key := plugin.StringScalar(update["platform"]) + ":" + plugin.StringScalar(update["id"])
 				if plugin.StringScalar(update["uid"]) != uid || key == ":" || seenUpdates[key] {

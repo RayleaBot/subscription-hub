@@ -98,7 +98,7 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		resolved.URL = douyinCanonicalPreviewURL(resolved.Kind, resolved.ID)
 		ref = resolved
 	}
-	if update := douyinPreviewUpdateFromPage(shareBody, ref); update != nil {
+	if update := douyinPreviewUpdateFromPage(actions.TimeLocation(), shareBody, ref); update != nil {
 		return update, nil
 	}
 	accounts, accErr := readDouyinAccounts(ctx, actions)
@@ -110,7 +110,7 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		if err != nil {
 			return nil, errors.New(friendlyDouyinSourceError("抖音预览失败", err))
 		}
-		live := normalizeDouyinLive(douyinLiveFromPage(body), "")
+		live := normalizeDouyinLive(actions.TimeLocation(), douyinLiveFromPage(body), "")
 		if live == nil {
 			return nil, errors.New("没有找到这场抖音直播")
 		}
@@ -142,7 +142,7 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 			detailErr = err
 		}
 	}
-	if update := douyinPreviewUpdateFromPage(shareBody, ref); update != nil {
+	if update := douyinPreviewUpdateFromPage(actions.TimeLocation(), shareBody, ref); update != nil {
 		return update, nil
 	}
 	if detailErr != nil {
@@ -161,7 +161,7 @@ func fetchDouyinDetailAnonymous(ctx context.Context, client *douyinClient, ref *
 		return nil, err
 	}
 	for _, aweme := range douyinAwemesFromValue(document) {
-		if update := douyinPreviewUpdateFromAweme(aweme, ref); update != nil {
+		if update := douyinPreviewUpdateFromAweme(client.actions.TimeLocation(), aweme, ref); update != nil {
 			return update, nil
 		}
 	}
@@ -178,7 +178,7 @@ func fetchDouyinDetailAcrossAccounts(ctx context.Context, client *douyinClient, 
 			continue
 		}
 		for _, aweme := range douyinAwemesFromValue(document) {
-			if update := douyinPreviewUpdateFromAweme(aweme, ref); update != nil {
+			if update := douyinPreviewUpdateFromAweme(client.actions.TimeLocation(), aweme, ref); update != nil {
 				return update, nil
 			}
 		}
@@ -190,17 +190,17 @@ func fetchDouyinDetailAcrossAccounts(ctx context.Context, client *douyinClient, 
 	return nil, lastError
 }
 
-func douyinPreviewUpdateFromPage(body string, ref *douyinPreviewRef) map[string]any {
+func douyinPreviewUpdateFromPage(location *time.Location, body string, ref *douyinPreviewRef) map[string]any {
 	for _, aweme := range douyinAwemesFromPage(body) {
-		if update := douyinPreviewUpdateFromAweme(aweme, ref); update != nil {
+		if update := douyinPreviewUpdateFromAweme(location, aweme, ref); update != nil {
 			return update
 		}
 	}
 	return nil
 }
 
-func douyinPreviewUpdateFromAweme(aweme map[string]any, ref *douyinPreviewRef) map[string]any {
-	update := normalizeDouyinAweme(aweme)
+func douyinPreviewUpdateFromAweme(location *time.Location, aweme map[string]any, ref *douyinPreviewRef) map[string]any {
+	update := normalizeDouyinAweme(location, aweme)
 	if update == nil || (ref.ID != "" && plugin.FirstText(update["id"]) != ref.ID && !strings.Contains(plugin.StringScalar(update["url"]), ref.ID)) {
 		return nil
 	}

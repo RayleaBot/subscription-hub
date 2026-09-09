@@ -2,12 +2,13 @@ package douyin
 
 import (
 	"testing"
+	"time"
 
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
 
 func TestDouyinPreviewBuildsResolverMetrics(t *testing.T) {
-	update := normalizeDouyinAweme(map[string]any{
+	update := normalizeDouyinAweme(time.UTC, map[string]any{
 		"aweme_id": "7000000000000000000", "desc": "测试作品", "create_time": 1700000000,
 		"author": map[string]any{"sec_uid": "MS4wLjABAAAAmetric", "nickname": "测试用户"},
 		"video":  map[string]any{"duration": 80000},

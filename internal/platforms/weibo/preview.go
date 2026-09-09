@@ -156,11 +156,11 @@ func fetchWeiboPreview(ctx context.Context, actions plugin.SourceActions, ref *w
 	}
 	document, requestErr := requestWeiboAcrossAccounts(ctx, actions, accounts, endpoint, referer)
 	mblog := weiboMblogFromShowDocument(document)
-	update := normalizeWeiboMblog(mblog, 0)
+	update := normalizeWeiboMblog(actions.TimeLocation(), mblog, 0)
 	if update == nil {
 		if detailMblog, err := requestWeiboDetailAcrossAccounts(ctx, actions, accounts, ref.ID); err == nil {
 			mblog = detailMblog
-			update = normalizeWeiboMblog(mblog, 0)
+			update = normalizeWeiboMblog(actions.TimeLocation(), mblog, 0)
 		}
 	}
 	if update == nil {

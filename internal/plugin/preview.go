@@ -105,7 +105,7 @@ func (handler *Handler) previewSubscriptionCard(ctx context.Context, event *rayl
 		if !ok {
 			return event.SendText(ErrUnsupportedPreview.Error())
 		}
-		platformID, update = platform, selected.Sample(service, handler.now())
+		platformID, update = platform, selected.Sample(service, handler.now().In(actions.TimeLocation()))
 	}
 	author := MapValue(update["author"])
 	item := Subscription{

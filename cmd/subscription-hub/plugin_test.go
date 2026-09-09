@@ -317,6 +317,7 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 			frame["super_admins"] = []string{"7"}
 			frame["command_prefixes"] = []string{"/"}
 			frame["concurrency"] = 1
+			frame["timezone"] = "Asia/Shanghai"
 		}
 		if event != nil {
 			frame["event"] = event

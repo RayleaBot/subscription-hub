@@ -23,11 +23,11 @@ var weiboLongTextLink = regexp.MustCompile(`(?is)>\s*全文\s*</a>\s*$`)
 
 var weiboLongTextSuffix = regexp.MustCompile(`(?:\.{3}|…)[[:space:]]*全文[[:space:]]*$`)
 
-func weiboFeedUpdates(document map[string]any) []map[string]any {
+func weiboFeedUpdates(location *time.Location, document map[string]any) []map[string]any {
 	updates := make([]map[string]any, 0)
 	seen := map[string]bool{}
 	for _, mblog := range collectWeiboMblogs(document, 0) {
-		update := normalizeWeiboMblog(mblog, 0)
+		update := normalizeWeiboMblog(location, mblog, 0)
 		if update == nil {
 			continue
 		}
@@ -81,7 +81,7 @@ func weiboMblogIsAd(object map[string]any) bool {
 	return plugin.MapValue(object["promotion"]) != nil
 }
 
-func normalizeWeiboMblog(mblog map[string]any, depth int) map[string]any {
+func normalizeWeiboMblog(location *time.Location, mblog map[string]any, depth int) map[string]any {
 	if mblog == nil || weiboMblogIsAd(mblog) {
 		return nil
 	}
@@ -98,7 +98,7 @@ func normalizeWeiboMblog(mblog map[string]any, depth int) map[string]any {
 	}
 	var original map[string]any
 	if service == "repost" && depth < 2 {
-		original = normalizeWeiboMblog(plugin.MapValue(mblog["retweeted_status"]), depth+1)
+		original = normalizeWeiboMblog(location, plugin.MapValue(mblog["retweeted_status"]), depth+1)
 		if summary == "" {
 			summary = "转发微博"
 		}
@@ -110,7 +110,7 @@ func normalizeWeiboMblog(mblog map[string]any, depth int) map[string]any {
 		"summary": summary, "summary_html": "",
 		"needs_long_text": needsLongText,
 		"url":             weiboStatusURL(uid, mblog, id), "pub_ts": pubTS,
-		"created_at":    plugin.FormatTime(pubTS, plugin.StringScalar(mblog["created_at"])),
+		"created_at":    plugin.FormatTime(location, pubTS, plugin.StringScalar(mblog["created_at"])),
 		"duration_text": weiboMblogDuration(mblog),
 		"author": map[string]any{
 			"name": plugin.FirstText(name, uid), "uid": uid,
@@ -286,7 +286,7 @@ func weiboPubTS(mblog map[string]any) int64 {
 		"2006-01-02 15:04:05",
 		time.RFC1123Z,
 	} {
-		if parsed, err := time.Parse(layout, text); err == nil {
+		if parsed, err := time.ParseInLocation(layout, text, plugin.ChinaLocation); err == nil {
 			return parsed.Unix()
 		}
 	}
