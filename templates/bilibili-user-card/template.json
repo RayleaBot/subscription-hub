@@ -1,5 +1,6 @@
 {
   "id": "bilibili-user-card",
+  "name": "哔哩哔哩 · 用户名片",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",

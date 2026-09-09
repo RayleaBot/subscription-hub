@@ -1,5 +1,6 @@
 {
   "id": "douyin-search-results",
+  "name": "抖音 · 搜索结果",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",

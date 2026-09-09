@@ -1,5 +1,6 @@
 {
   "id": "douyin-resolver",
+  "name": "抖音 · 内容解析",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",

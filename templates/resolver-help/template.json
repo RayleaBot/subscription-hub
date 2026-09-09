@@ -1,5 +1,6 @@
 {
   "id": "resolver-help",
+  "name": "解析帮助",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",

@@ -1,5 +1,6 @@
 {
   "id": "weibo-user-card",
+  "name": "微博 · 用户名片",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",

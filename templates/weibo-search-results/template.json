@@ -1,5 +1,6 @@
 {
   "id": "weibo-search-results",
+  "name": "微博 · 搜索结果",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",

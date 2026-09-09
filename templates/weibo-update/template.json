@@ -1,5 +1,6 @@
 {
   "id": "weibo-update",
+  "name": "微博 · 订阅推送",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",

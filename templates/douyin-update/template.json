@@ -1,5 +1,6 @@
 {
   "id": "douyin-update",
+  "name": "抖音 · 订阅推送",
   "version": "1",
   "entry_html": "template.html",
   "stylesheet": "styles.css",
