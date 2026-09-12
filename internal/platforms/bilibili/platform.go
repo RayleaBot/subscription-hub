@@ -20,5 +20,6 @@ func New() plugin.Platform {
 		PreviewAliases: []string{"bilibili", "bili", "b站"}, PreviewDefault: "video", PreviewInputs: nil, Baseline: &plugin.BaselinePolicy{KeyPrefix: "source:bilibili:dynamic:initialized:", Timestamp: false, ExemptServices: []string{"live"}}, Avatar: avatarPolicy(), Cleanup: func(item plugin.Subscription) []plugin.KVSelector {
 			return []plugin.KVSelector{{Prefix: "source:bilibili:follow:", Suffix: ":" + strings.TrimSpace(item.UID)}}
 		},
+		Account: &plugin.AccountAdapter{Validate: ValidateAccount, NewQRProvider: NewAccountQRProvider},
 	}
 }

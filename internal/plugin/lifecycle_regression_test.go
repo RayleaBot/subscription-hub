@@ -125,7 +125,7 @@ func TestSchedulerRegistrationIsSingleFlight(t *testing.T) {
 		})
 	}
 	workers.Wait()
-	if len(actions.SchedulerRequests) != 2 {
+	if len(actions.SchedulerRequests) != 3 {
 		t.Fatalf("registrations = %d", len(actions.SchedulerRequests))
 	}
 }

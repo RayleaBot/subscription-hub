@@ -31,7 +31,7 @@ func TestMatchBilibiliUserByQuery(t *testing.T) {
 
 func TestBilibiliSearchUsesAnOverallTimeout(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPRoutes = []testkit.HTTPRoute{{
 		Path: "/x/web-interface/wbi/search/type",
@@ -57,7 +57,7 @@ func TestBilibiliSearchUsesAnOverallTimeout(t *testing.T) {
 
 func TestAddBilibiliSubscriptionByNicknameSubscribesExactMatch(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/x/web-interface/wbi/search/type", Result: testkit.HTTPJSON(200, map[string]any{
@@ -80,7 +80,7 @@ func TestAddBilibiliSubscriptionByNicknameSubscribesExactMatch(t *testing.T) {
 
 func TestAddBilibiliSubscriptionByNicknameReturnsCandidatesWithoutExactMatch(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/x/web-interface/wbi/search/type", Result: testkit.HTTPJSON(200, map[string]any{
@@ -106,7 +106,7 @@ func TestAddBilibiliSubscriptionByNicknameReturnsCandidatesWithoutExactMatch(t *
 
 func TestAddBilibiliSubscriptionByUIDKeepsDirectRead(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/x/space/wbi/acc/info", Result: testkit.HTTPJSON(200, map[string]any{

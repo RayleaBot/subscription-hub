@@ -15,6 +15,7 @@ func Run(ctx context.Context, platforms ...Platform) error {
 	if err != nil {
 		return err
 	}
+	defer handler.accountQR.Close()
 	return rayleabot.Run(ctx, rayleabot.Options{}, handler)
 }
 
@@ -39,6 +40,17 @@ func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContex
 		if action == "flush_deferred_media" {
 			handler.flushDeferredMedia(ctx, event)
 			return event.Result(map[string]any{"handled": true, "media_flushed": true})
+		}
+		if action == "check_accounts" {
+			current, err := handler.loadSettings(ctx, event)
+			if err != nil {
+				return err
+			}
+			checked, err := handler.checkDueAccounts(ctx, handler.hostActions(event), current.AccountCheckIntervalMinutes)
+			if err != nil {
+				return err
+			}
+			return event.Result(map[string]any{"handled": true, "checked": checked})
 		}
 		if action != "" && action != "check_subscriptions" {
 			return event.Result(map[string]any{"handled": false})

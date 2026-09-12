@@ -1,10 +1,13 @@
 package plugin
 
 type Settings struct {
-	Enabled               bool             `json:"enabled"`
-	DeliveryMaxAgeMinutes int              `json:"delivery_max_age_minutes"`
-	Subscriptions         []Subscription   `json:"subscriptions"`
-	Resolver              ResolverSettings `json:"resolver"`
+	Enabled                     bool             `json:"enabled"`
+	DeliveryMaxAgeMinutes       int              `json:"delivery_max_age_minutes"`
+	AccountCheckIntervalMinutes int              `json:"account_check_interval_minutes"`
+	AccountBrowserMode          string           `json:"account_browser_mode"`
+	AccountBrowserRemoteURL     string           `json:"account_browser_remote_debugging_url"`
+	Subscriptions               []Subscription   `json:"subscriptions"`
+	Resolver                    ResolverSettings `json:"resolver"`
 }
 
 type ResolverSettings struct {

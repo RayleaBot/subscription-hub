@@ -120,27 +120,22 @@ func (client *bilibiliClient) requestTimeout() int {
 }
 
 func readBilibiliAccounts(ctx context.Context, actions plugin.SourceActions) ([]bilibiliAccount, error) {
-	result, err := actions.ThirdPartyAccountRead(ctx, rayleabot.ThirdPartyAccountReadRequest{Platform: "bilibili"})
+	items, err := plugin.EnabledAccountCookies(ctx, actions, "bilibili")
 	if err != nil {
-		return nil, fmt.Errorf("Bilibili 账号读取失败：%w", err)
+		return nil, fmt.Errorf("读取 Bilibili 账号失败：%w", err)
 	}
-	accounts := make([]bilibiliAccount, 0)
-	for _, raw := range plugin.SliceValue(result["accounts"]) {
-		item := plugin.MapValue(raw)
-		cookie := plugin.StringScalar(plugin.NestedValue(item, "cookie", "value"))
-		if cookie == "" {
-			continue
-		}
+	accounts := make([]bilibiliAccount, 0, len(items))
+	for _, item := range items {
 		accounts = append(accounts, bilibiliAccount{
-			ID:              plugin.StringScalar(item["account_id"]),
-			Label:           plugin.StringScalar(item["label"]),
-			Cookie:          cookie,
-			ProfileUID:      plugin.StringScalar(plugin.NestedValue(item, "profile", "uid")),
-			ProfileNickname: plugin.StringScalar(plugin.NestedValue(item, "profile", "nickname")),
+			ID:              item.AccountID,
+			Label:           item.Label,
+			Cookie:          item.Cookie,
+			ProfileUID:      item.UID,
+			ProfileNickname: item.Nickname,
 		})
 	}
 	if len(accounts) == 0 {
-		return nil, errors.New("没有可用的 Bilibili 账号 CK，请在 Web 三方账号页面保存账号")
+		return nil, errors.New("没有可用的 Bilibili 账号 CK，请在插件账号管理页保存账号")
 	}
 	return accounts, nil
 }

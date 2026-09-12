@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 type Actions struct {
 	Location           *time.Location
 	mu                 sync.Mutex
-	Accounts           rayleabot.ActionResult
+	Secrets            map[string]string
 	HTTPRoutes         []HTTPRoute
 	HTTPDefault        rayleabot.ActionResult
 	HTTPFallback       func(rayleabot.HTTPRequest) (rayleabot.ActionResult, error, bool)
@@ -30,9 +31,9 @@ type Actions struct {
 	GroupMembers       map[string]rayleabot.ActionResult
 	GroupErrors        map[string]error
 	GroupRequests      []string
-	AccountValidations []AccountValidationRequest
-	ResolveRequests    []ResolveRequest
-	ResolveResults     []rayleabot.ActionResult
+	BrowserLaunches    []rayleabot.BrowserLaunchRequest
+	BrowserCloses      []string
+	BrowserLaunchError error
 	Config             map[string]any
 	SchedulerRequests  []rayleabot.SchedulerCreateRequest
 }
@@ -40,6 +41,7 @@ type Actions struct {
 func NewActions() *Actions {
 	return &Actions{
 		Location:     time.FixedZone("Asia/Shanghai", 8*60*60),
+		Secrets:      map[string]string{},
 		KV:           map[string]any{},
 		Config:       map[string]any{},
 		GroupMembers: map[string]rayleabot.ActionResult{},
@@ -49,10 +51,134 @@ func NewActions() *Actions {
 
 func (fake *Actions) TimeLocation() *time.Location { return fake.Location }
 
-func (fake *Actions) ThirdPartyAccountRead(context.Context, rayleabot.ThirdPartyAccountReadRequest) (rayleabot.ActionResult, error) {
+// SeedAccounts stores fixture profiles and credentials in plugin KV and secrets.
+func (fake *Actions) SeedAccounts(platform string, payload rayleabot.ActionResult) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
-	return fake.Accounts, nil
+	if payload == nil {
+		return
+	}
+	items, _ := payload["accounts"].([]any)
+	for index, raw := range items {
+		item, _ := raw.(map[string]any)
+		if item == nil {
+			continue
+		}
+		accountID, _ := item["account_id"].(string)
+		if accountID == "" {
+			continue
+		}
+		label, _ := item["label"].(string)
+		enabled := true
+		if value, ok := item["enabled"].(bool); ok {
+			enabled = value
+		}
+		record := map[string]any{
+			"platform":         platform,
+			"account_id":       accountID,
+			"label":            label,
+			"enabled":          enabled,
+			"credential_state": "unknown",
+			"updated_at":       fmt.Sprintf("2026-01-01T00:00:%02dZ", index),
+		}
+		if profile, ok := item["profile"].(map[string]any); ok {
+			if value, ok := profile["uid"].(string); ok {
+				record["uid"] = value
+			}
+			if value, ok := profile["nickname"].(string); ok {
+				record["nickname"] = value
+			}
+			if value, ok := profile["avatar_url"].(string); ok {
+				record["avatar_url"] = value
+			}
+		}
+		fake.KV["account:"+platform+":"+accountID] = record
+		if cookie, ok := item["cookie"].(map[string]any); ok {
+			if value, ok := cookie["value"].(string); ok && value != "" {
+				fake.Secrets["account."+platform+"."+accountID+".cookie"] = value
+			}
+		} else if value, ok := item["cookie"].(string); ok && value != "" {
+			fake.Secrets["account."+platform+"."+accountID+".cookie"] = value
+		}
+	}
+}
+
+// AccountCredentialState returns the persisted credential state for one test
+// account, if present.
+func (fake *Actions) AccountCredentialState(platform, accountID string) (string, bool) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	raw, exists := fake.KV["account:"+platform+":"+accountID]
+	if !exists {
+		return "", false
+	}
+	if record, ok := raw.(map[string]any); ok {
+		state, _ := record["credential_state"].(string)
+		return state, true
+	}
+	value := reflect.ValueOf(raw)
+	if value.Kind() == reflect.Struct {
+		field := value.FieldByName("CredentialState")
+		if field.IsValid() && field.Kind() == reflect.String {
+			return field.String(), true
+		}
+	}
+	return "", false
+}
+
+func (fake *Actions) SecretRead(_ context.Context, key string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	value, exists := fake.Secrets[key]
+	if !exists {
+		return rayleabot.ActionResult{"key": key, "exists": false}, nil
+	}
+	return rayleabot.ActionResult{"key": key, "exists": true, "value": value}, nil
+}
+
+func (fake *Actions) SecretWrite(_ context.Context, values map[string]string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	changed := make([]string, 0, len(values))
+	for key, value := range values {
+		fake.Secrets[key] = value
+		changed = append(changed, key)
+	}
+	return rayleabot.ActionResult{"changed_keys": changed}, nil
+}
+
+func (fake *Actions) SecretDelete(_ context.Context, keys []string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	changed := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if _, exists := fake.Secrets[key]; exists {
+			delete(fake.Secrets, key)
+			changed = append(changed, key)
+		}
+	}
+	return rayleabot.ActionResult{"changed_keys": changed}, nil
+}
+
+func (fake *Actions) BrowserLaunch(_ context.Context, request rayleabot.BrowserLaunchRequest) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.BrowserLaunches = append(fake.BrowserLaunches, request)
+	if fake.BrowserLaunchError != nil {
+		return nil, fake.BrowserLaunchError
+	}
+	return rayleabot.ActionResult{
+		"session_id":   "browser-fixture",
+		"debugger_url": "ws://127.0.0.1:9222/devtools/browser/fixture",
+		"mode":         "headless",
+	}, nil
+}
+
+func (fake *Actions) BrowserClose(_ context.Context, sessionID string) (rayleabot.ActionResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.BrowserCloses = append(fake.BrowserCloses, sessionID)
+	return rayleabot.ActionResult{"closed": true}, nil
 }
 
 func (fake *Actions) Call(_ context.Context, action string, input any, output any) error {
@@ -77,31 +203,6 @@ func (fake *Actions) Call(_ context.Context, action string, input any, output an
 		}
 		if result, ok := output.(*rayleabot.ActionResult); ok {
 			*result = rayleabot.ActionResult{"image_path": "plugin-test.png"}
-		}
-		return nil
-	case "thirdparty.account.validate":
-		var request AccountValidationRequest
-		if err := decodeInput(input, &request); err != nil {
-			return fmt.Errorf("unexpected third-party validation input %T", input)
-		}
-		fake.AccountValidations = append(fake.AccountValidations, request)
-		if result, ok := output.(*rayleabot.ActionResult); ok {
-			*result = rayleabot.ActionResult{"accepted": true, "reason": "queued"}
-		}
-		return nil
-	case "thirdparty.resolve":
-		var request ResolveRequest
-		if err := decodeInput(input, &request); err != nil {
-			return fmt.Errorf("unexpected third-party resolve input %T", input)
-		}
-		fake.ResolveRequests = append(fake.ResolveRequests, request)
-		if result, ok := output.(*rayleabot.ActionResult); ok {
-			if len(fake.ResolveResults) > 0 {
-				*result = fake.ResolveResults[0]
-				fake.ResolveResults = fake.ResolveResults[1:]
-			} else {
-				*result = rayleabot.ActionResult{}
-			}
 		}
 		return nil
 	default:

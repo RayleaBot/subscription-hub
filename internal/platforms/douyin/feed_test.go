@@ -77,7 +77,7 @@ func douyinRouterDataPage(document map[string]any) string {
 
 func TestDouyinFeedNormalizesVideoAndImageText(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	secUID := "MS4wLjABAAAAfixture"
 	now := time.Now().Truncate(time.Second)
 	fake.HTTPResponses = []rayleabot.ActionResult{douyinAwemePostResult(
@@ -112,7 +112,7 @@ func TestDouyinFeedNormalizesVideoAndImageText(t *testing.T) {
 
 func TestDouyinSubscriptionCheckBaselinesThenRendersNewAweme(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	secUID := "MS4wLjABAAAAfixture"
 	item := plugin.Subscription{
@@ -160,7 +160,7 @@ func TestDouyinSubscriptionCheckBaselinesThenRendersNewAweme(t *testing.T) {
 
 func TestDouyinSubscriptionCheckPushesLiveStartOncePerSession(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	secUID := "MS4wLjABAAAAfixture"
 	item := plugin.Subscription{
@@ -248,7 +248,7 @@ func TestDouyinLiveTransitionKeepsStateWhenLiveUnobserved(t *testing.T) {
 
 func TestDouyinSearchParsesUserList(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, douyinSearchDocument(
 		map[string]any{
 			"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户", "unique_id": "testuser",
@@ -274,7 +274,7 @@ func TestDouyinSearchParsesUserList(t *testing.T) {
 
 func TestDouyinSearchSkipsHTMLFallbackWhenRiskControlled(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, map[string]any{
 		"status_code": 0,
 		"user_list":   []any{},
@@ -299,7 +299,7 @@ func TestDouyinSearchSkipsHTMLFallbackWhenRiskControlled(t *testing.T) {
 
 func TestAddDouyinSubscriptionResolvesExactMatch(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, douyinSearchDocument(
 		map[string]any{"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户", "unique_id": "testuser"},
 	))}
@@ -324,7 +324,7 @@ func TestAddDouyinSubscriptionResolvesExactMatch(t *testing.T) {
 
 func TestAddDouyinSubscriptionOffersCandidates(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, douyinSearchDocument(
 		map[string]any{"sec_uid": "MS4wLjABAAAAother", "nickname": "别的用户"},
 	))}
@@ -345,7 +345,7 @@ func TestAddDouyinSubscriptionOffersCandidates(t *testing.T) {
 
 func TestAddDouyinSubscriptionUsesExplicitSecUIDWithoutLookup(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	current := plugin.Settings{}
 	event := &rayleabot.EventContext{Event: rayleabot.Event{
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
@@ -366,7 +366,7 @@ func TestAddDouyinSubscriptionUsesExplicitSecUIDWithoutLookup(t *testing.T) {
 
 func TestAddDouyinSubscriptionReusesKnownSourceWithoutLookup(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	current := plugin.Settings{Subscriptions: []plugin.Subscription{{
 		ID: "known", Platform: "douyin", UID: "MS4wLjABAAAAknown", Name: "已知用户", AvatarURL: "https://p3-pc.douyinpic.com/known.jpeg",
 		TargetType: "group", TargetID: "old", Services: []string{"all"}, Enabled: true,
@@ -387,7 +387,7 @@ func TestAddDouyinSubscriptionReusesKnownSourceWithoutLookup(t *testing.T) {
 
 func TestDouyinManagementResolutionMatchesUniqueID(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPDefault = testkit.HTTPJSON(200, douyinSearchDocument(map[string]any{"sec_uid": "MS4wLjABAAAAone", "unique_id": "testuser", "nickname": "测试用户"}))
 	handler := newHandler(t)
 	result := handler.ResolveUser(t.Context(), fake, "douyin", "testuser", plugin.Settings{})
@@ -457,7 +457,7 @@ func TestDouyinRouterDataExtractsCurrentSharePageItemID(t *testing.T) {
 func TestFetchDouyinPreviewUsesMobileShortLinkAndSignedDetailAPI(t *testing.T) {
 	const awemeID = "7679356419690253583"
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.KV["source:douyin:web_cookies:primary"] = map[string]any{
 		"msToken": "fixture-mstoken-primary", "ms_token_fetched_at": time.Now().Unix(),
 	}
@@ -717,9 +717,6 @@ func TestDouyinDiagnosticsNeverIncludeUpstreamBody(t *testing.T) {
 	if strings.Contains(message, "CK 已失效") || !strings.Contains(message, "服务器检查结果") {
 		t.Fatalf("HTTP 403 feedback = %q", message)
 	}
-	if len(fake.AccountValidations) != 1 || fake.AccountValidations[0].Observation != "session_blocked" || fake.AccountValidations[0].HTTPStatus != 403 {
-		t.Fatalf("HTTP 403 validation request = %#v", fake.AccountValidations)
-	}
 }
 
 func TestCommandOperationCoversDouyinSearch(t *testing.T) {
@@ -730,7 +727,7 @@ func TestCommandOperationCoversDouyinSearch(t *testing.T) {
 
 func TestDouyinSearchPausesAfterEmptyAPIAndPageResults(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(200, douyinSearchDocument()),
 		{"status_code": 200, "body_text": `<html><body><nav>登录</nav><script id="RENDER_DATA" type="application/json">{"loaderData":{"search":{"data":[]}}}</script></body></html>`},
@@ -759,90 +756,30 @@ func TestDouyinSearchPausesAfterEmptyAPIAndPageResults(t *testing.T) {
 	}
 }
 
-func TestDouyinSearchPauseAllowsHostResolve(t *testing.T) {
+func TestDouyinSearchPauseAttemptsBrowserResolve(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
-	fake.KV[douyinSearchPauseKey] = map[string]any{
-		"kind": "risk_control", "until": time.Now().Add(10 * time.Minute).Unix(),
-	}
-	fake.ResolveResults = []rayleabot.ActionResult{{
-		"platform": "douyin",
-		"profiles": []any{
-			map[string]any{"uid": "MS4wLjABAAAAhost", "nickname": "测试用户", "avatar_url": "https://p3-pc.douyinpic.com/host.jpeg"},
-		},
-		"exact": true,
-	}}
-	users, err := searchDouyinWithActions(context.Background(), fake, "测试用户")
-	if err != nil || len(users) != 1 || users[0].UID != "MS4wLjABAAAAhost" {
-		t.Fatalf("paused host resolve users=%#v, err=%v", users, err)
-	}
-	if len(fake.HTTPRequests) != 0 {
-		t.Fatalf("paused resolve still reached upstream: %#v", testkit.RequestURLs(fake))
-	}
-	if _, exists := fake.KV[douyinSearchPauseKey]; exists {
-		t.Fatalf("successful paused resolve left a pause behind: %#v", fake.KV)
-	}
-}
-
-func TestDouyinSearchPauseKeptWhenHostResolveEmpty(t *testing.T) {
-	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.KV[douyinSearchPauseKey] = map[string]any{
 		"kind": "risk_control", "until": time.Now().Add(10 * time.Minute).Unix(),
 	}
 	users, err := searchDouyinWithActions(context.Background(), fake, "测试用户")
 	if err == nil || !strings.Contains(err.Error(), "已暂停") {
-		t.Fatalf("paused empty resolve err=%v", err)
+		t.Fatalf("paused browser resolve users=%#v, err=%v", users, err)
 	}
-	if len(users) != 0 {
-		t.Fatalf("users = %#v, want none", users)
+	if len(fake.HTTPRequests) != 0 {
+		t.Fatalf("paused resolve still reached upstream: %#v", testkit.RequestURLs(fake))
 	}
-	if len(fake.ResolveRequests) != 1 {
-		t.Fatalf("host resolve was not attempted: %#v", fake.ResolveRequests)
+	if len(fake.BrowserLaunches) != 1 || fake.BrowserLaunches[0].Mode != plugin.ModeHeadless {
+		t.Fatalf("paused browser resolve launches = %#v", fake.BrowserLaunches)
 	}
 	if _, exists := fake.KV[douyinSearchPauseKey]; !exists {
-		t.Fatalf("failed resolve dropped the pause: %#v", fake.KV)
+		t.Fatalf("failed browser resolve dropped the pause: %#v", fake.KV)
 	}
 }
 
-func TestDouyinSearchFallsBackToHostResolveWhenIntercepted(t *testing.T) {
+func TestDouyinSearchFallsBackToBrowserResolveWhenIntercepted(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
-	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, map[string]any{
-		"status_code": 0,
-		"user_list":   []any{},
-		"search_nil_info": map[string]any{
-			"search_nil_type": "verify_check",
-		},
-	})}
-	fake.ResolveResults = []rayleabot.ActionResult{{
-		"platform": "douyin",
-		"profiles": []any{
-			map[string]any{"uid": "MS4wLjABAAAAhost", "unique_id": "host_douyin_id", "nickname": "测试用户", "avatar_url": "https://p3-pc.douyinpic.com/host.jpeg"},
-		},
-		"exact": true,
-	}}
-	users, err := searchDouyinWithActions(context.Background(), fake, "测试用户")
-	if err != nil || len(users) != 1 {
-		t.Fatalf("host-resolved search users=%#v, err=%v", users, err)
-	}
-	if users[0].UID != "MS4wLjABAAAAhost" || users[0].UniqueID != "host_douyin_id" || users[0].Name != "测试用户" || users[0].AvatarURL != "https://p3-pc.douyinpic.com/host.jpeg" {
-		t.Fatalf("host-resolved profile lost fields: %#v", users[0])
-	}
-	if len(fake.ResolveRequests) != 1 || fake.ResolveRequests[0].Platform != "douyin" || fake.ResolveRequests[0].Query != "测试用户" {
-		t.Fatalf("host resolve request = %#v", fake.ResolveRequests)
-	}
-	if want := "sessionid=primary; ttwid=fixture-ttwid-primary; msToken=fixture-mstoken-primary; webid=7000000000000000001; s_v_web_id=verify_fixture_primary;"; fake.ResolveRequests[0].Cookie != want {
-		t.Fatalf("host resolve cookie = %q, want %q", fake.ResolveRequests[0].Cookie, want)
-	}
-	if _, exists := fake.KV[douyinSearchPauseKey]; exists {
-		t.Fatalf("successful host resolve left a pause behind: %#v", fake.KV)
-	}
-}
-
-func TestDouyinSearchKeepsRiskErrorWhenHostResolveEmpty(t *testing.T) {
-	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, map[string]any{
 		"status_code": 0,
 		"user_list":   []any{},
@@ -852,13 +789,13 @@ func TestDouyinSearchKeepsRiskErrorWhenHostResolveEmpty(t *testing.T) {
 	})}
 	users, err := searchDouyinWithActions(context.Background(), fake, "测试用户")
 	if err == nil || !strings.Contains(err.Error(), "安全验证") {
-		t.Fatalf("empty host resolve users=%#v, err=%v", users, err)
+		t.Fatalf("intercepted search users=%#v, err=%v", users, err)
 	}
 	if len(users) != 0 {
 		t.Fatalf("users = %#v, want none", users)
 	}
-	if len(fake.ResolveRequests) != 1 {
-		t.Fatalf("host resolve was not attempted: %#v", fake.ResolveRequests)
+	if len(fake.BrowserLaunches) != 1 {
+		t.Fatalf("browser resolve was not attempted: %#v", fake.BrowserLaunches)
 	}
 	if _, exists := fake.KV[douyinSearchPauseKey]; !exists {
 		t.Fatalf("risk control did not open a pause: %#v", fake.KV)

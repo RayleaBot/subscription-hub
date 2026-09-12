@@ -306,11 +306,11 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 		}
 	}()
 	encoder := json.NewEncoder(inputWriter)
-	write := func(kind, id string, event *rayleabot.Event) {
+	write := func(kind, id string, event any) {
 		t.Helper()
 		frame := map[string]any{"type": kind, "request_id": id}
 		if kind == "init" {
-			frame["protocol_version"] = "2"
+			frame["protocol_version"] = "3"
 			frame["plugin_id"] = "raylea.subscription-hub"
 			frame["config"] = actions.Config
 			frame["effective_permissions"] = []string{"message.send", "scheduler.create", "render.image"}
@@ -318,9 +318,13 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 			frame["command_prefixes"] = []string{"/"}
 			frame["concurrency"] = 1
 			frame["timezone"] = "Asia/Shanghai"
+			frame["bots"] = []any{map[string]any{"source_adapter": "fixture", "source_protocol": "onebot11", "id": "1001"}}
 		}
 		if event != nil {
 			frame["event"] = event
+		}
+		if kind == "shutdown" {
+			frame["reason"] = "stop"
 		}
 		if err := encoder.Encode(frame); err != nil {
 			t.Fatal(err)
@@ -348,8 +352,17 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	if frame := read("init"); frame["type"] != "init_ack" || frame["status"] != "ready" {
 		t.Fatalf("plugin did not initialize: %#v", frame)
 	}
-	event := func(kind string, payload map[string]any) *rayleabot.Event {
-		return &rayleabot.Event{EventType: kind, Actor: rayleabot.Actor{ID: "7", Nickname: "fixture"}, Target: rayleabot.Target{Type: "group", ID: "100"}, Payload: payload}
+	event := func(kind string, payload map[string]any) map[string]any {
+		if payload == nil {
+			payload = map[string]any{}
+		}
+		return map[string]any{
+			"event_id": "event-fixture", "source_protocol": "onebot11", "source_adapter": "fixture",
+			"event_type": kind, "timestamp": time.Now().Unix(),
+			"actor":   map[string]any{"id": "7", "nickname": "fixture"},
+			"target":  map[string]any{"type": "group", "id": "100"},
+			"payload": payload,
+		}
 	}
 	write("event", "start", event("plugin.started", nil))
 	read("start")
@@ -398,10 +411,10 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	for frame := range frames {
 		t.Errorf("extra terminal reply: %#v", frame)
 	}
-	if len(actions.SchedulerRequests) != 2 {
+	if len(actions.SchedulerRequests) != 3 {
 		t.Fatalf("scheduler registrations = %d", len(actions.SchedulerRequests))
 	}
-	if plugin.StringScalar(actions.SchedulerRequests[0].Payload["action"]) != "check_subscriptions" || plugin.StringScalar(actions.SchedulerRequests[1].Payload["action"]) != "flush_deferred_media" {
+	if plugin.StringScalar(actions.SchedulerRequests[0].Payload["action"]) != "check_subscriptions" || plugin.StringScalar(actions.SchedulerRequests[1].Payload["action"]) != "flush_deferred_media" || plugin.StringScalar(actions.SchedulerRequests[2].Payload["action"]) != "check_accounts" {
 		t.Fatalf("scheduler payloads = %#v", actions.SchedulerRequests)
 	}
 	if len(actions.Renders) != 3 {

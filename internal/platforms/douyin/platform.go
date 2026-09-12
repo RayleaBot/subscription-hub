@@ -21,5 +21,6 @@ func New() plugin.Platform {
 			uid := strings.TrimSpace(item.UID)
 			return []plugin.KVSelector{{Prefix: "source:douyin:resolved_uid:" + uid}, {Prefix: "source:douyin:live:" + uid}, {Prefix: "source:douyin:zero_posts:" + uid}}
 		},
+		Account: &plugin.AccountAdapter{Validate: ValidateAccount, NewQRProvider: NewAccountQRProvider},
 	}
 }

@@ -30,7 +30,7 @@ func TestWBISigningMatchesPreMigrationVector(t *testing.T) {
 
 func TestBilibiliSearchUsesWBIEndpoint(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, map[string]any{
 		"code": 0,
@@ -59,7 +59,7 @@ func TestBilibiliSearchUsesWBIEndpoint(t *testing.T) {
 
 func TestBilibiliSearchRotatesAccountsAfterRiskControl(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary", "backup")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary", "backup"))
 	seedSourceState(fake, time.Now(), "", "primary", "backup")
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(412, map[string]any{"code": -412, "message": "request was banned"}),
@@ -81,7 +81,7 @@ func TestBilibiliSearchRotatesAccountsAfterRiskControl(t *testing.T) {
 
 func TestBilibiliUserLookupUsesWBIEndpoint(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/x/space/wbi/acc/info", Result: testkit.HTTPJSON(200, map[string]any{
@@ -129,7 +129,7 @@ func TestBilibiliUserLookupUsesWBIEndpoint(t *testing.T) {
 
 func TestBilibiliUserLookupToleratesFansFailure(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/x/space/wbi/acc/info", Result: testkit.HTTPJSON(200, map[string]any{
@@ -146,7 +146,7 @@ func TestBilibiliUserLookupToleratesFansFailure(t *testing.T) {
 
 func TestBilibiliSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary", "backup")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary", "backup"))
 	now := time.Unix(1780905600, 0)
 	seedSourceState(fake, now, "123456", "primary", "backup")
 	fake.HTTPResponses = []rayleabot.ActionResult{
@@ -174,7 +174,7 @@ func TestBilibiliSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 
 func TestBilibiliSourceRefreshesWBIKeysAfterSignatureRejection(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	now := time.Now()
 	fake.KV["source:bilibili:follow:primary:123456"] = map[string]any{"checked_at": now.Unix(), "following": true}
 	fake.HTTPResponses = []rayleabot.ActionResult{
@@ -197,7 +197,7 @@ func TestBilibiliSourceRefreshesWBIKeysAfterSignatureRejection(t *testing.T) {
 
 func TestAccountFeedCollectsMultipleSubjectsInOneRequest(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	now := time.Now()
 	seedSourceState(fake, now, "123456", "primary")
 	fake.KV["source:bilibili:follow:primary:654321"] = map[string]any{"checked_at": now.Unix(), "following": true}
@@ -220,7 +220,7 @@ func TestAccountFeedCollectsMultipleSubjectsInOneRequest(t *testing.T) {
 
 func TestSubscriptionCheckBaselinesThenRendersNewDynamic(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
 	current := plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{
@@ -257,7 +257,7 @@ func TestSubscriptionCheckBaselinesThenRendersNewDynamic(t *testing.T) {
 
 func TestSubscriptionCheckContinuesFanoutAfterTargetFailure(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
 	subscriptions := []plugin.Subscription{
@@ -283,7 +283,7 @@ func TestSubscriptionCheckContinuesFanoutAfterTargetFailure(t *testing.T) {
 
 func TestSubscriptionCheckExpiresFailedDynamicDelivery(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
 	item := plugin.Subscription{
@@ -326,7 +326,7 @@ func TestSubscriptionCheckExpiresFailedDynamicDelivery(t *testing.T) {
 
 func TestLiveSourceBaselinesThenEmitsTransition(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	liveDocument := func(status int) rayleabot.ActionResult {
 		return testkit.HTTPJSON(200, map[string]any{"code": 0, "data": map[string]any{
 			"123456": map[string]any{"uid": 123456, "uname": "测试 UP", "room_id": 777, "title": "直播标题", "live_status": status, "live_time": 1700000000},

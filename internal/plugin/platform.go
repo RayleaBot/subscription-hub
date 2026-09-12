@@ -33,6 +33,17 @@ type Platform struct {
 	Baseline        *BaselinePolicy
 	Avatar          AvatarPolicy
 	Cleanup         func(Subscription) []KVSelector
+	Account         *AccountAdapter
+}
+
+// AccountAdapter supplies the platform-specific credential check and QR login
+// implementation for plugin-managed accounts. Both hooks are optional.
+type AccountAdapter struct {
+	// Validate checks one cookie and classifies the outcome. It must not
+	// mutate stored account state.
+	Validate func(context.Context, SourceActions, string) AccountValidation
+	// NewQRProvider builds one QR login provider per login session.
+	NewQRProvider QRLoginProviderFactory
 }
 
 type Session interface {
@@ -165,6 +176,8 @@ type Handler struct {
 	resolverCooldowns   map[string]time.Time
 	mediaGate           resolverMediaGate
 	deferredMedia       *deferredMediaQueue
+	accountQR           *QRLoginManager
+	accountCheckMu      sync.Mutex
 }
 
 var platformIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -250,6 +263,7 @@ func NewHandler(options Options) (*Handler, error) {
 		handler.platforms = append(handler.platforms, platform)
 		handler.byID[platform.ID] = platform
 	}
+	handler.initAccountQRManager()
 	return handler, nil
 }
 

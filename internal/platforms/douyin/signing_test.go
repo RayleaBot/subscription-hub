@@ -13,7 +13,7 @@ import (
 
 func TestDouyinSearchRequestsCarrySessionTokens(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, douyinSearchDocument(
 		map[string]any{"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户"},
 	))}
@@ -47,10 +47,10 @@ func TestDouyinSearchRequestsCarrySessionTokens(t *testing.T) {
 
 func TestDouyinSessionCookiesBootstrapWhenTTWIDMissing(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = rayleabot.ActionResult{"accounts": []any{map[string]any{
+	fake.SeedAccounts("douyin", rayleabot.ActionResult{"accounts": []any{map[string]any{
 		"account_id": "primary",
 		"cookie":     map[string]any{"value": "sessionid=primary;"},
-	}}}
+	}}})
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{
 			Path: "/",
@@ -104,7 +104,7 @@ func TestDouyinSessionCookiesBootstrapWhenTTWIDMissing(t *testing.T) {
 
 func TestDouyinSessionCookiesSkipBootstrapWhenTTWIDPresent(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, douyinSearchDocument(
 		map[string]any{"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户"},
 	))}
@@ -123,10 +123,10 @@ func TestDouyinSessionCookiesSkipBootstrapWhenTTWIDPresent(t *testing.T) {
 
 func TestDouyinSessionCookiesNegativeCacheAvoidsRepeatBootstrap(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = rayleabot.ActionResult{"accounts": []any{map[string]any{
+	fake.SeedAccounts("douyin", rayleabot.ActionResult{"accounts": []any{map[string]any{
 		"account_id": "primary",
 		"cookie":     map[string]any{"value": "sessionid=primary;"},
-	}}}
+	}}})
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/aweme/v1/web/discover/search/", Result: testkit.HTTPJSON(200, douyinSearchDocument(
 			map[string]any{"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户"},
@@ -215,7 +215,7 @@ func TestDouyinErrorLogFieldsCarryStatusMsgAndEndpoint(t *testing.T) {
 
 func TestDouyinSessionPrefersBootstrappedMsToken(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	freshToken := strings.Repeat("a", 182) + "=="
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/web/r/token", Result: rayleabot.ActionResult{
@@ -246,7 +246,7 @@ func TestDouyinSessionPrefersBootstrappedMsToken(t *testing.T) {
 
 func TestDouyinMsTokenBootstrapNegativeCacheAvoidsRepeatRequests(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureDouyinAccounts("primary")
+	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(200, douyinSearchDocument(map[string]any{"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户"})),
 		testkit.HTTPJSON(200, douyinSearchDocument(map[string]any{"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户"})),

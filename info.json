@@ -1,12 +1,12 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅与解析",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "manifest_version": "3",
   "license": "MIT",
-  "min_core_version": "0.4.0",
+  "min_core_version": "0.5.0",
   "metadata": {
-    "description": "订阅平台内容，并解析 B站、微博与抖音链接",
+    "description": "订阅平台内容，解析 B 站、微博与抖音链接，并管理平台账号与 CK",
     "author": "raylea",
     "repo": "https://github.com/RayleaBot/plugin-subscription-hub",
     "keywords": [
@@ -34,31 +34,15 @@
     "render.image": true,
     "http.request": true,
     "scheduler.create": true,
-    "thirdparty.account.read": {
-      "platforms": [
-        "bilibili",
-        "weibo",
-        "douyin",
-        "netease_music"
-      ]
-    },
-    "thirdparty.account.validate": {
-      "platforms": [
-        "bilibili",
-        "weibo",
-        "douyin",
-        "netease_music"
-      ]
-    },
-    "thirdparty.resolve": {
-      "platforms": [
-        "douyin"
-      ]
-    },
     "friend.list": true,
     "group.list": true,
     "user.info.get": true,
-    "group.member.get": true
+    "group.member.get": true,
+    "secret.read": true,
+    "secret.write": true,
+    "secret.delete": true,
+    "browser.launch": true,
+    "browser.close": true
   },
   "default_config": {
     "enabled": true,
@@ -93,7 +77,10 @@
         "douyin_resolution": 1080,
         "douyin_merge_bgm": true
       }
-    }
+    },
+    "account_check_interval_minutes": 360,
+    "account_browser_mode": "auto",
+    "account_browser_remote_debugging_url": ""
   },
   "commands": [
     {

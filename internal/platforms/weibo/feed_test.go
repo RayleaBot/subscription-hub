@@ -25,9 +25,9 @@ type subscriptionCheckDeadlineActions struct {
 	hasStateDeadline bool
 }
 
-func (actions *subscriptionCheckDeadlineActions) ThirdPartyAccountRead(ctx context.Context, request rayleabot.ThirdPartyAccountReadRequest) (rayleabot.ActionResult, error) {
+func (actions *subscriptionCheckDeadlineActions) SecretRead(ctx context.Context, key string) (rayleabot.ActionResult, error) {
 	actions.deadline, actions.hasDeadline = ctx.Deadline()
-	return actions.Actions.ThirdPartyAccountRead(ctx, request)
+	return actions.Actions.SecretRead(ctx, key)
 }
 
 func (actions *subscriptionCheckDeadlineActions) KVSet(ctx context.Context, key string, value any) (rayleabot.ActionResult, error) {
@@ -59,7 +59,7 @@ func (actions *cancelAfterFirstWeiboRequestActions) KVSet(ctx context.Context, k
 
 func TestWeiboFeedPollsEachSubjectIndependently(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{
 			Path: "/api/container/getIndex", QueryContains: "containerid=1076036000000001",
@@ -92,7 +92,7 @@ func TestWeiboFeedPollsEachSubjectIndependently(t *testing.T) {
 
 func TestWeiboFeedFollowsCursorUntilDeliveryAgeBoundary(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{ID: "paged-weibo", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(item)] = true
@@ -113,7 +113,7 @@ func TestWeiboFeedFollowsCursorUntilDeliveryAgeBoundary(t *testing.T) {
 
 func TestWeiboFeedDoesNotTreatSeenUpdateAsPagingBoundary(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	first := plugin.Subscription{ID: "paged-first", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(first)] = true
@@ -133,7 +133,7 @@ func TestWeiboFeedDoesNotTreatSeenUpdateAsPagingBoundary(t *testing.T) {
 
 func TestWeiboSourceUsesPerUserFeedWithoutFollowMutation(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{{
 		Path: "/api/container/getIndex", QueryContains: "containerid=1076036000000001", Result: weiboFeedResult(),
 	}}
@@ -157,7 +157,7 @@ func TestWeiboSourceUsesPerUserFeedWithoutFollowMutation(t *testing.T) {
 
 func TestWeiboFeedPageLimitIsIncomplete(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{ID: "busy", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(item)] = true
@@ -193,7 +193,7 @@ func TestWeiboFeedPageLimitIsIncomplete(t *testing.T) {
 
 func TestWeiboSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary", "backup")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary", "backup"))
 	now := time.Unix(1780905600, 0)
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(412, map[string]any{"ok": 0, "msg": "请求被拦截"}),
@@ -220,7 +220,7 @@ func TestWeiboSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 
 func TestWeiboSourceClassifiesHTTP432AndEntersCooldown(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{{
 		"status_code": 432,
 		"body_text":   `{"ok":0,"msg":"fixture-upstream-body SUB=fixture-leak;"}`,
@@ -251,39 +251,29 @@ func TestWeiboSourceClassifiesHTTP432AndEntersCooldown(t *testing.T) {
 	if rendered := fmt.Sprint(fields); strings.Contains(rendered, "fixture-upstream-body") || strings.Contains(rendered, "fixture-leak") {
 		t.Fatalf("HTTP 432 log included upstream response content: %#v", fields)
 	}
-	if len(fake.AccountValidations) != 1 {
-		t.Fatalf("HTTP 432 validation requests = %#v", fake.AccountValidations)
-	}
-	validation := fake.AccountValidations[0]
-	if validation.Platform != "weibo" || validation.AccountID != "primary" || validation.Observation != "session_blocked" || validation.HTTPStatus != 432 {
-		t.Fatalf("HTTP 432 validation request = %#v", validation)
+	if state, exists := fake.AccountCredentialState("weibo", "primary"); !exists || state != plugin.CredentialUnknown {
+		t.Fatalf("HTTP 432 credential state = %q, exists=%v", state, exists)
 	}
 
 	second := source.poll(context.Background(), []plugin.Subscription{item})
 	if len(fake.HTTPRequests) != 1 || second.FeedOK || len(second.Errors) != 1 || !strings.Contains(second.Errors[0], "H5 会话阻断") {
 		t.Fatalf("cooldown did not suppress the next request: result=%#v requests=%#v", second, fake.HTTPRequests)
 	}
-	if len(fake.AccountValidations) != 1 {
-		t.Fatalf("cooldown emitted another validation request: %#v", fake.AccountValidations)
-	}
 }
 
 func TestWeiboClientRequestsValidationForAuthenticationRejection(t *testing.T) {
 	fake := testkit.NewActions()
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{{"status_code": 401, "body_text": ""}}
 	client := newWeiboClient(fake)
 
-	_, err := client.requestJSON(context.Background(), weiboUserFeedURL("6000000001", ""), weiboAccount{ID: "primary", Cookie: "SUB=fixture;"}, weiboMobileReferer)
+	_, err := client.requestJSON(context.Background(), weiboUserFeedURL("6000000001", ""), weiboAccount{ID: "primary", Cookie: fake.Secrets["account.weibo.primary.cookie"]}, weiboMobileReferer)
 	var sourceErr *weiboSourceError
 	if !errors.As(err, &sourceErr) || sourceErr.Kind != "auth" {
 		t.Fatalf("authentication error = %#v", err)
 	}
-	if len(fake.AccountValidations) != 1 {
-		t.Fatalf("authentication validation requests = %#v", fake.AccountValidations)
-	}
-	validation := fake.AccountValidations[0]
-	if validation.Platform != "weibo" || validation.AccountID != "primary" || validation.Observation != "auth_rejected" || validation.HTTPStatus != 401 {
-		t.Fatalf("authentication validation request = %#v", validation)
+	if state, exists := fake.AccountCredentialState("weibo", "primary"); !exists || state != plugin.CredentialInvalid {
+		t.Fatalf("authentication credential state = %q, exists=%v", state, exists)
 	}
 }
 
@@ -300,7 +290,7 @@ func TestWeiboSourceReportsStructuredUpstreamFailureInSummary(t *testing.T) {
 
 func TestWeiboSubscriptionCheckBaselinesThenRendersNewMblog(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{
 		ID: "weibo-6000000001-group-10000", Platform: "weibo", UID: "6000000001", Name: "测试博主",
@@ -341,7 +331,7 @@ func TestWeiboSubscriptionCheckBaselinesThenRendersNewMblog(t *testing.T) {
 
 func TestWeiboSubscriptionCheckBaselineBlocksLaterHistoricalPages(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{ID: "new-busy", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedPageResult(
@@ -377,7 +367,7 @@ func TestWeiboSubscriptionCheckBaselineBlocksLaterHistoricalPages(t *testing.T) 
 
 func TestSubscriptionCheckAppliesTotalDeadline(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedResult()}
 	actions := &subscriptionCheckDeadlineActions{Actions: fake}
 	startedAt := time.Now()
@@ -405,7 +395,7 @@ func TestSubscriptionCheckAppliesTotalDeadline(t *testing.T) {
 
 func TestSubscriptionCheckReservesParentDeadlineForFinalization(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedResult()}
 	actions := &subscriptionCheckDeadlineActions{Actions: fake}
 	parentCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -435,7 +425,7 @@ func TestSubscriptionCheckReservesParentDeadlineForFinalization(t *testing.T) {
 
 func TestWeiboFeedSavesContinuationWhenCheckIsInterrupted(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{ID: "interrupted", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(item)] = true
@@ -470,7 +460,7 @@ func TestWeiboSubscriptionCheckExpiresStaleMblog(t *testing.T) {
 func checkExpiresStaleMblog(t *testing.T, plainTime bool) {
 	t.Helper()
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{
 		ID: "stale-weibo", Platform: "weibo", UID: "6000000001", Name: "测试博主",
@@ -503,7 +493,7 @@ func checkExpiresStaleMblog(t *testing.T, plainTime bool) {
 
 func TestWeiboSubscriptionCheckFiltersByService(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{
 		ID: "typed-weibo", Platform: "weibo", UID: "6000000001", Name: "测试博主",
@@ -534,7 +524,7 @@ func TestWeiboSubscriptionCheckFiltersByService(t *testing.T) {
 
 func TestWeiboSubscriptionCheckPrefetchesMediaBeforeRendering(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{
 		ID: "retry-weibo-media", Platform: "weibo", UID: "6000000001", Name: "测试博主",
@@ -571,7 +561,7 @@ func TestWeiboSubscriptionCheckPrefetchesMediaBeforeRendering(t *testing.T) {
 
 func TestWeiboSubscriptionCheckFallsBackForUnavailableMedia(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{
 		ID: "retry-partial-weibo-media", Platform: "weibo", UID: "6000000001", Name: "测试博主",
@@ -613,7 +603,7 @@ func TestWeiboSubscriptionCheckFallsBackForUnavailableMedia(t *testing.T) {
 
 func TestWeiboCheckDoesNotSkipWhenOnlyWeiboSubscriptions(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now()
 	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedResult()}
 	result := checkAt(t, context.Background(), fake, plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{

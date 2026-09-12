@@ -2,6 +2,8 @@ package netease_music
 
 import (
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"net/url"
+	"strings"
 )
 
 var catalog = plugin.NewServiceCatalog(
@@ -14,6 +16,9 @@ func New() plugin.Platform {
 		ID: "netease_music", Name: "网易云音乐", SubjectLabel: "ID", ListTitle: "网易云音乐订阅列表", AllListTitle: "全部网易云音乐订阅列表",
 		Commands: map[string]string{"订阅网易云音乐推送": "add", "取消网易云音乐推送": "remove", "网易云音乐订阅列表": "list", "全部网易云音乐订阅列表": "list_all"}, Services: catalog, ParseSubject: subjectIDFromInput,
 		NewSession:     func(actions plugin.SourceActions) plugin.Session { return &session{actions: actions} },
-		PreviewAliases: nil, PreviewDefault: "", PreviewInputs: nil, Baseline: nil, Avatar: plugin.AvatarPolicy{}, Cleanup: nil,
+		PreviewAliases: nil, PreviewDefault: "", PreviewInputs: nil, Baseline: nil, Avatar: plugin.AvatarPolicy{Validate: func(parsed *url.URL) (string, bool) {
+			return "https://music.163.com/", plugin.HostMatches(strings.ToLower(parsed.Hostname()), "music.126.net", "music.163.com")
+		}}, Cleanup: nil,
+		Account: &plugin.AccountAdapter{Validate: ValidateAccount, NewQRProvider: NewAccountQRProvider},
 	}
 }

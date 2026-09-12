@@ -135,25 +135,20 @@ func (err *douyinSourceError) cooldown() bool {
 }
 
 func readDouyinAccounts(ctx context.Context, actions plugin.SourceActions) ([]douyinAccount, error) {
-	result, err := actions.ThirdPartyAccountRead(ctx, rayleabot.ThirdPartyAccountReadRequest{Platform: "douyin"})
+	items, err := plugin.EnabledAccountCookies(ctx, actions, "douyin")
 	if err != nil {
 		return nil, fmt.Errorf("抖音账号读取失败：%w", err)
 	}
-	accounts := make([]douyinAccount, 0)
-	for _, raw := range plugin.SliceValue(result["accounts"]) {
-		item := plugin.MapValue(raw)
-		cookie := plugin.StringScalar(plugin.NestedValue(item, "cookie", "value"))
-		if cookie == "" {
-			continue
-		}
+	accounts := make([]douyinAccount, 0, len(items))
+	for _, item := range items {
 		accounts = append(accounts, douyinAccount{
-			ID:     plugin.StringScalar(item["account_id"]),
-			Label:  plugin.StringScalar(item["label"]),
-			Cookie: cookie,
+			ID:     item.AccountID,
+			Label:  item.Label,
+			Cookie: item.Cookie,
 		})
 	}
 	if len(accounts) == 0 {
-		return nil, errors.New("没有可用的抖音账号 CK，请在 Web 三方账号页面保存账号")
+		return nil, errors.New("没有可用的抖音账号 CK，请在插件账号管理页保存账号")
 	}
 	return accounts, nil
 }
@@ -723,26 +718,16 @@ func (client *douyinClient) requestCredentialValidation(ctx context.Context, acc
 	if client == nil || client.actions == nil || sourceErr == nil || strings.TrimSpace(account.ID) == "" {
 		return
 	}
-	caller, ok := client.actions.(plugin.GenericLocalActionCaller)
-	if !ok {
-		return
-	}
-	observation := ""
+	kind := plugin.ErrorKind("")
 	switch sourceErr.Kind {
 	case "auth":
-		observation = "auth_rejected"
+		kind = plugin.ErrorAuth
 	case "session_blocked":
-		observation = "session_blocked"
+		kind = plugin.ErrorRiskControl
 	default:
 		return
 	}
-	var result rayleabot.ActionResult
-	_ = caller.Call(ctx, "thirdparty.account.validate", plugin.AccountValidationRequest{
-		Platform:    "douyin",
-		AccountID:   strings.TrimSpace(account.ID),
-		Observation: observation,
-		HTTPStatus:  sourceErr.HTTPStatus,
-	}, &result)
+	plugin.ObserveAccountFailure(ctx, client.actions, "douyin", strings.TrimSpace(account.ID), account.Cookie, kind)
 }
 
 func requestDouyinJSONAcrossAccounts(ctx context.Context, actions plugin.SourceActions, accounts []douyinAccount, rawURL, referer string) (map[string]any, error) {

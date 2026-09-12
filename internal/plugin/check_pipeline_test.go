@@ -63,6 +63,7 @@ func newWorkflowHandler(t testing.TB, platforms ...Platform) *Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(handler.accountQR.Close)
 	return handler
 }
 
@@ -342,8 +343,8 @@ func TestSourceBoundaryStopsCanceledRequestsAndDoesNotExposeDelivery(t *testing.
 	if _, ok := source.(HostActions); ok {
 		t.Fatal("source received render and delivery actions")
 	}
-	if err := source.(GenericLocalActionCaller).Call(t.Context(), "render.image", map[string]any{}, &rayleabot.ActionResult{}); err == nil {
-		t.Fatal("source could render through the generic action caller")
+	if _, ok := source.(GenericLocalActionCaller); ok {
+		t.Fatal("source exposed the generic action caller")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

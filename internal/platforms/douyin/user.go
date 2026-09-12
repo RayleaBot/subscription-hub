@@ -20,8 +20,6 @@ const douyinSearchEmptyPause = 5 * time.Minute
 
 const douyinSearchVerificationPause = 30 * time.Minute
 
-const douyinHostResolveTimeout = 70 * time.Second
-
 type douyinUser struct {
 	UID       string `json:"uid"`
 	UniqueID  string `json:"unique_id,omitempty"`
@@ -137,7 +135,7 @@ func searchDouyinWithActions(ctx context.Context, actions plugin.SourceActions, 
 				}
 			}
 			if resolveCookie != "" {
-				if resolved, resolveErr := searchDouyinViaHostResolve(ctx, actions, query, resolveCookie); resolveErr == nil && len(resolved) > 0 {
+				if resolved, resolveErr := searchDouyinViaBrowser(ctx, actions, query, resolveCookie); resolveErr == nil && len(resolved) > 0 {
 					clearDouyinSearchPause(ctx, actions)
 					return resolved, nil
 				}
@@ -177,7 +175,7 @@ func searchDouyinWithActions(ctx context.Context, actions plugin.SourceActions, 
 				break
 			}
 		}
-		if resolved, resolveErr := searchDouyinViaHostResolve(ctx, actions, query, resolveCookie); resolveErr == nil && len(resolved) > 0 {
+		if resolved, resolveErr := searchDouyinViaBrowser(ctx, actions, query, resolveCookie); resolveErr == nil && len(resolved) > 0 {
 			clearDouyinSearchPause(ctx, actions)
 			return resolved, nil
 		} else if resolveErr != nil {
@@ -199,55 +197,6 @@ func searchDouyinWithActions(ctx context.Context, actions plugin.SourceActions, 
 	}
 	logDouyinFailure(ctx, actions, "抖音用户搜索失败", searchErr)
 	return nil, errors.New(friendlyDouyinSourceError("抖音用户搜索失败", searchErr))
-}
-
-type thirdPartyResolveRequest struct {
-	Platform string `json:"platform"`
-	Query    string `json:"query"`
-	Cookie   string `json:"cookie,omitempty"`
-}
-
-// searchDouyinViaHostResolve 在纯 HTTP 搜索无结果后请求宿主登录 profile
-// 浏览器解析关键词。宿主浏览器与扫码登录窗口互斥；失败只记录诊断日志，
-// 不改变既有 HTTP 失败的结论。
-func searchDouyinViaHostResolve(ctx context.Context, actions plugin.SourceActions, query, cookie string) ([]douyinUser, error) {
-	caller, ok := actions.(plugin.GenericLocalActionCaller)
-	if !ok {
-		return nil, errors.New("宿主不支持 local action 调用")
-	}
-	resolveCtx, cancel := context.WithTimeout(ctx, douyinHostResolveTimeout)
-	defer cancel()
-	var result rayleabot.ActionResult
-	if err := caller.Call(resolveCtx, "thirdparty.resolve", thirdPartyResolveRequest{
-		Platform: "douyin",
-		Query:    strings.TrimSpace(query),
-		Cookie:   cookie,
-	}, &result); err != nil {
-		return nil, err
-	}
-	return douyinUsersFromResolveResult(result), nil
-}
-
-func douyinUsersFromResolveResult(result rayleabot.ActionResult) []douyinUser {
-	users := make([]douyinUser, 0)
-	for _, raw := range plugin.SliceValue(result["profiles"]) {
-		item := plugin.MapValue(raw)
-		if item == nil {
-			continue
-		}
-		uid := plugin.StringScalar(item["uid"])
-		name := plugin.StringScalar(item["nickname"])
-		if uid == "" || name == "" {
-			continue
-		}
-		users = append(users, douyinUser{
-			UID:       uid,
-			UniqueID:  plugin.StringScalar(item["unique_id"]),
-			Name:      name,
-			AvatarURL: plugin.StringScalar(item["avatar_url"]),
-		})
-	}
-	return users
 }
 
 // douyinHTMLFallbackAllowed 判断 JSON 端点失败后是否值得尝试 HTML 搜索页回退。

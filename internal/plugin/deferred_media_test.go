@@ -111,10 +111,10 @@ func TestEnsureSchedulerRegistersDedicatedMediaFlush(t *testing.T) {
 	if !handler.ensureScheduler(context.Background(), &rayleabot.EventContext{}) {
 		t.Fatalf("ensureScheduler() = false")
 	}
-	if len(actions.SchedulerRequests) != 2 {
+	if len(actions.SchedulerRequests) != 3 {
 		t.Fatalf("scheduler requests = %#v", actions.SchedulerRequests)
 	}
-	if actions.SchedulerRequests[0].TaskID != schedulerTaskID || actions.SchedulerRequests[1].TaskID != deferredMediaTaskID {
+	if actions.SchedulerRequests[0].TaskID != schedulerTaskID || actions.SchedulerRequests[1].TaskID != deferredMediaTaskID || actions.SchedulerRequests[2].TaskID != accountCheckTaskID {
 		t.Fatalf("scheduler task IDs = %#v", actions.SchedulerRequests)
 	}
 	if actions.SchedulerRequests[1].Payload["action"] != "flush_deferred_media" {

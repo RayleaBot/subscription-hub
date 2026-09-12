@@ -1,6 +1,9 @@
 {
   "enabled": true,
   "delivery_max_age_minutes": 30,
+  "account_check_interval_minutes": 360,
+  "account_browser_mode": "auto",
+  "account_browser_remote_debugging_url": "",
   "subscriptions": [],
   "resolver": {
     "targets": [],

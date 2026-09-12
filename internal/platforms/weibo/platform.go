@@ -16,5 +16,6 @@ func New() plugin.Platform {
 		Commands: map[string]string{"订阅微博推送": "add", "取消微博推送": "remove", "微博搜索博主": "search", "微博订阅列表": "list", "全部微博订阅列表": "list_all"}, Services: catalog, ParseSubject: subjectIDFromInput,
 		NewSession:     func(actions plugin.SourceActions) plugin.Session { return &session{actions: actions} },
 		PreviewAliases: []string{"weibo", "微博"}, PreviewDefault: "post", PreviewInputs: map[string]string{"image": "image", "图片": "image", "文字": "post"}, Baseline: &plugin.BaselinePolicy{KeyPrefix: "source:weibo:feed:initialized:", Timestamp: true, ExemptServices: nil}, Avatar: avatarPolicy(), Cleanup: nil,
+		Account: &plugin.AccountAdapter{Validate: ValidateAccount, NewQRProvider: NewAccountQRProvider},
 	}
 }

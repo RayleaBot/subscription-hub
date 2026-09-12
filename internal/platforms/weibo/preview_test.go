@@ -48,7 +48,7 @@ func TestWeiboPreviewReportsUnexpandedShortLink(t *testing.T) {
 
 func TestFetchWeiboPreviewUsesMobileStatusAPI(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{{
 		Path: "/statuses/show",
 		Result: testkit.HTTPJSON(200, map[string]any{"ok": 1, "data": weiboImageMblog(
@@ -72,7 +72,7 @@ func TestFetchWeiboPreviewUsesMobileStatusAPI(t *testing.T) {
 
 func TestFetchWeiboPreviewFallsBackToDetailPage(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	mblog := weiboImageMblog("5000000000000001", "6000000001", "详情页微博", 1700000000)
 	raw, err := json.Marshal(mblog)
 	if err != nil {
@@ -103,7 +103,7 @@ func TestFetchWeiboPreviewFallsBackToDetailPage(t *testing.T) {
 
 func TestFetchWeiboPreviewExpandsLongText(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	mblog := weiboTextMblog(
 		"5000000000000001",
 		"6000000001",
@@ -165,7 +165,7 @@ func TestSampleWeiboUpdateCoversCatalogServices(t *testing.T) {
 
 func TestFetchWeiboPreviewWithoutAccountTriesAnonymousThenGuides(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts()
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts())
 	fake.HTTPRoutes = []testkit.HTTPRoute{{
 		Path:   "/statuses/show",
 		Result: testkit.HTTPJSON(403, map[string]any{"ok": 0, "msg": "登录"}),
@@ -178,7 +178,7 @@ func TestFetchWeiboPreviewWithoutAccountTriesAnonymousThenGuides(t *testing.T) {
 
 func TestFetchWeiboPreviewNormalizesShowAPIRubyDateAndCompactAvatar(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{{
 		Path: "/statuses/show",
 		Result: testkit.HTTPJSON(200, map[string]any{
@@ -234,7 +234,7 @@ func TestFetchWeiboPreviewNormalizesShowAPIRubyDateAndCompactAvatar(t *testing.T
 
 func TestFetchWeiboPreviewLogsWhenStatusCannotBeNormalized(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{{
 		Path: "/statuses/show",
 		Result: testkit.HTTPJSON(200, map[string]any{"ok": 1, "data": map[string]any{

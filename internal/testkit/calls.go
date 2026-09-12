@@ -22,19 +22,6 @@ type RenderRequest struct {
 	Resources    []RenderResource `json:"resources"`
 }
 
-type AccountValidationRequest struct {
-	Platform    string `json:"platform"`
-	AccountID   string `json:"account_id"`
-	Observation string `json:"observation"`
-	HTTPStatus  int    `json:"http_status"`
-}
-
-type ResolveRequest struct {
-	Platform string `json:"platform"`
-	Query    string `json:"query"`
-	Cookie   string `json:"cookie"`
-}
-
 func (fake *Actions) ConfigWrite(ctx context.Context, values map[string]any) (rayleabot.ActionResult, error) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()

@@ -74,25 +74,20 @@ func (err *weiboSourceError) cooldown() bool {
 }
 
 func readWeiboAccounts(ctx context.Context, actions plugin.SourceActions) ([]weiboAccount, error) {
-	result, err := actions.ThirdPartyAccountRead(ctx, rayleabot.ThirdPartyAccountReadRequest{Platform: "weibo"})
+	items, err := plugin.EnabledAccountCookies(ctx, actions, "weibo")
 	if err != nil {
 		return nil, fmt.Errorf("微博账号读取失败：%w", err)
 	}
-	accounts := make([]weiboAccount, 0)
-	for _, raw := range plugin.SliceValue(result["accounts"]) {
-		item := plugin.MapValue(raw)
-		cookie := plugin.StringScalar(plugin.NestedValue(item, "cookie", "value"))
-		if cookie == "" {
-			continue
-		}
+	accounts := make([]weiboAccount, 0, len(items))
+	for _, item := range items {
 		accounts = append(accounts, weiboAccount{
-			ID:     plugin.StringScalar(item["account_id"]),
-			Label:  plugin.StringScalar(item["label"]),
-			Cookie: cookie,
+			ID:     item.AccountID,
+			Label:  item.Label,
+			Cookie: item.Cookie,
 		})
 	}
 	if len(accounts) == 0 {
-		return nil, errors.New("没有可用的微博账号 CK，请在 Web 三方账号页面保存账号")
+		return nil, errors.New("没有可用的微博账号 CK，请在插件账号管理页保存账号")
 	}
 	return accounts, nil
 }
@@ -244,26 +239,16 @@ func (client *weiboClient) requestCredentialValidation(ctx context.Context, acco
 	if client == nil || client.actions == nil || sourceErr == nil || strings.TrimSpace(account.ID) == "" {
 		return
 	}
-	caller, ok := client.actions.(plugin.GenericLocalActionCaller)
-	if !ok {
-		return
-	}
-	observation := ""
+	kind := plugin.ErrorKind("")
 	switch sourceErr.Kind {
 	case "auth":
-		observation = "auth_rejected"
+		kind = plugin.ErrorAuth
 	case "session_blocked":
-		observation = "session_blocked"
+		kind = plugin.ErrorRiskControl
 	default:
 		return
 	}
-	var result rayleabot.ActionResult
-	_ = caller.Call(ctx, "thirdparty.account.validate", plugin.AccountValidationRequest{
-		Platform:    "weibo",
-		AccountID:   strings.TrimSpace(account.ID),
-		Observation: observation,
-		HTTPStatus:  sourceErr.HTTPStatus,
-	}, &result)
+	plugin.ObserveAccountFailure(ctx, client.actions, "weibo", strings.TrimSpace(account.ID), account.Cookie, kind)
 }
 
 // weiboDocumentRejected 识别 m.weibo.cn 的 ok:0 业务失败响应；没有 ok 字段的文档按正常处理。

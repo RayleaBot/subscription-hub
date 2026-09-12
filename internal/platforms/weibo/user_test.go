@@ -33,7 +33,7 @@ func TestMatchWeiboUserByQuery(t *testing.T) {
 
 func TestAddWeiboSubscriptionByNicknameSubscribesExactMatch(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/api/container/getIndex", QueryContains: "100103type", Result: testkit.HTTPJSON(200, weiboSearchDocument(
 			map[string]any{"id": 6000000001, "screen_name": "Vsinger_洛天依"},
@@ -55,7 +55,7 @@ func TestAddWeiboSubscriptionByNicknameSubscribesExactMatch(t *testing.T) {
 
 func TestAddWeiboSubscriptionByNicknameReturnsCandidatesWithoutExactMatch(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/api/container/getIndex", QueryContains: "100103type", Result: testkit.HTTPJSON(200, weiboSearchDocument(
 			map[string]any{"id": 6000000001, "screen_name": "Vsinger_洛天依"},
@@ -76,7 +76,7 @@ func TestAddWeiboSubscriptionByNicknameReturnsCandidatesWithoutExactMatch(t *tes
 
 func TestAddWeiboSubscriptionByUIDKeepsOfflineFallback(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/api/container/getIndex", QueryContains: "100505", Err: errors.New("network down")},
 	}
@@ -111,7 +111,7 @@ func weiboSearchDocument(users ...map[string]any) map[string]any {
 
 func TestWeiboSearchParsesMobileResults(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, weiboSearchDocument(
 		map[string]any{
 			"id": 6000000001, "screen_name": "测试博主",
@@ -146,7 +146,7 @@ func TestWeiboSearchParsesMobileResults(t *testing.T) {
 
 func TestWeiboSearchFallsBackToSecondSearchType(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(200, map[string]any{"ok": 1, "data": map[string]any{"cards": []any{}}}),
 		testkit.HTTPJSON(200, weiboSearchDocument(map[string]any{"id": 6000000002, "screen_name": "二号博主"})),
@@ -162,7 +162,7 @@ func TestWeiboSearchFallsBackToSecondSearchType(t *testing.T) {
 
 func TestWeiboSearchRotatesAccountsAfterAuthFailure(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary", "backup")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary", "backup"))
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(403, map[string]any{"ok": 0, "msg": "forbidden"}),
 		testkit.HTTPJSON(200, weiboSearchDocument(map[string]any{"id": 6000000003, "screen_name": "三号博主"})),
@@ -178,7 +178,7 @@ func TestWeiboSearchRotatesAccountsAfterAuthFailure(t *testing.T) {
 
 func TestWeiboSearchFallsBackToWebSearch(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	page := `<div class="card card-user-b"><a href="https://weibo.com/u/6000000009" nick-name="网页博主">网页博主</a><img src="https://tva2.sinaimg.cn/crop.0.0.100.100.50/face.jpg"/></div>`
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(200, map[string]any{"ok": 1, "data": map[string]any{"cards": []any{}}}),
@@ -203,7 +203,7 @@ func TestWeiboSearchFallsBackToWebSearch(t *testing.T) {
 
 func TestWeiboSearchReportsEmptyResults(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		testkit.HTTPJSON(200, map[string]any{"ok": 1, "data": map[string]any{"cards": []any{}}}),
 		testkit.HTTPJSON(200, map[string]any{"ok": 1, "data": map[string]any{"cards": []any{}}}),
@@ -217,7 +217,7 @@ func TestWeiboSearchReportsEmptyResults(t *testing.T) {
 
 func TestWeiboSearchRequiresAccount(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = rayleabot.ActionResult{"accounts": []any{}}
+	fake.SeedAccounts("weibo", rayleabot.ActionResult{"accounts": []any{}})
 	_, err := searchWeiboWithActions(context.Background(), fake, "测试博主")
 	if err == nil || !strings.Contains(err.Error(), "没有可用的微博账号 CK") {
 		t.Fatalf("missing account did not fail with guidance: %v", err)
@@ -229,7 +229,7 @@ func TestWeiboSearchRequiresAccount(t *testing.T) {
 
 func TestWeiboSearchDeduplicatesUsers(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	duplicate := map[string]any{"id": 6000000001, "screen_name": "测试博主"}
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, weiboSearchDocument(duplicate, duplicate))}
 	users, err := searchWeiboWithActions(context.Background(), fake, "测试博主")
@@ -240,7 +240,7 @@ func TestWeiboSearchDeduplicatesUsers(t *testing.T) {
 
 func TestReadWeiboUserParsesDetailProfile(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, map[string]any{
 		"ok": 1,
 		"data": map[string]any{"userInfo": map[string]any{
@@ -270,7 +270,7 @@ func TestReadWeiboUserParsesDetailProfile(t *testing.T) {
 func TestResolveWeiboUsersRoutesUIDLinkAndNickname(t *testing.T) {
 	newResolvedFake := func() *testkit.Actions {
 		fake := testkit.NewActions()
-		fake.Accounts = fixtureWeiboAccounts("primary")
+		fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 		fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, map[string]any{
 			"ok": 1, "data": map[string]any{"userInfo": map[string]any{"id": 6000000001, "screen_name": "测试博主"}},
 		})}
@@ -288,7 +288,7 @@ func TestResolveWeiboUsersRoutesUIDLinkAndNickname(t *testing.T) {
 	}
 
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, weiboSearchDocument(map[string]any{"id": 6000000002, "screen_name": "昵称博主"}))}
 	users, err := resolveWeiboUsersWithActions(context.Background(), fake, "昵称博主")
 	if err != nil || len(users) != 1 || users[0].UID != "6000000002" {

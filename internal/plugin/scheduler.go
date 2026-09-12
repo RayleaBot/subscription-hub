@@ -13,6 +13,8 @@ const schedulerTaskID = "subscription-hub-check"
 const schedulerCron = "*/1 * * * *"
 const deferredMediaTaskID = "subscription-hub-media"
 const deferredMediaCron = "*/1 * * * *"
+const accountCheckTaskID = "subscription-hub-accounts"
+const accountCheckCron = "*/15 * * * *"
 
 func (handler *Handler) ensureScheduler(ctx context.Context, event *rayleabot.EventContext) bool {
 	if handler.schedulerRegistered.Load() {
@@ -30,6 +32,7 @@ func (handler *Handler) ensureScheduler(ctx context.Context, event *rayleabot.Ev
 	tasks := []rayleabot.SchedulerCreateRequest{
 		{TaskID: schedulerTaskID, Cron: schedulerCron, EventType: "scheduler.trigger", LogLabel: "订阅检查", Payload: map[string]any{"action": "check_subscriptions"}},
 		{TaskID: deferredMediaTaskID, Cron: deferredMediaCron, EventType: "scheduler.trigger", LogLabel: "解析媒体发送", Payload: map[string]any{"action": "flush_deferred_media"}},
+		{TaskID: accountCheckTaskID, Cron: accountCheckCron, EventType: "scheduler.trigger", LogLabel: "账号检查", Payload: map[string]any{"action": "check_accounts"}},
 	}
 	for _, task := range tasks {
 		if _, err := handler.hostActions(event).SchedulerCreate(ctx, task); err != nil {

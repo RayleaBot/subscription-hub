@@ -51,7 +51,7 @@ func TestWeiboLongTextResolverSkipsShortUpdates(t *testing.T) {
 
 func TestWeiboSubscriptionCheckExpandsAndCachesLongText(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	first := plugin.Subscription{
 		ID: "long-one", Platform: "weibo", UID: "6000000001", Name: "测试博主",
@@ -93,7 +93,7 @@ func TestWeiboSubscriptionCheckExpandsAndCachesLongText(t *testing.T) {
 
 func TestWeiboSubscriptionCheckExpandsRepostedLongText(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{
 		ID: "long-repost", Platform: "weibo", UID: "6000000001", Name: "测试博主",
@@ -134,7 +134,7 @@ func TestWeiboSubscriptionCheckExpandsRepostedLongText(t *testing.T) {
 
 func TestWeiboLongTextResolverCachesFailures(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	fake.HTTPRoutes = []testkit.HTTPRoute{{
 		Path:   "/statuses/extend",
 		Result: testkit.HTTPJSON(403, map[string]any{"ok": 0, "msg": "登录"}),
@@ -162,7 +162,7 @@ func TestWeiboLongTextResolverCachesFailures(t *testing.T) {
 
 func TestWeiboSubscriptionCheckFallsBackToSummaryAndLink(t *testing.T) {
 	fake := testkit.NewActions()
-	fake.Accounts = fixtureWeiboAccounts("primary")
+	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	item := plugin.Subscription{
 		ID: "long-fallback", Platform: "weibo", UID: "6000000001", Name: "测试博主",

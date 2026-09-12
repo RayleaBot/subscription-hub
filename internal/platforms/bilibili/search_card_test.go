@@ -229,7 +229,7 @@ func TestBilibiliLevelIcon(t *testing.T) {
 
 func TestBilibiliSearchParsesProfileFields(t *testing.T) {
 	fake := newActions()
-	fake.Accounts = fixtureAccounts("primary")
+	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	seedSourceState(fake, time.Now(), "", "primary")
 	fake.HTTPResponses = []rayleabot.ActionResult{testkit.HTTPJSON(200, map[string]any{
 		"code": 0,

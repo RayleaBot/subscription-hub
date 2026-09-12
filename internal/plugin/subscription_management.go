@@ -147,8 +147,42 @@ func (handler *Handler) handleManagementAction(ctx context.Context, event *rayle
 	case "subscription.resolve_user":
 		platform := stringValue(payload, "platform", handler.platforms[0].ID)
 		return event.Result(handler.ResolveUser(ctx, actions, platform, stringValue(payload, "query", ""), current))
+	case "account.list":
+		result, err := handler.accountList(ctx, actions, payload)
+		return accountActionResult(event, result, err)
+	case "account.upsert":
+		result, err := handler.accountUpsert(ctx, actions, payload)
+		return accountActionResult(event, result, err)
+	case "account.delete":
+		result, err := handler.accountDelete(ctx, actions, payload)
+		return accountActionResult(event, result, err)
+	case "account.validate":
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, interactiveReplyTimeout)
+		defer cancel()
+		result, err := handler.accountValidate(ctx, actions, payload)
+		return accountActionResult(event, result, err)
+	case "account.qr_create":
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, interactiveReplyTimeout)
+		defer cancel()
+		result, err := handler.accountQRCreate(ctx, actions, payload, current)
+		return accountActionResult(event, result, err)
+	case "account.qr_poll":
+		result, err := handler.accountQRPoll(ctx, actions, payload)
+		return accountActionResult(event, result, err)
+	case "account.qr_cancel":
+		result, err := handler.accountQRCancel(ctx, actions, payload)
+		return accountActionResult(event, result, err)
 	}
 	return event.Result(map[string]any{"handled": false, "message": "未知订阅与解析管理动作。"})
+}
+
+func accountActionResult(event *rayleabot.EventContext, result map[string]any, err error) error {
+	if err != nil {
+		return event.Fail("account.failed", DiagnosticExcerpt(err.Error(), 300))
+	}
+	return event.Result(result)
 }
 
 func (handler *Handler) FormatStatus(current Settings) string {
@@ -166,5 +200,5 @@ func (handler *Handler) FormatStatus(current Settings) string {
 	for _, platform := range handler.platforms {
 		names = append(names, platform.Name)
 	}
-	return fmt.Sprintf("订阅与解析\n订阅状态：%s\n订阅：%d/%d\n解析：发送“解析帮助”查看当前会话开关\n平台：%s\n检查：插件定时检查，支持手动立即检查\n账号：Web 三方账号页面管理平台 Cookie", state, enabled, len(current.Subscriptions), strings.Join(names, "、"))
+	return fmt.Sprintf("订阅与解析\n订阅状态：%s\n订阅：%d/%d\n解析：发送“解析帮助”查看当前会话开关\n平台：%s\n检查：插件定时检查，支持手动立即检查\n账号：插件“账号管理”页保存平台 Cookie", state, enabled, len(current.Subscriptions), strings.Join(names, "、"))
 }
