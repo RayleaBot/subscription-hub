@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -177,12 +176,4 @@ func CloneJSONMap(value map[string]any) map[string]any {
 		return nil
 	}
 	return cloned
-}
-
-func requireMap(value any, label string) (map[string]any, error) {
-	result := MapValue(value)
-	if result == nil {
-		return nil, fmt.Errorf("%s 格式不正确", label)
-	}
-	return result, nil
 }

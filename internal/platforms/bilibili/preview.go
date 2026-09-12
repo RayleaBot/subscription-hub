@@ -81,7 +81,7 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 		endpoint = bilibiliVideoViewURL + "?" + query.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
 		if err != nil {
-			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 视频预览失败", err))
+			return nil, errors.New(friendlyBilibiliSourceError("无法预览 Bilibili 视频", err))
 		}
 		return previewVideoUpdate(actions.TimeLocation(), document, ref.URL)
 	case "bangumi_ep", "bangumi_season":
@@ -93,20 +93,20 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 		}
 		document, err := client.requestJSON(ctx, "GET", bilibiliPGCSeasonURL+"?"+query.Encode(), account, false, false, "", false)
 		if err != nil {
-			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 番剧预览失败", err))
+			return nil, errors.New(friendlyBilibiliSourceError("无法预览 Bilibili 番剧", err))
 		}
 		return previewBangumiUpdate(document, ref.URL, ref)
 	case "article":
 		document, err := client.requestJSON(ctx, "GET", bilibiliArticleViewURL+"?"+url.Values{"id": []string{ref.ID}}.Encode(), account, false, false, "", false)
 		if err != nil {
-			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 专栏预览失败", err))
+			return nil, errors.New(friendlyBilibiliSourceError("无法预览 Bilibili 专栏", err))
 		}
 		return previewArticleUpdate(actions.TimeLocation(), document, ref.URL, ref.ID)
 	case "opus":
 		endpoint = bilibiliOpusDetailURL + "?" + url.Values{"id": []string{ref.ID}}.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
 		if err != nil {
-			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 动态预览失败", err))
+			return nil, errors.New(friendlyBilibiliSourceError("无法预览 Bilibili 动态", err))
 		}
 		return previewDynamicUpdate(actions.TimeLocation(), document, ref.URL)
 	case "dynamic":
@@ -114,14 +114,14 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 		endpoint = bilibiliDynamicURL + "?" + values.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, false, "", false)
 		if err != nil {
-			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 动态预览失败", err))
+			return nil, errors.New(friendlyBilibiliSourceError("无法预览 Bilibili 动态", err))
 		}
 		return previewDynamicUpdate(actions.TimeLocation(), document, ref.URL)
 	case "live":
 		endpoint = bilibiliLiveRoomURL + "?" + url.Values{"room_id": []string{ref.ID}}.Encode()
 		document, err := client.requestJSON(ctx, "GET", endpoint, account, false, true, "", false)
 		if err != nil {
-			return nil, errors.New(friendlyBilibiliSourceError("Bilibili 直播间预览失败", err))
+			return nil, errors.New(friendlyBilibiliSourceError("无法预览 Bilibili 直播间", err))
 		}
 		uid := plugin.StringScalar(plugin.NestedValue(document, "data", "uid"))
 		var statusDocument map[string]any
@@ -137,7 +137,7 @@ func fetchBilibiliPreview(ctx context.Context, actions plugin.SourceActions, ref
 func previewVideoUpdate(location *time.Location, document map[string]any, canonicalURL string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
-		return nil, errors.New("Bilibili 视频预览失败：响应格式不正确")
+		return nil, errors.New("无法预览 Bilibili 视频：响应格式不正确")
 	}
 	owner := plugin.MapValue(data["owner"])
 	id := plugin.FirstText(data["bvid"], data["aid"])
@@ -166,7 +166,7 @@ func previewBangumiUpdate(document map[string]any, canonicalURL string, ref *bil
 		result = plugin.MapValue(document["data"])
 	}
 	if result == nil {
-		return nil, errors.New("Bilibili 番剧预览失败：响应格式不正确")
+		return nil, errors.New("无法预览 Bilibili 番剧：响应格式不正确")
 	}
 	episodes := plugin.SliceValue(result["episodes"])
 	var episode map[string]any
@@ -202,7 +202,7 @@ func previewBangumiUpdate(document map[string]any, canonicalURL string, ref *bil
 func previewArticleUpdate(location *time.Location, document map[string]any, canonicalURL, articleID string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
-		return nil, errors.New("Bilibili 专栏预览失败：响应格式不正确")
+		return nil, errors.New("无法预览 Bilibili 专栏：响应格式不正确")
 	}
 	images := make([]map[string]any, 0)
 	for _, raw := range plugin.SliceValue(plugin.FirstNonNil(data["image_urls"], data["images"])) {
@@ -221,7 +221,7 @@ func previewArticleUpdate(location *time.Location, document map[string]any, cano
 func previewDynamicUpdate(location *time.Location, document map[string]any, canonicalURL string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
-		return nil, errors.New("Bilibili 动态预览失败：响应格式不正确")
+		return nil, errors.New("无法预览 Bilibili 动态：响应格式不正确")
 	}
 	var item map[string]any
 	for _, key := range []string{"item", "opus", "dynamic"} {
@@ -244,14 +244,14 @@ func previewDynamicUpdate(location *time.Location, document map[string]any, cano
 		}
 	}
 	if item == nil {
-		return nil, errors.New("Bilibili 动态预览失败：未识别到可预览的动态内容")
+		return nil, errors.New("无法预览 Bilibili 动态：未识别到可预览的动态内容")
 	}
 	update := normalizeDynamicItem(location, item, 0)
 	if update == nil {
 		update = normalizeOpusDetailItem(location, item, canonicalURL)
 	}
 	if update == nil {
-		return nil, errors.New("Bilibili 动态预览失败：未识别到可预览的动态内容")
+		return nil, errors.New("无法预览 Bilibili 动态：未识别到可预览的动态内容")
 	}
 	update["url"] = canonicalURL
 	return update, nil
@@ -379,7 +379,7 @@ func opusDetailContent(content map[string]any) (string, string, []map[string]any
 func previewLiveUpdate(location *time.Location, document, statusDocument map[string]any, canonicalURL, roomID string) (map[string]any, error) {
 	data := plugin.MapValue(document["data"])
 	if data == nil {
-		return nil, errors.New("Bilibili 直播间预览失败：响应格式不正确")
+		return nil, errors.New("无法预览 Bilibili 直播间：响应格式不正确")
 	}
 	uid := plugin.StringScalar(data["uid"])
 	statusEntry := plugin.MapValue(plugin.NestedValue(statusDocument, "data", uid))

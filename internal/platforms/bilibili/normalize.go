@@ -223,9 +223,10 @@ func dynamicTopic(item, basic, major map[string]any) map[string]any {
 	}
 	for _, path := range paths {
 		root := any(item)
-		if path[0] == "basic" {
+		switch path[0] {
+		case "basic":
 			root, path = basic, path[1:]
-		} else if path[0] == "opus" {
+		case "opus":
 			root = major
 		}
 		if topic := topicFromValue(plugin.NestedValue(root, path...)); topic != nil {

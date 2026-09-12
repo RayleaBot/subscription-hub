@@ -116,7 +116,7 @@ func bilibiliResolverVideoPlan(document map[string]any, update plugin.Update, he
 		data = plugin.MapValue(document["result"])
 	}
 	if data == nil {
-		return plugin.ResolverMediaPlan{}, errors.New("Bilibili 视频地址响应格式不正确")
+		return plugin.ResolverMediaPlan{}, errors.New("解析 Bilibili 视频地址时收到不正确的响应格式")
 	}
 	video := chooseBilibiliDashVideo(plugin.SliceValue(plugin.NestedValue(data, "dash", "video")), targetHeight, duration, settings, bangumi)
 	if video != nil {
