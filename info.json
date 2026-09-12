@@ -561,6 +561,10 @@
     "entry": "ui/index.html",
     "pages": [
       {
+        "id": "accounts",
+        "label": "账号管理"
+      },
+      {
         "id": "subscriptions",
         "label": "订阅设置"
       },

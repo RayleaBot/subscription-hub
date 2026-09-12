@@ -4,6 +4,7 @@ import { Alert as AAlert } from 'ant-design-vue'
 import { usePluginHost } from '@rayleabot/plugin-ui'
 
 import { readCachedAvatarDataURLs, storeAvatarDataURLs } from './avatar-cache'
+import AccountManager from './components/AccountManager.vue'
 import ResolverSettingsPanel from './components/ResolverSettingsPanel.vue'
 import SubscriptionCard from './components/SubscriptionCard.vue'
 import { mergeAndCacheProtocolTargets, readCachedProtocolTargets } from './target-cache'
@@ -50,7 +51,7 @@ import {
 } from './model'
 
 const host = usePluginHost()
-type ManagementPage = 'subscriptions' | 'resolver-groups' | 'resolver-users' | 'resolver-strategy'
+type ManagementPage = 'subscriptions' | 'resolver-groups' | 'resolver-users' | 'resolver-strategy' | 'accounts'
 
 const defaultSettings: SubscriptionSettings = {
   enabled: true,
@@ -84,7 +85,7 @@ let rowCounter = 0
 
 const activePage = computed<ManagementPage>(() => {
   const pageID = host.init.value?.page.id
-  if (pageID === 'resolver-groups' || pageID === 'resolver-users' || pageID === 'resolver-strategy') return pageID
+  if (pageID === 'accounts' || pageID === 'resolver-groups' || pageID === 'resolver-users' || pageID === 'resolver-strategy') return pageID
   return 'subscriptions'
 })
 const isSubscriptionsPage = computed(() => activePage.value === 'subscriptions')
@@ -120,7 +121,7 @@ void host.ready
   .then(async (init) => {
     await applySettings(init.config, true)
     setStatus('设置已载入')
-    if (activePage.value !== 'resolver-strategy') void reloadTargets(false)
+    if (activePage.value !== 'resolver-strategy' && activePage.value !== 'accounts') void reloadTargets(false)
     if (isSubscriptionsPage.value) void refreshStaleDouyinAvatars()
   })
   .catch((error: unknown) => {
@@ -708,6 +709,10 @@ function errorMessage(error: unknown, fallback: string): string {
   <main id="main-content" class="page-shell">
     <h1 class="sr-only">{{ currentPageLabel }}</h1>
 
+    <AccountManager v-if="activePage === 'accounts'" :host="host" />
+
+    <template v-else>
+
     <AAlert v-if="hostErrorMessage" class="host-alert" type="error" :message="hostErrorMessage" show-icon />
 
     <section v-if="isSubscriptionsPage" class="status-strip" aria-label="订阅中心状态">
@@ -823,5 +828,6 @@ function errorMessage(error: unknown, fallback: string): string {
         <button type="button" class="button button--primary" :disabled="!loaded || errors.length > 0 || saving" @click="saveSettings">{{ saving ? '保存中…' : '保存设置' }}</button>
       </div>
     </footer>
+    </template>
   </main>
 </template>
