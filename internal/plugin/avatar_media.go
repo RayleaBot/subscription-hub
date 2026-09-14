@@ -12,6 +12,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 )
 
 const maxAvatarResolveItems = 4
@@ -159,7 +160,7 @@ func ResolveAvatarDataURLLimited(ctx context.Context, actions SourceActions, sou
 	if maxBytes <= 0 {
 		maxBytes = maxAvatarBytes
 	}
-	result, err := actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+	result, err := actions.HTTPRequest(ctx, httpaction.Request{
 		Method: "GET",
 		URL:    parsed.String(),
 		Headers: map[string]string{

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
 
@@ -322,7 +323,7 @@ func (client *bilibiliClient) requestJSON(
 	if live {
 		origin = "https://live.bilibili.com"
 	}
-	response, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+	response, err := client.actions.HTTPRequest(ctx, httpaction.Request{
 		Method: method, URL: requestURL, Headers: bilibiliRequestHeaders(account.Cookie, origin, origin+"/", body != ""),
 		TimeoutSeconds: client.requestTimeout(), BodyText: body,
 	})

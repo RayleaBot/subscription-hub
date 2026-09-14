@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
 )
 
@@ -51,7 +52,7 @@ func TestResolveAvatarDataURLsRetriesPolicyCandidates(t *testing.T) {
 	}
 	handler := newWorkflowHandler(t, platform)
 	fake := testkit.NewActions()
-	fake.HTTPFallback = func(request rayleabot.HTTPRequest) (rayleabot.ActionResult, error, bool) {
+	fake.HTTPFallback = func(request httpaction.Request) (rayleabot.ActionResult, error, bool) {
 		if strings.Contains(request.URL, "p3-pc") {
 			return nil, errors.New("region p3 unavailable"), true
 		}
@@ -81,7 +82,7 @@ func newConcurrentAvatarActions(want int) *concurrentAvatarActions {
 	return &concurrentAvatarActions{Actions: testkit.NewActions(), want: want, release: make(chan struct{})}
 }
 
-func (actions *concurrentAvatarActions) HTTPRequest(ctx context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (actions *concurrentAvatarActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	actions.mu.Lock()
 	actions.started++
 	actions.timeouts = append(actions.timeouts, request.TimeoutSeconds)

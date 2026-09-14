@@ -1,10 +1,10 @@
 {
   "id": "raylea.subscription-hub",
   "name": "订阅与解析",
-  "version": "0.5.0",
-  "manifest_version": "3",
+  "version": "0.6.0",
+  "manifest_version": "4",
   "license": "MIT",
-  "min_core_version": "0.5.0",
+  "min_core_version": "0.7.0",
   "metadata": {
     "description": "订阅平台内容，解析 B 站、微博与抖音链接，并管理平台账号与 CK",
     "author": "raylea",
@@ -26,24 +26,6 @@
     "message.group",
     "message.private"
   ],
-  "permissions": {
-    "message.send": true,
-    "message.forward.send": true,
-    "file.group.upload": true,
-    "file.private.upload": true,
-    "render.image": true,
-    "http.request": true,
-    "scheduler.create": true,
-    "friend.list": true,
-    "group.list": true,
-    "user.info.get": true,
-    "group.member.get": true,
-    "secret.read": true,
-    "secret.write": true,
-    "secret.delete": true,
-    "browser.launch": true,
-    "browser.close": true
-  },
   "default_config": {
     "enabled": true,
     "delivery_max_age_minutes": 30,

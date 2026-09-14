@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
 
@@ -319,7 +320,7 @@ func (client *douyinClient) requestFollowing(ctx context.Context, rawURL string,
 	current := strings.TrimSpace(rawURL)
 	var response rayleabot.ActionResult
 	for hop := 0; hop <= douyinRedirectMaxHops; hop++ {
-		result, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+		result, err := client.actions.HTTPRequest(ctx, httpaction.Request{
 			Method: "GET", URL: current, Headers: headers, TimeoutSeconds: douyinRequestTimeoutSeconds,
 		})
 		if err != nil {
@@ -575,7 +576,7 @@ func (client *douyinClient) bootstrapCookies(ctx context.Context, cookie string)
 
 // bootstrapTTWID 通过 ttwid 联合注册端点获取 ttwid（真实浏览器的无 Cookie 入口）。
 func (client *douyinClient) bootstrapTTWID(ctx context.Context, cookie string) string {
-	result, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+	result, err := client.actions.HTTPRequest(ctx, httpaction.Request{
 		Method: "POST", URL: douyinTTWIDRegisterURL,
 		Headers: map[string]string{
 			"Content-Type": "application/json", "User-Agent": douyinUserAgent, "Referer": douyinWebReferer, "Cookie": cookie,
@@ -630,7 +631,7 @@ func (client *douyinClient) requestDetailJSONAnonymous(ctx context.Context, rawU
 // 失败返回空串，调用方回退 CK 值或随机令牌。
 func (client *douyinClient) bootstrapMsToken(ctx context.Context) string {
 	payload := `{"magic":538969122,"version":1,"dataType":8,"strData":"` + douyinMsTokenData + `","ulr":0,"tspFromClient":` + strconv.FormatInt(client.now().UnixMilli(), 10) + `}`
-	result, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+	result, err := client.actions.HTTPRequest(ctx, httpaction.Request{
 		Method: "POST", URL: douyinMsTokenRegisterURL,
 		Headers:        map[string]string{"Content-Type": "application/json; charset=utf-8", "User-Agent": douyinUserAgent},
 		BodyText:       payload,
@@ -648,7 +649,7 @@ func (client *douyinClient) bootstrapMsToken(ctx context.Context) string {
 
 // bootstrapWebID 分配数字 webid（真实浏览器每个 API 请求都携带的追踪标识）。
 func (client *douyinClient) bootstrapWebID(ctx context.Context) string {
-	result, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+	result, err := client.actions.HTTPRequest(ctx, httpaction.Request{
 		Method: "POST", URL: douyinWebIDURL,
 		Headers:        map[string]string{"Content-Type": "application/json; charset=UTF-8", "User-Agent": douyinUserAgent, "Referer": douyinWebReferer},
 		BodyText:       `{"app_id":6383,"referer":"https://www.douyin.com/","url":"https://www.douyin.com/","user_agent":"` + douyinUserAgent + `","user_unique_id":""}`,

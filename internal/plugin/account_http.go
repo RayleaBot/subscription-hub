@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 )
 
 const (
@@ -150,9 +151,9 @@ func CheckedCredential(platform string, kind ErrorKind) (string, string) {
 	}
 }
 
-// actionTransport performs HTTP requests through the authenticated plugin
-// http.request action so account flows share the host's HTTPS, DNS,
-// redirect, SSRF, and response-size boundaries.
+// actionTransport routes account flows written against net/http through the
+// plugin HTTP action, which tests replace and which applies the same redirect,
+// retry and response-size handling as platform requests.
 type actionTransport struct {
 	actions SourceActions
 }
@@ -165,7 +166,7 @@ func (transport actionTransport) RoundTrip(request *http.Request) (*http.Respons
 	if err != nil {
 		return nil, err
 	}
-	input := rayleabot.HTTPRequest{
+	input := httpaction.Request{
 		Method:         request.Method,
 		URL:            request.URL.String(),
 		Headers:        firstValueHeaders(request.Header),

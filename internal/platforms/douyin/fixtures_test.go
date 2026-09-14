@@ -7,6 +7,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
 )
@@ -29,7 +30,7 @@ func checkAt(t testing.TB, ctx context.Context, actions plugin.HostActions, curr
 }
 func newActions() *testkit.Actions {
 	actions := testkit.NewActions()
-	actions.HTTPFallback = func(request rayleabot.HTTPRequest) (rayleabot.ActionResult, error, bool) {
+	actions.HTTPFallback = func(request httpaction.Request) (rayleabot.ActionResult, error, bool) {
 		parsed, err := url.Parse(request.URL)
 		if err == nil && parsed.Host == "mssdk.bytedance.com" {
 			return testkit.HTTPJSON(200, map[string]any{}), nil, true

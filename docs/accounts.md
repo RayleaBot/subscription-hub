@@ -68,13 +68,12 @@ pending_scan / pending_confirm / verification_required -> expired / failed
 
 自动检查由插件定时任务 `subscription-hub-accounts` 驱动，任务在管理面 **任务调度** 中以「账号检查」展示。
 
-## 存储与权限
+## 存储与请求
 
 - 账号元数据保存在插件 KV 的 `account:<platform>:<account_id>`。
 - CK 保存在插件密钥存储的 `account.<platform>.<account_id>.cookie`，仅在插件进程内按需读取，响应与日志不回显明文。
 - 每次账号写入生成新的 revision；检查结果只提交到未被编辑或删除的同一版本。网络、风控等检查失败保留上次成功取得的资料。
-- 相关 manifest 权限：`secret.read`、`secret.write`、`secret.delete`、`browser.launch`、`browser.close`。
-- 平台相关 HTTPS 请求通过 `http.request` 动作执行，复用宿主的 DNS、重定向复查、SSRF、私网拦截与响应大小限制。
+- 平台相关 HTTPS 请求由插件自带的 HTTP 客户端发出：不自动跟随重定向，响应正文上限 4 MiB，GET 请求在网络错误或 408、429、502、503、504 响应时重试一次。
 
 ## 查询与设置
 

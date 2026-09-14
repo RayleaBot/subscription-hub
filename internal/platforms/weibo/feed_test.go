@@ -13,6 +13,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
 )
@@ -41,7 +42,7 @@ type cancelAfterFirstWeiboRequestActions struct {
 	requestCount int
 }
 
-func (actions *cancelAfterFirstWeiboRequestActions) HTTPRequest(ctx context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (actions *cancelAfterFirstWeiboRequestActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	result, err := actions.Actions.HTTPRequest(ctx, request)
 	actions.requestCount++
 	if actions.requestCount == 1 {

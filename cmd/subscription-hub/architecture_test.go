@@ -43,7 +43,8 @@ func TestPlatformDependenciesKeepSharedRuntimeIndependent(t *testing.T) {
 					t.Errorf("%s imports platform implementation %s", relative, imported)
 				}
 			}
-			if parts[0] == "testkit" && strings.HasPrefix(imported, module) {
+			// httpaction is the shared request primitive that testkit fakes, like the SDK.
+			if parts[0] == "testkit" && strings.HasPrefix(imported, module) && imported != module+"httpaction" {
 				t.Errorf("shared testkit depends on plugin implementation: %s -> %s", relative, imported)
 			}
 			if !strings.HasSuffix(path, "_test.go") && parts[0] != "testkit" && strings.HasPrefix(imported, module+"testkit") {

@@ -39,7 +39,6 @@ import {
   validateRow,
   validateRows,
   validateSettings,
-  type IdentityResolveResponse,
   type LiveTarget,
   type Platform,
   type ResolveCandidate,
@@ -49,6 +48,7 @@ import {
   type TargetType,
   type TargetsState,
 } from './model'
+import { loadProtocolTargets, resolveProtocolIdentities } from './protocol'
 
 const host = usePluginHost()
 type ManagementPage = 'subscriptions' | 'resolver-groups' | 'resolver-users' | 'resolver-strategy' | 'accounts'
@@ -94,7 +94,14 @@ const resolverView = computed<'group' | 'private' | 'strategy'>(() => {
   if (activePage.value === 'resolver-users') return 'private'
   return 'strategy'
 })
-const currentPageLabel = computed(() => host.init.value?.page.label || '订阅设置')
+const pageLabels: Record<ManagementPage, string> = {
+  accounts: '账号管理',
+  subscriptions: '订阅设置',
+  'resolver-groups': '群聊解析',
+  'resolver-users': '用户解析',
+  'resolver-strategy': '防抖与媒体策略',
+}
+const currentPageLabel = computed(() => pageLabels[activePage.value])
 const hostErrorMessage = computed(() => host.error.value?.message ?? '')
 const context = computed(() => createRowContext(targets.value, rows.value, subscriberAvatars.value, avatarDataURLs.value))
 const errors = computed(() => isSubscriptionsPage.value ? [...validateSettings(settings.value), ...validateRows(rows.value, context.value)] : [])
@@ -189,7 +196,7 @@ async function reloadTargets(refreshAvatars = true) {
   targetsLoading.value = true
   setStatus('正在刷新可选推送范围…')
   try {
-    const payload = await host.client.request<Record<string, unknown>>('protocol.targets.reload', undefined, 5_000)
+    const payload = await loadProtocolTargets(host.client)
     targets.value = mergeAndCacheProtocolTargets(normalizeTargets(payload))
     const issue = targets.value.issues[0]?.message
     const liveCount = targets.value.groups.length + targets.value.private_users.length
@@ -622,7 +629,7 @@ async function saveSettings() {
     const identityRequests = isSubscriptionsPage.value ? buildIdentityRequests(rows.value) : []
     if (identityRequests.length > 0) {
       setStatus('正在刷新订阅人身份…')
-      const resolved = await host.client.request<IdentityResolveResponse>('protocol.identities.resolve', { items: identityRequests })
+      const resolved = await resolveProtocolIdentities(host.client, identityRequests)
       const received = new Set(resolved.items.map((item) => identityKey(item.target_type, item.target_id, item.user_id)))
       const missing = identityRequests.filter((item) => !received.has(identityKey(item.target_type, item.target_id, item.user_id)))
       if (resolved.issues.length > 0 || missing.length > 0) {
@@ -687,7 +694,9 @@ async function checkNow() {
 
 function openPreview(templateId: string) {
   try {
-    host.client.send('render_template.open', { template_id: `plugin.raylea.subscription-hub.${templateId}` })
+    const templateID = encodeURIComponent(`plugin.raylea.subscription-hub.${templateId}`)
+    const hostWindow = window.top ?? window
+    hostWindow.location.assign(`/render/templates/${templateID}`)
   } catch (error) {
     setStatus(errorMessage(error, '无法打开卡片预览'), true)
   }

@@ -310,10 +310,9 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 		t.Helper()
 		frame := map[string]any{"type": kind, "request_id": id}
 		if kind == "init" {
-			frame["protocol_version"] = "3"
+			frame["protocol_version"] = "4"
 			frame["plugin_id"] = "raylea.subscription-hub"
 			frame["config"] = actions.Config
-			frame["effective_permissions"] = []string{"message.send", "scheduler.create", "render.image"}
 			frame["super_admins"] = []string{"7"}
 			frame["command_prefixes"] = []string{"/"}
 			frame["concurrency"] = 1

@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
 
@@ -315,7 +315,7 @@ func searchWeiboWebUsers(ctx context.Context, actions plugin.SourceActions, acco
 	rawURL := weiboWebUserSearchURL + "?" + url.Values{"q": []string{strings.TrimSpace(query)}}.Encode()
 	var lastError error
 	for _, account := range accounts {
-		response, err := actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+		response, err := actions.HTTPRequest(ctx, httpaction.Request{
 			Method: "GET", URL: rawURL, Headers: weiboSearchPageHeaders(account.Cookie), TimeoutSeconds: weiboRequestTimeoutSeconds,
 		})
 		if err != nil {

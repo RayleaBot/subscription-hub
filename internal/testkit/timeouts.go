@@ -5,6 +5,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 )
 
 type DeadlineActions struct {
@@ -12,7 +13,7 @@ type DeadlineActions struct {
 	Deadline time.Time
 }
 
-func (actions *DeadlineActions) HTTPRequest(ctx context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (actions *DeadlineActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	if deadline, ok := ctx.Deadline(); ok {
 		actions.mu.Lock()
 		actions.Deadline = deadline

@@ -5,12 +5,13 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 )
 
 type SourceActions interface {
 	BrowserLauncher
 	TimeLocation() *time.Location
-	HTTPRequest(context.Context, rayleabot.HTTPRequest) (rayleabot.ActionResult, error)
+	HTTPRequest(context.Context, httpaction.Request) (rayleabot.ActionResult, error)
 	SecretRead(context.Context, string) (rayleabot.ActionResult, error)
 	KVGet(context.Context, string) (rayleabot.ActionResult, error)
 	KVSet(context.Context, string, any) (rayleabot.ActionResult, error)
@@ -46,7 +47,7 @@ func sourceBoundary(actions SourceActions) SourceActions {
 	return sourceActions{SourceActions: actions}
 }
 
-func (actions sourceActions) HTTPRequest(ctx context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (actions sourceActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -65,4 +66,13 @@ func (actions sourceActions) SecretRead(ctx context.Context, key string) (raylea
 // dedicated typed helper. Source sessions never receive this interface.
 type GenericLocalActionCaller interface {
 	Call(context.Context, string, any, any) error
+}
+
+// hostRuntimeActions adds the plugin's own HTTP client to the SDK actions.
+type hostRuntimeActions struct {
+	*rayleabot.Actions
+}
+
+func (hostRuntimeActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
+	return httpaction.Do(ctx, request)
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 )
 
 type Actions struct {
@@ -17,10 +18,10 @@ type Actions struct {
 	Secrets            map[string]string
 	HTTPRoutes         []HTTPRoute
 	HTTPDefault        rayleabot.ActionResult
-	HTTPFallback       func(rayleabot.HTTPRequest) (rayleabot.ActionResult, error, bool)
+	HTTPFallback       func(httpaction.Request) (rayleabot.ActionResult, error, bool)
 	HTTPResponses      []rayleabot.ActionResult
 	HTTPErrors         []error
-	HTTPRequests       []rayleabot.HTTPRequest
+	HTTPRequests       []httpaction.Request
 	KV                 map[string]any
 	Renders            []rayleabot.RenderImageRequest
 	ResourceRenders    []RenderRequest

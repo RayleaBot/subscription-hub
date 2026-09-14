@@ -23,7 +23,7 @@ func (handler *Handler) hostActions(event *rayleabot.EventContext) RuntimeAction
 	if handler.actions != nil {
 		return handler.actions
 	}
-	return event.Actions()
+	return hostRuntimeActions{Actions: event.Actions()}
 }
 
 func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContext) error {

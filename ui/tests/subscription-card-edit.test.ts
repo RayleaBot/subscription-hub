@@ -23,22 +23,25 @@ const host = vi.hoisted(() => {
     theme: { mode: 'light', tokens: {} },
   }
   const client = {
-    request: vi.fn(async (type: string) => {
-      if (type === 'protocol.targets.reload') {
+    apiRequest: vi.fn(async (method: string, path: string) => {
+      if (method === 'GET' && path === '/api/adapters') {
+        return { adapters: [{ id: 'onebot', protocol: 'onebot11', enabled: true }] }
+      }
+      if (method === 'GET' && path === '/api/adapters/onebot/onebot11/targets') {
         return {
           available: true,
           groups: [{ target_id: '200', target_name: '测试群聊' }],
           private_users: [],
+          issues: [],
         }
       }
-      throw new Error(`unexpected request: ${type}`)
+      throw new Error(`unexpected request: ${method} ${path}`)
     }),
     invokeAction: vi.fn(async (action: string, payload: Record<string, unknown>) => {
       if (action !== 'subscription.resolve_avatars') throw new Error(`unexpected action: ${action}`)
       const urls = Array.isArray(payload.urls) ? payload.urls.map(String) : []
       return { items: urls.map((source_url) => ({ source_url, data_url: 'data:image/png;base64,dGVzdA==' })) }
     }),
-    send: vi.fn(),
   }
   return {
     client,
@@ -58,7 +61,7 @@ import App from '../src/App.vue'
 describe('subscription card editing', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
-    host.client.request.mockClear()
+    host.client.apiRequest.mockClear()
     host.client.invokeAction.mockClear()
   })
 

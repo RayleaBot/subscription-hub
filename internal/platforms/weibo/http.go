@@ -11,6 +11,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 )
 
@@ -185,7 +186,7 @@ func newWeiboClient(actions plugin.SourceActions) *weiboClient {
 }
 
 func (client *weiboClient) requestJSON(ctx context.Context, rawURL string, account weiboAccount, referer string) (map[string]any, error) {
-	response, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+	response, err := client.actions.HTTPRequest(ctx, httpaction.Request{
 		Method: "GET", URL: rawURL, Headers: weiboRequestHeaders(account.Cookie, referer), TimeoutSeconds: weiboRequestTimeoutSeconds,
 	})
 	if err != nil {
@@ -216,7 +217,7 @@ func (client *weiboClient) requestHTML(ctx context.Context, rawURL string, accou
 	headers["Sec-Fetch-Dest"] = "document"
 	headers["Sec-Fetch-Mode"] = "navigate"
 	delete(headers, "X-Requested-With")
-	response, err := client.actions.HTTPRequest(ctx, rayleabot.HTTPRequest{
+	response, err := client.actions.HTTPRequest(ctx, httpaction.Request{
 		Method: "GET", URL: rawURL, Headers: headers, TimeoutSeconds: weiboRequestTimeoutSeconds,
 	})
 	if err != nil {

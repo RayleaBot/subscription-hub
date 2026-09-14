@@ -8,6 +8,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
 )
@@ -187,10 +188,10 @@ type blockingAvatarActions struct {
 
 type fallbackAvatarActions struct {
 	*testkit.Actions
-	requests []rayleabot.HTTPRequest
+	requests []httpaction.Request
 }
 
-func (actions *fallbackAvatarActions) HTTPRequest(_ context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (actions *fallbackAvatarActions) HTTPRequest(_ context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	actions.requests = append(actions.requests, request)
 	if len(actions.requests) == 1 {
 		return nil, context.DeadlineExceeded
@@ -198,7 +199,7 @@ func (actions *fallbackAvatarActions) HTTPRequest(_ context.Context, request ray
 	return testkit.AvatarHTTPResult(), nil
 }
 
-func (actions *blockingAvatarActions) HTTPRequest(ctx context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (actions *blockingAvatarActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	select {
 	case actions.started <- request.URL:
 	case <-ctx.Done():

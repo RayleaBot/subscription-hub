@@ -10,6 +10,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
 )
 
@@ -348,7 +349,7 @@ func TestSourceBoundaryStopsCanceledRequestsAndDoesNotExposeDelivery(t *testing.
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := source.HTTPRequest(ctx, rayleabot.HTTPRequest{URL: "https://example.test/"}); !errors.Is(err, context.Canceled) {
+	if _, err := source.HTTPRequest(ctx, httpaction.Request{URL: "https://example.test/"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled source request: %v", err)
 	}
 	if len(actions.HTTPRequests) != 0 || len(actions.Renders) != 0 {

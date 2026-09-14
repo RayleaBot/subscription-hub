@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
 )
 
 type HTTPRoute struct {
@@ -17,7 +18,7 @@ type HTTPRoute struct {
 	Err           error
 }
 
-func (fake *Actions) HTTPRequest(_ context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (fake *Actions) HTTPRequest(_ context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
 	fake.HTTPRequests = append(fake.HTTPRequests, request)
@@ -60,10 +61,10 @@ func HTTPJSON(status int, document map[string]any) rayleabot.ActionResult {
 
 type FailedAvatarActions struct {
 	*Actions
-	Requests []rayleabot.HTTPRequest
+	Requests []httpaction.Request
 }
 
-func (actions *FailedAvatarActions) HTTPRequest(_ context.Context, request rayleabot.HTTPRequest) (rayleabot.ActionResult, error) {
+func (actions *FailedAvatarActions) HTTPRequest(_ context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {
 	actions.mu.Lock()
 	defer actions.mu.Unlock()
 	actions.Requests = append(actions.Requests, request)
