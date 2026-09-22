@@ -156,7 +156,7 @@ func chooseBilibiliDashVideo(raw []any, targetHeight, duration int, settings plu
 		}
 	}
 	sort.SliceStable(candidates, func(left, right int) bool {
-		leftHeight, rightHeight := plugin.IntScalar(candidates[left]["height"]), plugin.IntScalar(candidates[right]["height"])
+		leftHeight, rightHeight := bilibiliVideoResolution(candidates[left]), bilibiliVideoResolution(candidates[right])
 		if leftHeight != rightHeight {
 			return leftHeight > rightHeight
 		}
@@ -170,7 +170,7 @@ func chooseBilibiliDashVideo(raw []any, targetHeight, duration int, settings plu
 	}
 	var fallback map[string]any
 	for _, candidate := range candidates {
-		height := int(plugin.IntScalar(candidate["height"]))
+		height := bilibiliVideoResolution(candidate)
 		if height > targetHeight {
 			continue
 		}
@@ -189,6 +189,15 @@ func chooseBilibiliDashVideo(raw []any, targetHeight, duration int, settings plu
 		return candidate
 	}
 	return fallback
+}
+
+func bilibiliVideoResolution(video map[string]any) int {
+	width, height := int(plugin.IntScalar(video["width"])), int(plugin.IntScalar(video["height"]))
+	// 清晰度按短边计算，480×852 的竖屏流仍是 480P。
+	if width > 0 && (height <= 0 || width < height) {
+		return width
+	}
+	return height
 }
 
 func chooseBilibiliDashAudio(raw []any) map[string]any {
