@@ -16,6 +16,8 @@ type douyinPreviewRef struct {
 	URL  string
 }
 
+var errDouyinProfilePreview = errors.New("这是抖音用户主页，请分享具体作品或直播间链接；订阅该用户请使用订阅命令")
+
 func parseDouyinPreviewURL(value string) *douyinPreviewRef {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -33,6 +35,9 @@ func parseDouyinPreviewURL(value string) *douyinPreviewRef {
 	}
 	host := strings.ToLower(parsed.Hostname())
 	parts := plugin.PathParts(parsed.Path)
+	if host == "webcast.amemv.com" && len(parts) == 4 && parts[0] == "douyin" && parts[1] == "webcast" && parts[2] == "reflow" {
+		return &douyinPreviewRef{Kind: "live_reflow", ID: parts[3], URL: parsed.String()}
+	}
 	if host == "v.douyin.com" || strings.HasSuffix(host, ".v.douyin.com") {
 		if len(parts) == 0 {
 			return nil
@@ -55,7 +60,9 @@ func parseDouyinPreviewURL(value string) *douyinPreviewRef {
 		case "note":
 			return &douyinPreviewRef{Kind: "image_text", ID: parts[index+1], URL: parsed.String()}
 		case "live":
-			return &douyinPreviewRef{Kind: "live", ID: parts[index+1], URL: parsed.String()}
+			return &douyinPreviewRef{Kind: "live", ID: parts[index+1], URL: "https://live.douyin.com/" + url.PathEscape(parts[index+1])}
+		case "user":
+			return &douyinPreviewRef{Kind: "user", ID: parts[index+1], URL: parsed.String()}
 		}
 	}
 	return nil
@@ -95,30 +102,21 @@ func fetchDouyinPreview(ctx context.Context, actions plugin.SourceActions, ref *
 		if resolved == nil || resolved.Kind == "short" || resolved.ID == "" {
 			return nil, errors.New("没有从这条抖音短链解析到作品 ID")
 		}
-		resolved.URL = douyinCanonicalPreviewURL(resolved.Kind, resolved.ID)
+		if resolved.Kind == "video" || resolved.Kind == "image_text" {
+			resolved.URL = douyinCanonicalPreviewURL(resolved.Kind, resolved.ID)
+		}
 		ref = resolved
+	}
+	if ref.Kind == "user" {
+		return nil, errDouyinProfilePreview
+	}
+	if ref.Kind == "live" || ref.Kind == "live_reflow" {
+		return fetchDouyinLivePreview(ctx, client, ref, shareBody)
 	}
 	if update := douyinPreviewUpdateFromPage(actions.TimeLocation(), shareBody, ref); update != nil {
 		return update, nil
 	}
 	accounts, accErr := readDouyinAccounts(ctx, actions)
-	if ref.Kind == "live" {
-		if accErr != nil {
-			return nil, accErr
-		}
-		body, err := requestDouyinHTMLAcrossAccounts(ctx, actions, accounts, ref.URL, douyinWebReferer)
-		if err != nil {
-			return nil, errors.New(friendlyDouyinSourceError("抖音预览失败", err))
-		}
-		live := normalizeDouyinLive(actions.TimeLocation(), douyinLiveFromPage(body), "")
-		if live == nil {
-			return nil, errors.New("没有找到这场抖音直播")
-		}
-		if rawURL := strings.TrimSpace(ref.URL); rawURL != "" {
-			live["url"] = rawURL
-		}
-		return live, nil
-	}
 	var detailErr error
 	if accErr == nil {
 		if update, err := fetchDouyinDetailAcrossAccounts(ctx, client, accounts, ref); err == nil {

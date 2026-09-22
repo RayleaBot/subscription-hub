@@ -17,6 +17,9 @@ func (session *session) ResolverMedia(ctx context.Context, update plugin.Update,
 	}
 	service := plugin.StringScalar(update["service"])
 	if service == "live" {
+		if update["live_status"] != nil && plugin.IntScalar(update["live_status"]) != 1 {
+			return plugin.ResolverMediaPlan{}, nil
+		}
 		live := plugin.MapValue(update["_resolver_live"])
 		streamURL := douyinResolverLiveURL(live)
 		if streamURL == "" {
@@ -115,8 +118,9 @@ func douyinResolverLiveURL(live map[string]any) string {
 		plugin.NestedValue(room, "stream_url", "flv_pull_url", "SD1"),
 		plugin.NestedValue(room, "stream_url", "hls_pull_url_map", "FULL_HD1"),
 		plugin.NestedValue(room, "stream_url", "hls_pull_url_map", "HD1"),
+		plugin.NestedValue(room, "stream_url", "hls_pull_url"),
 	} {
-		if value := plugin.StringScalar(candidate); strings.HasPrefix(value, "http") {
+		if value := plugin.NormalizeMediaURL(candidate); strings.HasPrefix(value, "http") {
 			return value
 		}
 	}

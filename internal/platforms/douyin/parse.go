@@ -412,7 +412,7 @@ func douyinURLFromImage(value any) string {
 		}
 		return text
 	case map[string]any:
-		for _, item := range plugin.SliceValue(typed["url_list"]) {
+		for _, item := range plugin.SliceValue(plugin.FirstNonNil(typed["url_list"], typed["urlList"])) {
 			if text := douyinURLFromImage(item); text != "" {
 				return text
 			}

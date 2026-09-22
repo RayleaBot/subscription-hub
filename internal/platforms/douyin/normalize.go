@@ -59,7 +59,15 @@ func normalizeDouyinLive(location *time.Location, live map[string]any, secUID st
 	if cover != "" {
 		images = append(images, map[string]any{"url": cover})
 	}
-	pubTS := time.Now().Unix()
+	pubTS := plugin.IntScalar(live["start_time"])
+	if pubTS <= 0 {
+		pubTS = time.Now().Unix()
+	}
+	liveStatus := plugin.IntScalar(plugin.FirstNonNil(live["live_status"], 1))
+	summary := title
+	if liveStatus != 1 {
+		summary = "直播已结束"
+	}
 	liveURL := plugin.FirstText(live["url"], "https://live.douyin.com/"+url.PathEscape(id))
 	if cleaned, ok := cleanDouyinShareURL(liveURL); ok {
 		liveURL = cleaned
@@ -67,7 +75,7 @@ func normalizeDouyinLive(location *time.Location, live map[string]any, secUID st
 	return map[string]any{
 		"id": "live:" + id, "platform": "douyin", "uid": uid, "service": "live",
 		"category": douyinServiceCategory("live"), "title": title,
-		"summary": title, "url": liveURL,
+		"summary": summary, "url": liveURL, "live_status": liveStatus,
 		"pub_ts": pubTS, "created_at": plugin.FormatTime(location, pubTS, ""),
 		"author": map[string]any{
 			"name": plugin.FirstText(name, uid), "uid": uid,
