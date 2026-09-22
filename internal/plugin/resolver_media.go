@@ -11,14 +11,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 )
 
 const (
-	resolverImageMaxBytes = 64 << 20
-	resolverAudioMaxBytes = 128 << 20
-	resolverVideoMaxBytes = 2 << 30
+	resolverImageMaxBytes    = 64 << 20
+	resolverAudioMaxBytes    = 128 << 20
+	resolverVideoMaxBytes    = 2 << 30
+	resolverMediaReadTimeout = 15 * time.Second
 )
 
 type preparedResolverMedia struct {
@@ -249,8 +251,13 @@ func downloadResolverFileWithFFmpeg(ctx context.Context, candidates []string, he
 	}
 	var lastErr error
 	for _, candidate := range candidates {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		_ = os.Remove(destination)
-		args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+		// 限制网络连续无响应的时间，让停滞的 CDN 可以回退到备用地址；
+		// 持续传输的大文件仍使用整个后台下载预算。
+		args := []string{"-y", "-hide_banner", "-loglevel", "error", "-rw_timeout", fmt.Sprint(resolverMediaReadTimeout.Microseconds())}
 		if len(headerLines) > 0 {
 			args = append(args, "-headers", strings.Join(headerLines, "\r\n")+"\r\n")
 		}
