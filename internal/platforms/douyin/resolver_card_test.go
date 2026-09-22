@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
@@ -12,7 +13,9 @@ import (
 func TestPrepareResolverCardInlinesCoverBeforeRendering(t *testing.T) {
 	fake := newActions()
 	fake.HTTPDefault = testkit.AvatarHTTPResult()
-	card := resolverCardFixture()
+	item := plugin.Subscription{Platform: "douyin", UID: "MS4wLjABAAAAfixture", Name: "测试用户"}
+	update := normalizeDouyinAweme(time.UTC, douyinVideoAweme("video", item.UID, item.Name, "测试作品", 1700000000))
+	card := (&session{actions: fake}).UpdateCard(item, update)
 
 	prepared := (&session{actions: fake}).PrepareResolverCard(t.Context(), card)
 	if len(prepared.Resources) != 0 {
@@ -29,6 +32,9 @@ func TestPrepareResolverCardInlinesCoverBeforeRendering(t *testing.T) {
 	}
 	if len(fake.HTTPRequests) != 1 || fake.HTTPRequests[0].TimeoutSeconds != douyinResolverCardImageTimeout {
 		t.Fatalf("resolver cover request = %#v", fake.HTTPRequests)
+	}
+	if fake.HTTPRequests[0].URL != "https://p3-pc.douyinpic.com/fixture-published-cover.jpeg" {
+		t.Fatalf("resolver fetched a video frame instead of the published cover: %s", fake.HTTPRequests[0].URL)
 	}
 }
 

@@ -268,22 +268,10 @@ h1 {
 }
 
 .media-grid--single .media-item {
-  aspect-ratio: 16 / 9;
-}
-
-.media-grid--single .media-item--long {
-  aspect-ratio: 3 / 4;
-}
-
-.media-grid--single .media-item--wide {
-  aspect-ratio: 16 / 9;
-}
-
-.media-grid--single .media-item:not(.media-item--wide) {
   aspect-ratio: auto;
 }
 
-.media-grid--single .media-item:not(.media-item--wide) img {
+.media-grid--single .media-item img {
   height: auto;
   object-fit: contain;
 }

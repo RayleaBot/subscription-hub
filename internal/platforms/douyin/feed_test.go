@@ -40,8 +40,10 @@ func douyinVideoAweme(id, secUID, name, text string, ts int64) map[string]any {
 		"aweme_id": id, "aweme_type": 0, "desc": text, "create_time": ts,
 		"author": map[string]any{"sec_uid": secUID, "nickname": name},
 		"video": map[string]any{
-			"duration": 80000,
-			"cover":    map[string]any{"url_list": []any{"https://p3-pc.douyinpic.com/fixture-cover.jpeg"}},
+			"duration":             80000,
+			"cover_original_scale": map[string]any{"url_list": []any{"https://p3-pc.douyinpic.com/fixture-published-cover.jpeg"}},
+			"cover":                map[string]any{"url_list": []any{"https://p3-pc.douyinpic.com/fixture-cover.jpeg"}},
+			"origin_cover":         map[string]any{"url_list": []any{"https://p3-pc.douyinpic.com/fixture-video-frame.jpeg"}},
 		},
 	}
 }
@@ -152,6 +154,10 @@ func TestDouyinSubscriptionCheckBaselinesThenRendersNewAweme(t *testing.T) {
 	}
 	if plugin.StringScalar(data["url"]) != "https://www.douyin.com/video/new" || plugin.StringScalar(data["duration_text"]) != "1:20" {
 		t.Fatalf("render data lost media fields: %#v", data)
+	}
+	images := plugin.ImageMaps(data["images"], 9)
+	if len(images) != 1 || images[0]["url"] != "https://p3-pc.douyinpic.com/fixture-published-cover.jpeg" {
+		t.Fatalf("subscription did not use the published cover: %#v", images)
 	}
 	if _, exists := fake.KV["seen:douyin-fixture-group-10000:video:new"]; !exists {
 		t.Fatalf("new update was not marked seen: %#v", fake.KV)
@@ -487,6 +493,10 @@ func TestFetchDouyinPreviewUsesMobileShortLinkAndSignedDetailAPI(t *testing.T) {
 	}
 	if plugin.StringScalar(update["id"]) != awemeID || plugin.StringScalar(update["url"]) != "https://www.douyin.com/video/"+awemeID {
 		t.Fatalf("preview update = %#v", update)
+	}
+	images := plugin.ImageMaps(update["images"], 9)
+	if len(images) != 1 || images[0]["url"] != "https://p3-pc.douyinpic.com/fixture-published-cover.jpeg" {
+		t.Fatalf("preview did not use the published cover: %#v", images)
 	}
 	if len(fake.HTTPRequests) != 3 {
 		t.Fatalf("preview requests = %#v", testkit.RequestURLs(fake))

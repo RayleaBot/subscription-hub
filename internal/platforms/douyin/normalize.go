@@ -202,9 +202,15 @@ func douyinAwemeImages(aweme map[string]any, service string) []map[string]any {
 		}
 	}
 	if len(images) == 0 {
-		// 优先静态封面；动态封面（dynamic_cover）是动图 webp，体积大且偶发取图失败，放最后。
+		// cover_original_scale / cover 是作品发布封面；origin_cover 可能只是视频帧。
+		// 按可用地址依次回退，空封面对象不能阻断后续候选；动态封面放最后。
 		video := plugin.MapValue(aweme["video"])
-		appendMirrors(plugin.FirstNonNil(video["origin_cover"], video["cover"], aweme["cover"], aweme["video_cover"], video["dynamic_cover"]))
+		for _, cover := range []any{video["cover_original_scale"], video["cover"], aweme["cover"], aweme["video_cover"], video["origin_cover"], video["dynamic_cover"]} {
+			appendMirrors(cover)
+			if len(images) > 0 {
+				break
+			}
+		}
 	}
 	if len(images) > 9 {
 		images = images[:9]

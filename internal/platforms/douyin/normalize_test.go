@@ -70,6 +70,78 @@ func TestDouyinImageMirrorsCollectsURLList(t *testing.T) {
 	}
 }
 
+func TestDouyinVideoCoverSelection(t *testing.T) {
+	cover := func(name string) map[string]any {
+		return map[string]any{"url_list": []any{
+			"https://p3-pc.douyinpic.com/" + name + ".jpeg",
+			"https://p6-pc.douyinpic.com/" + name + ".jpeg",
+		}}
+	}
+	for _, test := range []struct {
+		name  string
+		video map[string]any
+		want  string
+	}{
+		{
+			name: "published cover before video frame",
+			video: map[string]any{
+				"cover_original_scale": cover("published"), "cover": cover("resized"),
+				"origin_cover": cover("frame"), "dynamic_cover": cover("animated"),
+			},
+			want: "published",
+		},
+		{
+			name:  "regular cover before video frame",
+			video: map[string]any{"cover": cover("resized"), "origin_cover": cover("frame")},
+			want:  "resized",
+		},
+		{
+			name:  "empty original scale does not hide regular cover",
+			video: map[string]any{"cover_original_scale": map[string]any{"url_list": []any{}}, "cover": cover("resized")},
+			want:  "resized",
+		},
+		{
+			name: "invalid static covers fall back to original frame",
+			video: map[string]any{
+				"cover_original_scale": map[string]any{"url_list": []any{"invalid", "http://example.com/cover.jpeg"}},
+				"cover":                map[string]any{}, "origin_cover": cover("frame"), "dynamic_cover": cover("animated"),
+			},
+			want: "frame",
+		},
+		{
+			name:  "dynamic cover is last fallback",
+			video: map[string]any{"origin_cover": map[string]any{}, "dynamic_cover": cover("animated")},
+			want:  "animated",
+		},
+		{name: "no usable cover", video: map[string]any{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			images := douyinAwemeImages(map[string]any{"video": test.video}, "video")
+			if test.want == "" {
+				if len(images) != 0 {
+					t.Fatalf("unexpected images: %#v", images)
+				}
+				return
+			}
+			want := douyinImageMirrors(cover(test.want))
+			if len(images) != 1 || images[0]["url"] != want[0] || !reflect.DeepEqual(images[0]["candidates"], want) {
+				t.Fatalf("cover = %#v, want URLs %v", images, want)
+			}
+		})
+	}
+}
+
+func TestDouyinImagePostKeepsImagesBeforeVideoCover(t *testing.T) {
+	aweme := map[string]any{
+		"images": []any{map[string]any{"url_list": []any{"https://p3-pc.douyinpic.com/photo.jpeg"}}},
+		"video":  map[string]any{"cover_original_scale": map[string]any{"url_list": []any{"https://p3-pc.douyinpic.com/cover.jpeg"}}},
+	}
+	images := douyinAwemeImages(aweme, "image_text")
+	if len(images) != 1 || images[0]["url"] != "https://p3-pc.douyinpic.com/photo.jpeg" {
+		t.Fatalf("image post was replaced by its video cover: %#v", images)
+	}
+}
+
 func TestDouyinPicRegionMirrorsSwapsRegionHosts(t *testing.T) {
 	parsed, _ := url.Parse("https://p3-pc-sign.douyinpic.com/aweme/face.jpeg?x-expires=1780905600&x-signature=abc")
 	alts := douyinpicRegionMirrors(parsed)
