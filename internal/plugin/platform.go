@@ -263,6 +263,9 @@ func NewHandler(options Options) (*Handler, error) {
 		handler.platforms = append(handler.platforms, platform)
 		handler.byID[platform.ID] = platform
 	}
+	if err := addCommandAliases(handler.commands); err != nil {
+		return nil, err
+	}
 	handler.initAccountQRManager()
 	return handler, nil
 }

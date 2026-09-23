@@ -257,6 +257,19 @@ func newHandler(t testing.TB) *plugin.Handler {
 }
 
 func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testing.T) {
+	for _, aliases := range []bool{false, true} {
+		t.Run(fmt.Sprintf("aliases=%t", aliases), func(t *testing.T) {
+			testRuntimeRoutesManagementCommandsAndPreviews(t, aliases)
+		})
+	}
+}
+
+func testRuntimeRoutesManagementCommandsAndPreviews(t *testing.T, aliases bool) {
+	t.Helper()
+	subscribeCommand, previewCommand := "订阅网易云音乐推送", "预览订阅卡片"
+	if aliases {
+		subscribeCommand, previewCommand = "订阅网易云", "订阅预览"
+	}
 	actions := testkit.NewActions()
 	actions.Config = map[string]any{
 		"enabled": true, "delivery_max_age_minutes": 30,
@@ -370,7 +383,7 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	if !plugin.BoolScalar(plugin.NestedValue(resolved, "data", "exact")) || plugin.StringScalar(plugin.NestedValue(resolved, "data", "user", "uid")) != "42" {
 		t.Fatalf("management resolution = %#v", resolved)
 	}
-	write("event", "subscribe", event("message.group", map[string]any{"command": "订阅网易云音乐推送", "args": []string{"音乐人", "https://music.163.com/#/artist?id=42"}}))
+	write("event", "subscribe", event("message.group", map[string]any{"command": subscribeCommand, "args": []string{"音乐人", "https://music.163.com/#/artist?id=42"}}))
 	if frame := read("subscribe"); frame["action"] != "message.send" {
 		t.Fatalf("subscription reply = %#v", frame)
 	}
@@ -385,7 +398,7 @@ func TestRuntimeRoutesManagementCommandsAndPreviewsThroughSharedHandler(t *testi
 	}
 	for index, preview := range []string{"b站 视频", "微博 图片", "抖音 直播"} {
 		id := fmt.Sprintf("preview-%d", index)
-		write("event", id, event("message.group", map[string]any{"command": "预览订阅卡片", "args": []string{preview}}))
+		write("event", id, event("message.group", map[string]any{"command": previewCommand, "args": []string{preview}}))
 		if frame := read(id); frame["action"] != "message.send" {
 			t.Fatalf("preview reply = %#v", frame)
 		}
