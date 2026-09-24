@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestDoKeepsHostActionResultShape(t *testing.T) {
@@ -44,5 +45,24 @@ func TestDoKeepsHostActionResultShape(t *testing.T) {
 	}
 	if _, err := Do(ctx, Request{URL: server.URL + "/large"}); !errors.Is(err, ErrResponseTooLarge) {
 		t.Fatalf("oversized body error = %v", err)
+	}
+}
+
+func TestRedirectDoesNotWaitForResponseBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/target")
+		w.WriteHeader(http.StatusFound)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	result, err := Do(ctx, Request{URL: server.URL})
+	if err != nil || result["status_code"] != http.StatusFound || ctx.Err() != nil {
+		t.Fatalf("redirect waited for body: %#v, %v", result, err)
+	}
+	if result["headers"].(map[string]any)["Location"] != "/target" {
+		t.Fatalf("redirect lost Location: %#v", result)
 	}
 }

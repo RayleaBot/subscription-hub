@@ -498,15 +498,13 @@ func TestFetchDouyinPreviewUsesMobileShortLinkAndSignedDetailAPI(t *testing.T) {
 	if len(images) != 1 || images[0]["url"] != "https://p3-pc.douyinpic.com/fixture-published-cover.jpeg" {
 		t.Fatalf("preview did not use the published cover: %#v", images)
 	}
-	if len(fake.HTTPRequests) != 3 {
+	if len(fake.HTTPRequests) != 2 {
 		t.Fatalf("preview requests = %#v", testkit.RequestURLs(fake))
 	}
-	for _, request := range fake.HTTPRequests[:2] {
-		if request.Headers["User-Agent"] != douyinShareUserAgent {
-			t.Fatalf("share request user agent = %q", request.Headers["User-Agent"])
-		}
+	if fake.HTTPRequests[0].Headers["User-Agent"] != douyinShareUserAgent {
+		t.Fatalf("share request user agent = %q", fake.HTTPRequests[0].Headers["User-Agent"])
 	}
-	detailRequest := fake.HTTPRequests[2]
+	detailRequest := fake.HTTPRequests[1]
 	parsed, parseErr := url.Parse(detailRequest.URL)
 	if parseErr != nil {
 		t.Fatalf("parse detail URL: %v", parseErr)
@@ -524,10 +522,6 @@ func TestFetchDouyinPreviewUsesCompleteSharePageBeforeAccountAPI(t *testing.T) {
 	fake := newActions()
 	fake.HTTPRoutes = []testkit.HTTPRoute{
 		{Path: "/share-fast/", Result: rayleabot.ActionResult{
-			"status_code": 302,
-			"headers":     map[string]any{"Location": "https://www.iesdouyin.com/share/video/" + awemeID + "/"},
-		}},
-		{Path: "/share/video/" + awemeID + "/", Result: rayleabot.ActionResult{
 			"status_code": 200,
 			"headers":     map[string]any{"Content-Type": "text/html"},
 			"body_text": douyinRouterDataPage(map[string]any{"loaderData": map[string]any{
@@ -545,7 +539,7 @@ func TestFetchDouyinPreviewUsesCompleteSharePageBeforeAccountAPI(t *testing.T) {
 	if plugin.StringScalar(update["id"]) != awemeID {
 		t.Fatalf("share page update = %#v", update)
 	}
-	if len(fake.HTTPRequests) != 2 {
+	if len(fake.HTTPRequests) != 1 {
 		t.Fatalf("complete share page still reached account API: %#v", testkit.RequestURLs(fake))
 	}
 }
@@ -595,12 +589,10 @@ func TestFetchDouyinPreviewAnonymousDetailWithoutAccounts(t *testing.T) {
 	if plugin.StringScalar(author["avatar"]) != avatarURL {
 		t.Fatalf("anonymous detail avatar = %#v", author["avatar"])
 	}
-	for _, request := range fake.HTTPRequests[:2] {
-		if !strings.Contains(request.Headers["Cookie"], "ttwid=") {
-			t.Fatalf("share request missing anonymous ttwid: %#v", request.Headers)
-		}
+	if len(fake.HTTPRequests) != 2 || fake.HTTPRequests[0].Headers["Cookie"] != "" {
+		t.Fatalf("short-link expansion should not require cookies or the landing page: %#v", testkit.RequestURLs(fake))
 	}
-	detailRequest := fake.HTTPRequests[2]
+	detailRequest := fake.HTTPRequests[1]
 	if !strings.Contains(detailRequest.Headers["Cookie"], "ttwid=fixture-ttwid") || strings.Contains(detailRequest.Headers["Cookie"], "sessionid") {
 		t.Fatalf("anonymous detail request cookie = %q", detailRequest.Headers["Cookie"])
 	}

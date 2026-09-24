@@ -122,7 +122,7 @@ func TestDouyinProfileLinksDoNotFallThroughToVideoIDExtraction(t *testing.T) {
 			}
 			wantRequests := 0
 			if short {
-				wantRequests = 2
+				wantRequests = 1
 			}
 			if len(fake.HTTPRequests) != wantRequests {
 				t.Fatalf("profile reached work API: %#v", testkit.RequestURLs(fake))

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -293,14 +294,23 @@ func (client *douyinClient) requestHTML(ctx context.Context, rawURL string, acco
 
 func (client *douyinClient) requestShareHTML(ctx context.Context, rawURL string) (string, string, error) {
 	headers := douyinShareRequestHeaders(douyinWebReferer)
-	// 分享页 SSR 现在要求携带 ttwid 才返回作品数据；匿名 ttwid 即可，
-	// 与登录 CK 无关（实测无 Cookie 时页面不含任何作品信息）。
-	if ttwid := client.anonymousTTWID(ctx); ttwid != "" {
+	var stop func(string) bool
+	if ref := parseDouyinPreviewURL(rawURL); ref != nil && ref.Kind == "short" {
+		// 短链重定向不依赖匿名会话，识别内容地址后交给对应解析流程。
+		stop = func(value string) bool {
+			ref := parseDouyinPreviewURL(value)
+			return ref != nil && ref.Kind != "short"
+		}
+	} else if ttwid := client.anonymousTTWID(ctx); ttwid != "" {
+		// 只有真正读取分享页时才准备匿名会话，避免注册失败耗尽展开预算。
 		headers["Cookie"] = "ttwid=" + ttwid
 	}
-	response, finalURL, err := client.requestFollowing(ctx, rawURL, headers)
+	response, finalURL, err := client.requestFollowingUntil(ctx, rawURL, headers, stop)
 	if err != nil {
 		return "", finalURL, err
+	}
+	if stop != nil && stop(finalURL) {
+		return "", finalURL, nil
 	}
 	status := int(plugin.IntScalar(response["status_code"]))
 	body := douyinResponseBody(response)
@@ -317,6 +327,10 @@ func (client *douyinClient) request(ctx context.Context, rawURL string, account 
 }
 
 func (client *douyinClient) requestFollowing(ctx context.Context, rawURL string, headers map[string]string) (rayleabot.ActionResult, string, error) {
+	return client.requestFollowingUntil(ctx, rawURL, headers, nil)
+}
+
+func (client *douyinClient) requestFollowingUntil(ctx context.Context, rawURL string, headers map[string]string, stop func(string) bool) (rayleabot.ActionResult, string, error) {
 	current := strings.TrimSpace(rawURL)
 	var response rayleabot.ActionResult
 	for hop := 0; hop <= douyinRedirectMaxHops; hop++ {
@@ -350,6 +364,9 @@ func (client *douyinClient) requestFollowing(ctx context.Context, rawURL string,
 			return result, current, nil
 		}
 		current = next.String()
+		if stop != nil && stop(current) {
+			return result, current, nil
+		}
 	}
 	return response, current, nil
 }
@@ -933,14 +950,32 @@ func douyinErrorLogFields(err error) map[string]any {
 		}
 		return fields
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		fields["kind"] = "timeout"
-	} else if errors.Is(err, context.Canceled) {
-		fields["kind"] = "canceled"
-	} else if err != nil {
-		fields["kind"] = "request"
+	if kind := douyinNetworkErrorKind(err); kind != "" {
+		fields["kind"] = kind
 	}
 	return fields
+}
+
+func douyinNetworkErrorKind(err error) string {
+	var dnsErr *net.DNSError
+	var networkErr net.Error
+	var urlErr *url.Error
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.As(err, &dnsErr):
+		return "dns"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &networkErr) && networkErr.Timeout():
+		return "timeout"
+	case errors.Is(err, httpaction.ErrResponseTooLarge):
+		return "response_too_large"
+	case errors.As(err, &urlErr):
+		return "network"
+	default:
+		return "request"
+	}
 }
 
 func friendlyDouyinSourceError(label string, err error) string {
@@ -948,6 +983,18 @@ func friendlyDouyinSourceError(label string, err error) string {
 	if !errors.As(err, &sourceErr) {
 		if plugin.IsHTTPActionPermissionError(err) {
 			return label + "：请检查插件 http.request 权限与宿主网络安全策略。"
+		}
+		switch douyinNetworkErrorKind(err) {
+		case "dns":
+			return label + "：域名解析失败，请检查运行环境的 DNS 或代理配置。"
+		case "timeout":
+			return label + "：网络请求超时，请检查运行环境的网络、DNS 或代理配置。"
+		case "canceled":
+			return label + "：请求已取消。"
+		case "response_too_large":
+			return label + "：返回页面超过读取上限。"
+		case "network":
+			return label + "：网络连接失败，请检查运行环境的网络或代理配置。"
 		}
 		if err != nil && strings.Contains(err.Error(), "没有可用的抖音账号") {
 			return label + "：" + strings.TrimSpace(err.Error()) + "。"

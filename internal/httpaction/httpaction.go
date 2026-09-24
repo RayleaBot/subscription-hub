@@ -88,6 +88,19 @@ func sendHTTP(ctx context.Context, method string, request Request, body []byte) 
 		return nil, true, err
 	}
 	defer func() { _ = response.Body.Close() }()
+	headers := make(map[string]any, len(response.Header))
+	for key, values := range response.Header {
+		headers[key] = strings.Join(values, ", ")
+	}
+	cookies := make([]any, 0)
+	for _, cookie := range response.Header.Values("Set-Cookie") {
+		cookies = append(cookies, cookie)
+	}
+	result := rayleabot.ActionResult{"status_code": response.StatusCode, "headers": headers, "set_cookies": cookies}
+	// 重定向只需要响应头，读取其正文可能被无关的大页面或停滞连接阻塞。
+	if response.StatusCode >= 300 && response.StatusCode < 400 && response.Header.Get("Location") != "" {
+		return result, false, nil
+	}
 	if method != http.MethodHead && response.ContentLength > maxHTTPResponseBodySize {
 		return nil, false, ErrResponseTooLarge
 	}
@@ -99,15 +112,6 @@ func sendHTTP(ctx context.Context, method string, request Request, body []byte) 
 		return nil, false, ErrResponseTooLarge
 	}
 
-	headers := make(map[string]any, len(response.Header))
-	for key, values := range response.Header {
-		headers[key] = strings.Join(values, ", ")
-	}
-	cookies := make([]any, 0)
-	for _, cookie := range response.Header.Values("Set-Cookie") {
-		cookies = append(cookies, cookie)
-	}
-	result := rayleabot.ActionResult{"status_code": response.StatusCode, "headers": headers, "set_cookies": cookies}
 	if len(content) > 0 {
 		if utf8.Valid(content) {
 			result["body_text"] = string(content)
