@@ -12,7 +12,7 @@ const fallbackText = computed(() => props.label.trim().slice(0, 1).toUpperCase()
 const fallbackColor = computed(() => {
   let hash = 0
   for (const character of props.label || '?') hash = character.charCodeAt(0) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360} 72% 58%)`
+  return `hsl(${Math.abs(hash) % 360} 24% 42%)`
 })
 
 watch(() => props.url, () => { failed.value = false })

@@ -1,5 +1,7 @@
 import { createApp, nextTick, reactive } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('ant-design-vue', () => ({ Modal: { props: ['open'], template: '<section v-if="open" role="dialog"><slot /></section>' } }))
 
 import ResolverSettingsPanel from '../src/components/ResolverSettingsPanel.vue'
 import { deriveTargetAvatarURL, emptyTargets, normalizeResolverSettings, normalizeTargets, type ResolverSettings } from '../src/model'

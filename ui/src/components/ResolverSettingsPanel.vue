@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Modal as AModal } from 'ant-design-vue'
+import PlatformLogo from './PlatformLogo.vue'
+import UiIcon from './UiIcon.vue'
 
 import {
   allTargets,
@@ -164,26 +167,20 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 
 <template>
   <section class="resolver-panel" aria-labelledby="resolver-settings-title">
-    <div class="resolver-heading">
-      <div>
-        <h2 id="resolver-settings-title">{{ pageCopy.title }}</h2>
-        <p>{{ pageCopy.description }}</p>
-      </div>
-      <button type="button" class="preview-help" @click="$emit('open-help')">预览解析帮助</button>
-    </div>
-
+    <h2 id="resolver-settings-title" class="sr-only">{{ pageCopy.title }}</h2>
     <div v-if="page !== 'strategy'" class="target-page">
       <div class="target-toolbar">
-        <label v-if="configuredTargets.length" class="target-search">
-          <span>筛选已添加{{ targetTypeLabel }}</span>
+        <label class="target-search">
+          <span class="sr-only">筛选已添加{{ targetTypeLabel }}</span>
           <input v-model="manageSearch" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
         </label>
+        <button type="button" class="button" @click="$emit('open-help')">解析帮助</button>
         <button type="button" class="target-button target-button--primary" :aria-expanded="pickerOpen" @click="pickerOpen = !pickerOpen">
-          {{ pickerOpen ? '收起添加列表' : `添加${targetTypeLabel}` }}
+          <UiIcon name="plus" />{{ `添加${targetTypeLabel}` }}
         </button>
       </div>
 
-      <section v-if="pickerOpen" class="target-picker" aria-labelledby="target-picker-title">
+      <AModal centered :footer="null" :open="pickerOpen" :title="`添加${targetTypeLabel}`" :width="480" class="hub-dialog" @cancel="pickerOpen = false"><section class="target-picker" aria-labelledby="target-picker-title">
         <div class="target-picker-heading">
           <div>
             <h3 id="target-picker-title">从连接协议添加{{ targetTypeLabel }}</h3>
@@ -220,9 +217,10 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
         </div>
         <p v-if="targets.issues.length" class="picker-issue">{{ targets.issues.map((issue) => issue.message).join('；') }}</p>
         <p v-if="candidateTargets.length > visibleCandidateTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
-      </section>
+      </section></AModal>
 
-      <div class="resolver-target-grid" :aria-label="`${page === 'group' ? '群聊' : '用户'}解析开关`">
+      <div class="collection-caption"><span>{{ filteredConfiguredTargets.length }} 个{{ targetTypeLabel }}</span><span>按平台独立开启解析</span></div>
+      <TransitionGroup name="cards" tag="div" class="resolver-target-grid" :aria-label="`${page === 'group' ? '群聊' : '用户'}解析开关`">
         <article v-for="target in visibleConfiguredTargets" :key="target.key" class="resolver-target-card">
           <div class="resolver-target-card__head">
             <span class="target-avatar" aria-hidden="true">
@@ -237,7 +235,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
           </div>
           <div class="resolver-platforms">
             <label v-for="platform in (['bilibili', 'weibo', 'douyin'] as ResolverPlatform[])" :key="platform" class="platform-switch">
-              <span>{{ resolverPlatformLabel(platform) }}</span>
+              <span class="platform-switch__label"><PlatformLogo :platform="platform" :size="24" />{{ resolverPlatformLabel(platform) }}</span>
               <span class="compact-switch">
                 <input
                   type="checkbox"
@@ -250,11 +248,11 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
             </label>
           </div>
         </article>
+      </TransitionGroup>
         <div v-if="visibleConfiguredTargets.length === 0" class="resolver-empty">
           <strong>{{ manageSearch ? '没有匹配项' : `尚未添加${targetTypeLabel}` }}</strong>
           <span>{{ manageSearch ? '请调整筛选条件。' : `点击“添加${targetTypeLabel}”从连接协议选择；在聊天中开启解析后也会自动加入。` }}</span>
         </div>
-      </div>
       <p v-if="filteredConfiguredTargets.length > visibleConfiguredTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
     </div>
 
@@ -292,7 +290,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
       </section>
 
       <section class="strategy-section">
-        <div class="strategy-title"><h3>B站视频</h3><p>普通视频与番剧分别控制时长和清晰度；番剧直链默认关闭。</p></div>
+        <div class="strategy-title"><h3><PlatformLogo platform="bilibili" :size="28" />B站视频</h3><p>普通视频与番剧分别控制时长和清晰度；番剧直链默认关闭。</p></div>
         <div class="setting-grid setting-grid--three">
           <label class="number-field"><span>普通视频最长</span><div><input v-model.number="draft.media.bilibili_max_duration_seconds" type="number" min="1" max="7200" /><em>秒</em></div></label>
           <label class="select-field"><span>普通视频清晰度</span><select v-model.number="draft.media.bilibili_resolution"><option :value="360">360p</option><option :value="480">480p</option><option :value="720">720p</option><option :value="1080">1080p</option><option :value="2160">2160p</option></select></label>
@@ -308,7 +306,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
       </section>
 
       <section class="strategy-section">
-        <div class="strategy-title"><h3>抖音视频</h3><p>控制作品时长、目标清晰度和动态图片配乐。</p></div>
+        <div class="strategy-title"><h3><PlatformLogo platform="douyin" :size="28" />抖音视频</h3><p>控制作品时长、目标清晰度和动态图片配乐。</p></div>
         <div class="setting-grid setting-grid--two">
           <label class="number-field"><span>视频最长</span><div><input v-model.number="draft.media.douyin_max_duration_seconds" type="number" min="1" max="7200" /><em>秒</em></div></label>
           <label class="select-field"><span>目标清晰度</span><select v-model.number="draft.media.douyin_resolution"><option :value="720">720p</option><option :value="1080">1080p</option></select></label>
@@ -405,8 +403,8 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   cursor: pointer;
 }
 .target-button:hover { border-color: var(--accent); color: var(--accent-strong); }
-.target-button--primary { flex: 0 0 auto; min-height: 42px; color: #fff; border-color: var(--accent); background: var(--accent); }
-.target-button--primary:hover { color: #fff; border-color: var(--accent-strong); background: var(--accent-strong); }
+.target-button--primary { flex: 0 0 auto; min-height: 42px; color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
+.target-button--primary:hover { color: var(--on-accent); border-color: var(--accent-strong); background: var(--accent-strong); }
 
 .target-picker {
   margin-bottom: 22px;
@@ -440,7 +438,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   cursor: pointer;
   transition: border-color 160ms ease-out, background 160ms ease-out, transform 160ms ease-out;
 }
-.target-choice-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); transform: translateY(-1px); }
+.target-choice-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--surface));  }
 .picker-empty { display: grid; grid-column: 1 / -1; gap: 5px; place-items: center; min-height: 126px; padding: 22px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); background: var(--surface); text-align: center; }
 .picker-empty strong { color: var(--text); }
 .picker-issue { margin: 12px 0 0; color: var(--danger); font-size: 13px; line-height: 1.55; }
@@ -509,7 +507,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 .target-choice-card:focus-visible,
 .target-remove:focus-visible,
 input:focus-visible,
-select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, transparent); outline-offset: 2px; }
+select:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
 
 .resolver-empty { display: grid; grid-column: 1 / -1; gap: 5px; place-items: center; min-height: 160px; padding: 24px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; }
 .resolver-empty strong { color: var(--text); }
@@ -565,4 +563,11 @@ select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 24%, 
   .resolver-target-card__head { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; }
   .target-avatar { width: 44px; height: 44px; }
 }
+
+.resolver-panel { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.target-page, .strategy-page { padding: 0; }.target-toolbar { gap: 12px; margin-bottom: 20px; }.target-search { margin-right: auto; width: min(440px, 100%); }.target-search input, .picker-search input { min-height: 40px; font-size: 13px; background: var(--surface); }
+.target-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 14px; min-height: 36px; }.target-picker { padding: 0; margin: 0; border: 0; background: transparent; box-shadow: none; }.candidate-grid { grid-template-columns: 1fr; }.target-choice-card { border: 0; background: var(--surface-soft); padding: 12px; }.resolver-target-grid { position: relative; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 18px; }.resolver-target-card { padding: 20px; border-radius: 14px; }.platform-switch__label { display: flex; align-items: center; gap: 6px; font-weight: 500; }.resolver-platforms { margin-top: 22px; padding-top: 16px; }
+.strategy-page { max-width: 1120px; }.strategy-section { display: grid; grid-template-columns: 220px minmax(0, 1fr); column-gap: 40px; padding: 24px 0; }.strategy-section + .strategy-section { margin: 0; padding-top: 28px; }.strategy-title { grid-column: 1; grid-row: 1 / 3; }.strategy-title h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }.strategy-title p { font-size: 12px; margin-top: 8px; }.setting-grid { grid-column: 2; margin-top: 0; gap: 20px; }.inline-toggles { grid-column: 2; flex-direction: column; gap: 16px; }.inline-toggles label { font-size: 13px; font-weight: 400; }.number-field, .select-field { font-size: 13px; font-weight: 500; }.number-field input, .select-field select { font-size: 14px; min-height: 38px; background: var(--surface); }.setting-toggle strong { font-size: 13px; font-weight: 500; }.setting-toggle small { font-size: 12px; }
+@media (max-width: 860px) { .strategy-section { grid-template-columns: 1fr; gap: 20px; }.strategy-title, .setting-grid, .inline-toggles { grid-column: 1; grid-row: auto; }.target-toolbar { flex-wrap: wrap; }.target-search { width: 100%; flex: 1 1 100%; } }
+@media (max-width: 560px) { .target-page, .strategy-page { padding: 0; }.target-toolbar { flex-direction: row; }.target-button--primary { width: auto; }.target-picker { padding: 0; }.platform-switch__label { gap: 4px; }.target-remove, .target-button { min-height: 44px; }.compact-switch { min-height: 44px; } }
 </style>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Alert as AAlert, Button as AButton, Input as AInput, InputNumber as AInputNumber, Modal as AModal, Select as ASelect, SelectOption as ASelectOption, Switch as ASwitch, Tag as ATag } from 'ant-design-vue'
+import { Alert as AAlert, Button as AButton, Input as AInput, InputNumber as AInputNumber, InputPassword as AInputPassword, Modal as AModal, Select as ASelect, SelectOption as ASelectOption, Switch as ASwitch, message as feedback } from 'ant-design-vue'
 import type { usePluginHost } from '@rayleabot/plugin-ui'
 
 import AvatarBadge from './AvatarBadge.vue'
+import PlatformLogo from './PlatformLogo.vue'
+import UiIcon from './UiIcon.vue'
 import { encodeQRCode } from '../qrcode'
 
 interface PlatformEntry {
@@ -44,6 +46,7 @@ interface QRSession {
 
 const props = defineProps<{ host: ReturnType<typeof usePluginHost> }>()
 const host = props.host
+const [feedbackApi, FeedbackContext] = feedback.useMessage()
 const accounts = ref<AccountEntry[]>([])
 const platforms = ref<PlatformEntry[]>([])
 const loading = ref(true)
@@ -61,7 +64,29 @@ const deleting = ref<AccountEntry | null>(null)
 const query = ref('')
 const page = ref(1)
 const pageSize = 20
-const total = ref(0)
+const platformFilter = ref('all')
+const stateFilter = ref('all')
+const settingsOpen = ref(false)
+const addMode = ref<'qr' | 'manual'>('qr')
+const editingAccount = computed(() => accounts.value.find(account => accountKey(account) === editingKey.value))
+const filteredAccounts = computed(() => {
+  const text = query.value.trim().toLocaleLowerCase()
+  return accounts.value.filter(account => {
+    if (platformFilter.value !== 'all' && account.platform !== platformFilter.value) return false
+    if (stateFilter.value === 'attention' && account.credential_state === 'valid' && !account.credential_last_error) return false
+    if (stateFilter.value === 'valid' && account.credential_state !== 'valid') return false
+    if (stateFilter.value === 'disabled' && account.enabled) return false
+    return !text || [platformName(account.platform), account.account_id, account.label, account.nickname, account.uid, account.unique_id].join(' ').toLocaleLowerCase().includes(text)
+  }).sort((a, b) => {
+    const attention = (item: AccountEntry) => Number(item.credential_state === 'invalid' || Boolean(item.credential_last_error))
+    return attention(b) - attention(a) || (a.label || a.account_id).localeCompare(b.label || b.account_id, 'zh-CN') || accountKey(a).localeCompare(accountKey(b))
+  })
+})
+const total = computed(() => filteredAccounts.value.length)
+const visibleAccounts = computed(() => filteredAccounts.value.slice((page.value - 1) * pageSize, page.value * pageSize))
+const hasFilters = computed(() => Boolean(query.value || platformFilter.value !== 'all' || stateFilter.value !== 'all'))
+function clearFilters() { query.value = ''; platformFilter.value = 'all'; stateFilter.value = 'all' }
+
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const accountSettings = ref({
   account_check_interval_minutes: Number(host.config.value.account_check_interval_minutes ?? 360),
@@ -71,7 +96,6 @@ const accountSettings = ref({
 const qr = ref<QRSession | null>(null)
 const qrImage = ref('')
 let qrTimer: number | undefined
-let searchTimer: number | undefined
 let qrGeneration = 0
 let listGeneration = 0
 let disposed = false
@@ -80,7 +104,12 @@ const qrStarting = ref(false)
 const knownPlatformNames = computed(() => new Map(platforms.value.map((entry) => [entry.id, entry.name])))
 
 void host.ready
-  .then(async () => {
+  .then(async (init) => {
+    accountSettings.value = {
+      account_check_interval_minutes: Number(init.config.account_check_interval_minutes ?? 360),
+      account_browser_mode: String(init.config.account_browser_mode ?? 'auto'),
+      account_browser_remote_debugging_url: String(init.config.account_browser_remote_debugging_url ?? ''),
+    }
     await refresh()
   })
   .catch((error: unknown) => {
@@ -88,15 +117,12 @@ void host.ready
     loading.value = false
   })
 
-watch(query, () => {
-  if (searchTimer !== undefined) window.clearTimeout(searchTimer)
-  searchTimer = window.setTimeout(() => { page.value = 1; void refresh() }, 250)
-})
+watch([query, platformFilter, stateFilter], () => { page.value = 1 })
 
 onBeforeUnmount(() => {
   disposed = true
   listGeneration++
-  if (searchTimer !== undefined) window.clearTimeout(searchTimer)
+  feedbackApi.destroy()
   void cancelQR()
 })
 
@@ -109,8 +135,9 @@ function platformName(id: string): string {
 }
 
 function setStatus(message: string, isError = false) {
-  status.value = message
+  status.value = isError ? message : ''
   statusIsError.value = isError
+  if (message && !isError) void feedbackApi.success({ key: 'account-feedback', content: message, duration: 3 })
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -126,17 +153,26 @@ async function refresh() {
   const generation = ++listGeneration
   loading.value = true
   try {
-    const result = await invoke('account.list', { query: query.value.trim(), offset: (page.value - 1) * pageSize, limit: pageSize })
-    if (disposed || generation !== listGeneration) return
-    if (typeof result.error === 'string' && result.error) {
-      setStatus(String(result.message ?? result.error), true)
-      return
-    }
-    accounts.value = Array.isArray(result.accounts) ? result.accounts as AccountEntry[] : []
-    total.value = Number(result.total ?? accounts.value.length)
-    if (page.value > pageCount.value) { page.value = pageCount.value; await refresh(); return }
-    platforms.value = Array.isArray(result.platforms) ? result.platforms as PlatformEntry[] : []
+    // Read each server page before local filtering so filters and counts cover every account.
+    const collected: AccountEntry[] = []
+    let offset = 0
+    let expected = 0
+    do {
+      const result = await invoke('account.list', { offset, limit: 100 })
+      if (disposed || generation !== listGeneration) return
+      if (typeof result.error === 'string' && result.error) throw new Error(String(result.message ?? result.error))
+      const batch = Array.isArray(result.accounts) ? result.accounts as AccountEntry[] : []
+      expected = Number(result.total ?? batch.length)
+      if (batch.length === 0 && offset < expected) throw new Error('账号列表不完整，请刷新重试。')
+      collected.push(...batch)
+      offset += batch.length
+      platforms.value = Array.isArray(result.platforms) ? result.platforms as PlatformEntry[] : []
+    } while (offset < expected)
+    accounts.value = [...new Map(collected.map(account => [accountKey(account), account])).values()]
+    page.value = Math.min(page.value, pageCount.value)
     if (!addPlatform.value && platforms.value.length > 0) addPlatform.value = platforms.value[0].id
+    loading.value = false
+    if (statusIsError.value) setStatus('')
     await refreshAvatars(generation)
   } catch (error: unknown) {
     if (!disposed && generation === listGeneration) setStatus(errorMessage(error, '账号列表载入失败'), true)
@@ -170,21 +206,14 @@ function avatarURL(account: AccountEntry): string {
 
 function credentialLabel(account: AccountEntry): string {
   switch (account.credential_state) {
-    case 'valid': return '检查有效'
-    case 'invalid': return 'CK 已失效'
+    case 'valid': return '凭据有效'
+    case 'invalid': return '凭据失效'
     default: return '待检查'
   }
 }
 
-function credentialColor(account: AccountEntry): string {
-  switch (account.credential_state) {
-    case 'valid': return 'green'
-    case 'invalid': return 'red'
-    default: return 'default'
-  }
-}
-
 function beginEdit(account: AccountEntry) {
+  setStatus('')
   editingKey.value = accountKey(account)
   draft.value = { account_id: account.account_id, label: account.label, enabled: account.enabled, cookie: '' }
 }
@@ -227,7 +256,10 @@ async function saveEdit(account: AccountEntry) {
 }
 
 function openAdd() {
+  setStatus('')
   adding.value = true
+  addMode.value = 'qr'
+  if (platformFilter.value !== 'all') addPlatform.value = platformFilter.value
   addDraft.value = { account_id: '', label: '', enabled: true, cookie: '' }
 }
 
@@ -292,7 +324,7 @@ async function validateAccount(account: AccountEntry) {
     }
     await refresh()
     const updated = accounts.value.find((item) => accountKey(item) === key)
-    setStatus(updated?.credential_last_error || 'CK 检查完成')
+    setStatus(updated?.credential_last_error || 'CK 检查完成', Boolean(updated?.credential_last_error))
   } catch (error: unknown) {
     setStatus(errorMessage(error, 'CK 检查失败'), true)
   } finally {
@@ -325,6 +357,7 @@ async function saveAccountSettings() {
   try {
     await host.client.saveSettings({ ...accountSettings.value, account_browser_remote_debugging_url: endpoint })
     setStatus('账号设置已保存')
+    settingsOpen.value = false
   } catch (error) {
     setStatus(errorMessage(error, '账号设置保存失败'), true)
   } finally {
@@ -334,7 +367,6 @@ async function saveAccountSettings() {
 
 async function movePage(next: number) {
   page.value = Math.max(1, Math.min(pageCount.value, next))
-  await refresh()
 }
 
 function checkedAtText(value?: string): string {
@@ -364,6 +396,7 @@ async function startQR(platform: string) {
       setStatus(String(result.message ?? result.error), true)
       return
     }
+    adding.value = false
     qr.value = {
       ...created,
       qrcode_url: String(result.qrcode_url ?? ''),
@@ -445,275 +478,101 @@ function qrStateText(state: string): string {
 </script>
 
 <template>
-  <AAlert v-if="status" class="host-alert" :type="statusIsError ? 'error' : 'info'" :message="status" show-icon />
-  <section class="account-toolbar">
-    <div>
-      <strong>三方账号</strong>
-      <small>管理订阅检查与链接解析使用的平台账号。</small>
-    </div>
-    <div class="footer-buttons">
-      <AButton size="small" :disabled="loading" @click="refresh">刷新</AButton>
-      <AButton size="small" type="primary" @click="openAdd">添加账号</AButton>
-    </div>
-  </section>
-
-  <details class="account-settings">
-    <summary>账号设置</summary>
-    <div class="account-editor account-editor--dialog">
-      <label><span>自动检查间隔（分钟，0 表示关闭）</span><AInputNumber v-model:value="accountSettings.account_check_interval_minutes" :min="0" :max="10080" :precision="0" /></label>
-      <label><span>登录浏览器模式</span><ASelect v-model:value="accountSettings.account_browser_mode">
-        <ASelectOption value="auto">自动选择</ASelectOption><ASelectOption value="visible">显示浏览器</ASelectOption><ASelectOption value="headless">无界面浏览器</ASelectOption><ASelectOption value="remote_cdp">远程调试浏览器</ASelectOption>
-      </ASelect></label>
-      <label><span>本机浏览器调试地址</span><AInput v-model:value="accountSettings.account_browser_remote_debugging_url" placeholder="http://127.0.0.1:9222" /></label>
-      <AButton :loading="isBusy('__settings__')" @click="saveAccountSettings">保存账号设置</AButton>
-    </div>
-  </details>
-  <AInput v-model:value="query" aria-label="搜索账号" placeholder="搜索平台、账号 ID、备注或昵称" allow-clear />
-  <section v-if="loading" class="empty" role="status">正在载入账号…</section>
-  <section v-else-if="accounts.length === 0" class="empty" role="status">{{ query ? '没有匹配的账号。' : '当前没有账号，先添加账号或扫码登录。' }}</section>
-
-  <section v-for="platform in platforms" :key="platform.id" class="platform-section">
-    <div class="platform-section__head">
-      <strong>{{ platform.name }}</strong>
-      <div class="footer-buttons">
-        <AButton size="small" :loading="qrStarting" @click="startQR(platform.id)">扫码获取 CK</AButton>
+  <FeedbackContext />
+  <section class="accounts-workspace" aria-label="账号管理">
+    <div class="workspace-toolbar">
+      <label class="search-control"><UiIcon name="search" /><input v-model="query" type="search" aria-label="搜索账号" placeholder="搜索昵称、备注或账号 ID" /></label>
+      <div class="toolbar-actions">
+        <button type="button" class="button icon-button" :disabled="loading" title="刷新账号" aria-label="刷新账号" @click="refresh"><UiIcon name="refresh" :class="{ 'is-spinning': loading }" /></button>
+        <button type="button" class="button" @click="settingsOpen = true"><UiIcon name="settings" />账号设置</button>
+        <button type="button" class="button button--primary" :disabled="!platforms.length" @click="openAdd"><UiIcon name="plus" />添加账号</button>
       </div>
     </div>
-
-    <div class="account-grid">
-      <article
-        v-for="account in accounts.filter((entry) => entry.platform === platform.id)"
-        :key="accountKey(account)"
-        class="account-card"
-        :class="{ 'account-card--editing': editingKey === accountKey(account) }"
-      >
-        <div class="account-card__head">
-          <AvatarBadge :url="avatarURL(account)" :label="account.label || account.account_id" size="up" />
-          <div class="account-card__meta">
-            <strong>{{ account.label || account.account_id }}</strong>
-            <small>{{ platformName(account.platform) }} · ID {{ account.account_id }}</small>
-            <small v-if="account.nickname || account.uid">{{ account.nickname || '未命名' }} · UID {{ account.uid || '—' }}<template v-if="account.unique_id"> · 抖音号 {{ account.unique_id }}</template></small>
-          </div>
-          <div class="account-card__badges">
-            <ATag :color="account.enabled ? 'blue' : 'default'">{{ account.enabled ? '启用' : '停用' }}</ATag>
-            <ATag :color="credentialColor(account)">{{ credentialLabel(account) }}</ATag>
-          </div>
+    <div class="filter-bar">
+      <div class="filter-chips" role="group" aria-label="平台筛选">
+        <button type="button" class="filter-chip" :aria-pressed="platformFilter === 'all'" @click="platformFilter = 'all'">全部平台<span class="filter-count">{{ accounts.length }}</span></button>
+        <button v-for="platform in platforms" :key="platform.id" type="button" class="filter-chip" :aria-pressed="platformFilter === platform.id" @click="platformFilter = platform.id"><PlatformLogo :platform="platform.id" :size="20" />{{ platform.name }}</button>
+      </div>
+      <div class="filter-chips filter-chips--secondary" role="group" aria-label="账号状态筛选">
+        <button v-for="item in [{ id: 'all', label: '全部状态' }, { id: 'attention', label: '需处理' }, { id: 'valid', label: '有效' }, { id: 'disabled', label: '已停用' }]" :key="item.id" type="button" class="filter-chip" :aria-pressed="stateFilter === item.id" @click="stateFilter = item.id">{{ item.label }}</button>
+      </div>
+    </div>
+    <div class="collection-caption"><span>{{ total }} 个账号<span v-if="loading"> · 正在刷新…</span></span><span>订阅与解析共用 · 异常账号优先</span></div>
+    <AAlert v-if="status" class="host-alert" type="error" :message="status" show-icon closable @close="status = ''" />
+    <div v-if="loading && !accounts.length" class="account-grid" role="status" aria-label="正在载入账号">
+      <div v-for="item in 3" :key="item" class="account-skeleton"><div class="skeleton skeleton--avatar"></div><div class="skeleton"></div><div class="skeleton skeleton--short"></div></div>
+    </div>
+    <TransitionGroup v-else name="cards" tag="div" class="account-grid" :aria-busy="loading">
+      <article v-for="account in visibleAccounts" :key="accountKey(account)" class="account-card" :class="{ 'account-card--disabled': !account.enabled }">
+        <div class="account-card__platform"><span><PlatformLogo :platform="account.platform" :size="28" />{{ platformName(account.platform) }}</span><span class="account-enabled"><span class="status-dot" :class="{ 'status-dot--active': account.enabled }"></span>{{ account.enabled ? '已启用' : '已停用' }}</span></div>
+        <div class="account-card__identity">
+          <AvatarBadge :url="avatarURL(account)" :label="account.nickname || account.label || account.account_id" size="up" />
+          <div class="account-card__meta"><h2 :title="account.label || account.account_id">{{ account.label || account.account_id }}</h2><span v-if="account.nickname && account.nickname !== account.label">{{ account.nickname }}</span><small :title="account.account_id">ID {{ account.account_id }}</small></div>
         </div>
-
-        <template v-if="editingKey === accountKey(account)">
-          <div class="account-editor">
-            <label>
-              <span>备注</span>
-              <AInput v-model:value="draft.label" size="small" placeholder="账号备注" />
-            </label>
-            <label>
-              <span>CK</span>
-              <AInput v-model:value="draft.cookie" size="small" placeholder="留空时保留当前 CK" />
-            </label>
-            <label class="switch-row">
-              <span>启用</span>
-              <ASwitch v-model:checked="draft.enabled" size="small" />
-            </label>
-          </div>
-          <div class="account-card__actions">
-            <AButton size="small" :disabled="isBusy(accountKey(account))" @click="cancelEdit">取消</AButton>
-            <AButton size="small" type="primary" :loading="isBusy(accountKey(account))" @click="saveEdit(account)">保存</AButton>
-          </div>
-        </template>
-        <template v-else>
-          <small>最近检查：{{ checkedAtText(account.credential_checked_at) }}</small>
-          <p v-if="account.credential_last_error" class="account-card__error">{{ account.credential_last_error }}</p>
-          <div class="account-card__actions">
-            <AButton size="small" :loading="isBusy(accountKey(account))" @click="validateAccount(account)">检查 CK</AButton>
-            <AButton size="small" @click="beginEdit(account)">编辑</AButton>
-            <AButton size="small" danger :loading="isBusy(accountKey(account))" @click="deleting = account">删除</AButton>
-          </div>
-        </template>
+        <div class="account-health" :class="`account-health--${account.credential_state}`"><UiIcon :name="account.credential_state === 'valid' ? 'shield' : account.credential_state === 'invalid' ? 'inbox' : 'clock'" :size="16" /><strong>{{ credentialLabel(account) }}</strong><span v-if="!account.credential_last_error">{{ account.credential_state === 'valid' ? account.enabled ? '可用于订阅与解析' : '启用后可使用' : '检查后更新状态' }}</span></div>
+        <p v-if="account.credential_last_error" class="account-card__error">{{ account.credential_last_error }}</p>
+        <div class="account-card__time"><UiIcon name="clock" :size="14" /><span>{{ account.credential_checked_at ? '检查于 ' : '' }}{{ checkedAtText(account.credential_checked_at) }}</span></div>
+        <div class="account-card__actions">
+          <button type="button" class="button button--small" :disabled="isBusy(accountKey(account))" @click="validateAccount(account)"><UiIcon name="refresh" :size="15" :class="{ 'is-spinning': isBusy(accountKey(account)) }" />{{ isBusy(accountKey(account)) ? '检查中…' : '检查 CK' }}</button>
+          <button v-if="account.credential_state === 'invalid'" type="button" class="button button--small" :disabled="qrStarting" @click="startQR(account.platform)"><UiIcon name="qr" :size="15" />重新登录</button>
+          <div class="account-card__utilities"><button type="button" class="button icon-button" title="编辑账号" :aria-label="`编辑 ${account.label || account.account_id}`" :disabled="isBusy(accountKey(account))" @click="beginEdit(account)"><UiIcon name="edit" /></button><button type="button" class="button icon-button danger-action" title="删除账号" :aria-label="`删除 ${account.label || account.account_id}`" :disabled="isBusy(accountKey(account))" @click="deleting = account"><UiIcon name="trash" /></button></div>
+        </div>
       </article>
-    </div>
+    </TransitionGroup>
+    <section v-if="!loading && !total" class="empty-state" role="status"><UiIcon name="inbox" :size="32" /><h2>{{ hasFilters ? '没有匹配的账号' : '连接你的第一个账号' }}</h2><p>{{ hasFilters ? '试试其他关键词，或清除筛选条件。' : '扫码登录后，即可用于平台订阅与链接解析。' }}</p><button type="button" class="button" @click="hasFilters ? clearFilters() : openAdd()">{{ hasFilters ? '清除筛选' : '添加账号' }}</button></section>
+    <nav v-if="pageCount > 1" class="account-pagination" aria-label="账号分页"><button type="button" class="button" :disabled="page <= 1" @click="movePage(page - 1)">上一页</button><span>{{ page }} / {{ pageCount }} 页</span><button type="button" class="button" :disabled="page >= pageCount" @click="movePage(page + 1)">下一页</button></nav>
   </section>
 
-  <nav class="account-pagination" aria-label="账号分页">
-    <AButton :disabled="loading || page <= 1" @click="movePage(page - 1)">上一页</AButton>
-    <span>共 {{ total }} 个账号 · {{ page }} / {{ pageCount }} 页</span>
-    <AButton :disabled="loading || page >= pageCount" @click="movePage(page + 1)">下一页</AButton>
-  </nav>
-  <AModal :open="deleting !== null" title="删除账号" ok-text="删除" :confirm-loading="deleting ? isBusy(accountKey(deleting)) : false" @ok="deleting && removeAccount(deleting)" @cancel="deleting = null">
-    <p v-if="deleting">确认删除 {{ platformName(deleting.platform) }} 账号“{{ deleting.label || deleting.account_id }}”及其本地凭据？此操作无法撤销。</p>
+  <AModal :footer="null" :open="settingsOpen" title="账号设置" centered :width="440" class="hub-dialog" @cancel="settingsOpen = false">
+    <form class="panel-form" @submit.prevent="saveAccountSettings">
+      <p class="panel-description">自动维护账号状态，选择扫码登录使用的浏览器。</p>
+      <label class="panel-field"><span>自动检查间隔</span><AInputNumber v-model:value="accountSettings.account_check_interval_minutes" :min="0" :max="10080" :precision="0" addon-after="分钟" /><small>15～10080 分钟；填 0 关闭自动检查。</small></label>
+      <label class="panel-field"><span>登录浏览器</span><ASelect v-model:value="accountSettings.account_browser_mode"><ASelectOption value="auto">自动选择</ASelectOption><ASelectOption value="visible">显示浏览器</ASelectOption><ASelectOption value="headless">无界面浏览器</ASelectOption><ASelectOption value="remote_cdp">远程调试浏览器</ASelectOption></ASelect></label>
+      <label v-if="accountSettings.account_browser_mode === 'remote_cdp'" class="panel-field"><span>本机浏览器调试地址</span><AInput v-model:value="accountSettings.account_browser_remote_debugging_url" placeholder="http://127.0.0.1:9222" /><small>连接已启动的本机浏览器。</small></label>
+      <AAlert v-if="statusIsError" type="error" :message="status" show-icon />
+      <AButton html-type="submit" type="primary" :loading="isBusy('__settings__')">保存账号设置</AButton>
+    </form>
   </AModal>
-  <AModal :open="adding" title="添加账号" :confirm-loading="isBusy('__add__')" @ok="saveNew" @cancel="adding = false">
-    <div class="account-editor account-editor--dialog">
-      <label>
-        <span>平台</span>
-        <ASelect v-model:value="addPlatform" size="small">
-          <ASelectOption v-for="platform in platforms" :key="platform.id" :value="platform.id">{{ platform.name }}</ASelectOption>
-        </ASelect>
-      </label>
-      <label>
-        <span>账号 ID</span>
-        <AInput v-model:value="addDraft.account_id" size="small" placeholder="小写字母、数字、下划线、点或中划线" />
-      </label>
-      <label>
-        <span>备注</span>
-        <AInput v-model:value="addDraft.label" size="small" placeholder="留空使用账号 ID" />
-      </label>
-      <label>
-        <span>CK</span>
-        <AInput v-model:value="addDraft.cookie" size="small" placeholder="粘贴平台 Cookie" />
-      </label>
-      <label class="switch-row">
-        <span>启用</span>
-        <ASwitch v-model:checked="addDraft.enabled" size="small" />
-      </label>
-    </div>
+  <AModal :footer="null" :open="Boolean(editingAccount)" title="编辑账号" centered :width="440" class="hub-dialog" @cancel="cancelEdit">
+    <form v-if="editingAccount" class="panel-form" @submit.prevent="saveEdit(editingAccount)">
+      <div class="panel-identity"><PlatformLogo :platform="editingAccount.platform" :size="32" /><div><strong>{{ platformName(editingAccount.platform) }}</strong><small>ID {{ editingAccount.account_id }}</small><small v-if="editingAccount.uid">UID {{ editingAccount.uid }}</small><small v-if="editingAccount.unique_id">抖音号 {{ editingAccount.unique_id }}</small></div></div>
+      <label class="panel-field"><span>备注</span><AInput v-model:value="draft.label" placeholder="账号备注" /></label>
+      <label class="panel-field"><span>更新 CK</span><AInputPassword v-model:value="draft.cookie" autocomplete="new-password" placeholder="留空保留当前 CK" /><small>已有凭据不会回显；仅在需要更新时填写。</small></label>
+      <label class="switch-row"><span>启用账号</span><ASwitch v-model:checked="draft.enabled" /></label>
+      <AAlert v-if="statusIsError" type="error" :message="status" show-icon />
+      <AButton html-type="submit" type="primary" :loading="isBusy(accountKey(editingAccount))">保存账号</AButton>
+    </form>
   </AModal>
-
-  <AModal :open="qr !== null" title="扫码获取 CK" :footer="null" @cancel="cancelQR">
-    <div v-if="qr" class="qr-panel">
-      <img v-if="qrImage" :src="qrImage" alt="登录二维码" width="168" height="168" />
-      <div>
-        <p role="status">{{ qrStateText(qr.state) }}</p>
-        <p v-if="qr.error" class="account-card__error">{{ qr.error }}</p>
-        <small>使用 {{ platformName(qr.platform) }} 客户端扫码，登录成功后凭据会自动保存。</small>
-      </div>
-      <AButton v-if="qr.state === 'expired' || qr.state === 'failed'" size="small" :loading="qrStarting" @click="startQR(qr.platform)">重新扫码</AButton>
-      <AButton size="small" @click="cancelQR">取消扫码</AButton>
-    </div>
+  <AModal centered :open="deleting !== null" title="删除账号" ok-text="删除" cancel-text="取消" :ok-button-props="{ danger: true }" :confirm-loading="deleting ? isBusy(accountKey(deleting)) : false" @ok="deleting && removeAccount(deleting)" @cancel="deleting = null"><p v-if="deleting">删除 {{ platformName(deleting.platform) }} 账号“{{ deleting.label || deleting.account_id }}”及其本地凭据？此操作无法撤销。</p><AAlert v-if="statusIsError" type="error" :message="status" show-icon /></AModal>
+  <AModal centered :open="adding" title="添加账号" :footer="null" @cancel="adding = false">
+    <form class="panel-form" @submit.prevent="addMode === 'qr' ? startQR(addPlatform) : saveNew()">
+      <div class="platform-choices" role="group" aria-label="选择账号平台"><button v-for="platform in platforms" :key="platform.id" type="button" :aria-pressed="addPlatform === platform.id" @click="addPlatform = platform.id"><PlatformLogo :platform="platform.id" :size="36" /><span>{{ platform.name }}</span></button></div>
+      <div class="filter-chips" role="group" aria-label="登录方式"><button type="button" class="filter-chip" :aria-pressed="addMode === 'qr'" @click="addMode = 'qr'">扫码登录</button><button type="button" class="filter-chip" :aria-pressed="addMode === 'manual'" @click="addMode = 'manual'">手动填写 CK</button></div>
+      <p v-if="addMode === 'qr'" class="panel-description">使用平台客户端扫码，成功后自动保存账号与凭据。</p>
+      <template v-else><label class="panel-field"><span>账号 ID</span><AInput v-model:value="addDraft.account_id" placeholder="小写字母、数字、下划线、点或中划线" /></label><label class="panel-field"><span>备注</span><AInput v-model:value="addDraft.label" placeholder="留空使用账号 ID" /></label><label class="panel-field"><span>CK</span><AInputPassword v-model:value="addDraft.cookie" autocomplete="new-password" placeholder="粘贴平台 Cookie" /></label><label class="switch-row"><span>启用账号</span><ASwitch v-model:checked="addDraft.enabled" /></label></template>
+      <AAlert v-if="statusIsError" type="error" :message="status" show-icon />
+      <AButton html-type="submit" type="primary" :loading="addMode === 'qr' ? qrStarting : isBusy('__add__')" :disabled="!addPlatform">{{ addMode === 'qr' ? '扫码获取 CK' : '保存账号' }}</AButton>
+    </form>
   </AModal>
+  <AModal centered :open="qr !== null" title="扫码登录" :footer="null" @cancel="cancelQR"><div v-if="qr" class="qr-panel"><div class="panel-identity"><PlatformLogo :platform="qr.platform" :size="28" /><strong>{{ platformName(qr.platform) }}</strong></div><div class="qr-frame"><img v-if="qrImage" :src="qrImage" alt="登录二维码" width="200" height="200" /></div><strong role="status">{{ qrStateText(qr.state) }}</strong><p v-if="qr.error" class="account-card__error">{{ qr.error }}</p><small>使用 {{ platformName(qr.platform) }} 客户端扫码，成功后自动保存。</small><AButton v-if="qr.state === 'expired' || qr.state === 'failed'" :loading="qrStarting" @click="startQR(qr.platform)">重新扫码</AButton><AButton @click="cancelQR">取消扫码</AButton></div></AModal>
 </template>
-
 <style scoped>
-.account-settings { margin-bottom: 16px; }
-.account-settings summary { cursor: pointer; padding: 8px 0; }
-.account-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 16px 0; }
-
-.account-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 8px 0 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface-soft, transparent);
-}
-
-.account-toolbar small,
-.platform-section__empty {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.platform-section {
-  margin-bottom: 24px;
-}
-
-.platform-section__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.account-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 12px;
-}
-
-.account-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 168px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface, transparent);
-}
-
-.account-card--editing {
-  border-color: var(--color-primary, var(--border));
-}
-
-.account-card__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.account-card__meta {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.account-card__meta small {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account-card__badges {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.account-card__error {
-  margin: 0;
-  color: var(--color-error, #cf1322);
-  font-size: 12px;
-}
-
-.account-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: auto;
-}
-
-.account-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.account-editor--dialog label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.account-editor label > span:first-child {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.switch-row {
-  flex-direction: row !important;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.qr-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.empty {
-  padding: 32px 0;
-  color: var(--muted);
-  text-align: center;
-}
+.account-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 18px; align-items: start; }
+.account-card { min-width: 0; display: flex; flex-direction: column; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); transition: border-color 180ms ease-out; }
+.account-card:hover { border-color: var(--border-strong); }
+.account-card--disabled { background: var(--surface-soft); }
+.account-card__platform { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.account-card__platform > span { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.account-enabled { white-space: nowrap; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }.status-dot--active { background: var(--success); }
+.account-card__identity { display: flex; gap: 12px; align-items: center; margin-bottom: 22px; }
+.account-card__meta { min-width: 0; display: grid; gap: 2px; }.account-card__meta h2 { font-size: 16px; line-height: 1.5; }.account-card__meta :is(h2, span, small) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.account-card__meta :is(span, small) { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.account-health { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }.account-health strong { font-weight: 600; }.account-health > span { margin-left: auto; font-size: 11px; color: var(--muted); }.account-health--valid { color: var(--success); }.account-health--invalid { color: var(--danger); }
+.account-card__error { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; color: var(--danger); background: var(--danger-soft); line-height: 1.65; font-size: 12px; overflow-wrap: anywhere; }
+.account-card__time { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; margin: 12px 0 18px; font-variant-numeric: tabular-nums; }
+.account-card__actions { display: flex; gap: 6px; align-items: center; border-top: 1px solid var(--border); padding-top: 14px; }.account-card__utilities { margin-left: auto; display: flex; gap: 2px; }.account-card__utilities .button { border-color: transparent; background: transparent; }
+.account-pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 24px; color: var(--muted); font-size: 12px; }
+.account-skeleton { padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; min-height: 240px; }.skeleton { height: 14px; width: 80%; margin: 20px 0; background: var(--surface-strong); border-radius: 6px; }.skeleton--avatar { width: 48px; height: 48px; border-radius: 50%; }.skeleton--short { width: 50%; }
+.qr-panel { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 12px 0; text-align: center; }.qr-panel small { color: var(--muted); }.qr-frame { padding: 16px; border-radius: 12px; background: white; }.qr-frame img { display: block; }
+@media (max-width: 600px) { .account-grid { gap: 12px; }.account-card { padding: 18px; }.account-card__platform { margin-bottom: 18px; } }
 </style>

@@ -54,7 +54,7 @@ const host = vi.hoisted(() => {
 vi.mock('@rayleabot/plugin-ui', () => ({
   usePluginHost: () => host,
 }))
-vi.mock('ant-design-vue', () => ({ Alert: { template: '<div />' } }))
+vi.mock('ant-design-vue', () => ({ Alert: { template: '<div />' }, Modal: { props: ['open'], template: '<section v-if="open"><slot /></section>' } }))
 
 import App from '../src/App.vue'
 

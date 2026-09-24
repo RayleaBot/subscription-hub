@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue'
 
 import AvatarBadge from './AvatarBadge.vue'
+import PlatformLogo from './PlatformLogo.vue'
+import UiIcon from './UiIcon.vue'
 import {
   currentTargetsForMode,
   displayAvatarURL,
@@ -97,22 +99,20 @@ function avatarURL(source: string): string {
 
 <template>
   <article class="sub-card" :data-row-id="row.row_id" :class="{ 'sub-card--editing': row.edit_mode, 'sub-card--disabled': !row.enabled }">
+    <div class="sub-card__platform"><span><PlatformLogo :platform="row.platform" :size="26" />{{ platformLabel(row.platform) }}</span><span class="badge" :class="errors.length ? 'badge--warning' : row.enabled ? 'badge--success' : ''">{{ errors.length ? '需完善' : row.enabled ? '已启用' : '已停用' }}</span></div>
     <div class="sub-card__head">
       <AvatarBadge :url="avatarURL(row.avatar_url)" :label="title" size="up" />
       <div class="sub-card__meta">
         <strong :title="title">{{ title }}</strong>
         <small :title="subtitle">
           <template v-if="row.uid">
-            <span>{{ platformLabel(row.platform) }} · {{ subjectLabel(row.platform) }}</span>
+            <span>{{ subjectLabel(row.platform) }}</span>
             <span class="sub-card__identity-value">{{ identityValue(row) }}</span>
           </template>
           <template v-else>{{ subtitle }}</template>
         </small>
       </div>
       <div class="sub-card__status">
-        <span v-if="row.resolved" class="badge">已校验</span>
-        <span v-else-if="row.edit_mode" class="badge">{{ resolving ? '校验中' : '待校验' }}</span>
-        <span class="badge" :class="errors.length ? 'badge--danger' : 'badge--success'">{{ errors.length ? '需处理' : '可保存' }}</span>
         <label v-if="!row.edit_mode" class="switch-row" title="启用">
           <input v-model="row.enabled" type="checkbox" aria-label="启用订阅" />
         </label>
@@ -272,7 +272,7 @@ function avatarURL(source: string): string {
             <AvatarBadge v-for="id in visibleSubscribers" :key="id" :url="avatarURL(subscriberAvatarURL(context.subscriberAvatars, id))" :label="`QQ ${id}`" size="subscriber" />
             <span v-if="row.subscriber_ids.length > visibleSubscribers.length" class="avatar-stack__overflow">+{{ row.subscriber_ids.length - visibleSubscribers.length }}</span>
           </span>
-          <span v-else class="chip chip--success">系统订阅</span>
+
           <span class="sub-card__summary-label">{{ row.subscriber_ids.length ? `${row.subscriber_ids.length} 位订阅人` : '系统订阅' }}</span>
         </div>
       </section>
@@ -289,13 +289,13 @@ function avatarURL(source: string): string {
         <div class="button-group">
           <button type="button" class="button button--primary button--small" @click="emit('finish')">完成</button>
           <button type="button" class="button button--ghost button--small" @click="emit('cancel')">取消</button>
-          <button type="button" class="button button--small" @click="emit('duplicate')">复制</button>
+          <button type="button" class="button button--small" @click="emit('duplicate')"><UiIcon name="copy" :size="15" />复制</button>
           <button type="button" class="button button--small button--danger" @click="emit('remove')">删除</button>
         </div>
       </template>
       <template v-else>
-        <button type="button" class="button button--primary button--small" @click="emit('edit')">编辑</button>
-        <button type="button" class="button button--small" @click="emit('duplicate')">复制</button>
+        <button type="button" class="button button--small" @click="emit('edit')"><UiIcon name="edit" :size="15" />编辑</button>
+        <button type="button" class="button button--small" @click="emit('duplicate')"><UiIcon name="copy" :size="15" />复制</button>
         <button type="button" class="button button--small button--danger" @click="emit('remove')">删除</button>
       </template>
     </div>

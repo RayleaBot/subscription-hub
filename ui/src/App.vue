@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { Alert as AAlert } from 'ant-design-vue'
+import { Alert as AAlert, Modal as AModal } from 'ant-design-vue'
 import { usePluginHost } from '@rayleabot/plugin-ui'
 
 import { readCachedAvatarDataURLs, storeAvatarDataURLs } from './avatar-cache'
 import AccountManager from './components/AccountManager.vue'
+import PlatformLogo from './components/PlatformLogo.vue'
+import UiIcon from './components/UiIcon.vue'
 import ResolverSettingsPanel from './components/ResolverSettingsPanel.vue'
 import SubscriptionCard from './components/SubscriptionCard.vue'
 import { mergeAndCacheProtocolTargets, readCachedProtocolTargets } from './target-cache'
@@ -27,6 +29,7 @@ import {
   MAX_DELIVERY_MAX_AGE_MINUTES,
   MIN_DELIVERY_MAX_AGE_MINUTES,
   platformLabel,
+  PLATFORM_OPTIONS,
   restoreRow,
   rowSnapshot,
   serviceCheckboxValues,
@@ -74,6 +77,8 @@ const checking = ref(false)
 const targetsLoading = ref(false)
 const resolvingRows = ref(new Set<string>())
 const search = ref('')
+const platformFilter = ref('all')
+const settingsOpen = ref(false)
 const statusFilter = ref<'all' | 'enabled' | 'disabled'>('all')
 const serviceFilter = ref('all')
 const listRef = ref<HTMLElement | null>(null)
@@ -172,6 +177,7 @@ function nextRowID(): string {
 
 function rowVisible(row: SubscriptionRow): boolean {
   if (row.edit_mode) return true
+  if (platformFilter.value !== 'all' && row.platform !== platformFilter.value) return false
   const query = search.value.trim().toLowerCase()
   if (query) {
     const targetText = row.targets.flatMap((target) => [
@@ -268,7 +274,7 @@ function removeRow(row: SubscriptionRow) {
 async function scrollToRow(row: SubscriptionRow) {
   await nextTick()
   const selector = `[data-row-id="${CSS.escape(row.row_id)}"]`
-  listRef.value?.querySelector(selector)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  listRef.value?.querySelector(selector)?.scrollIntoView({ block: 'center', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
 }
 
 function changePlatform(row: SubscriptionRow, platformValue: Platform) {
@@ -724,37 +730,16 @@ function errorMessage(error: unknown, fallback: string): string {
 
     <AAlert v-if="hostErrorMessage" class="host-alert" type="error" :message="hostErrorMessage" show-icon />
 
-    <section v-if="isSubscriptionsPage" class="status-strip" aria-label="订阅中心状态">
-      <label class="switch-row" for="enabled-input">
-        <input id="enabled-input" v-model="settings.enabled" name="enabled" type="checkbox" autocomplete="off" />
-        <span><strong>订阅中心</strong><small>{{ settings.enabled ? '启用' : '停用' }}</small></span>
-      </label>
-      <div class="strip-metric"><span>订阅</span><strong>{{ rows.length }} / {{ settings.subscriptions.length }}</strong></div>
-      <div class="strip-metric"><span>可选推送范围</span><strong>{{ targetMetric }}</strong></div>
-      <label class="delivery-age-field" for="delivery-max-age-input">
-        <span>投递时效</span>
-        <span class="delivery-age-control">
-          <input
-            id="delivery-max-age-input"
-            v-model.number="settings.delivery_max_age_minutes"
-            name="delivery_max_age_minutes"
-            type="number"
-            :min="MIN_DELIVERY_MAX_AGE_MINUTES"
-            :max="MAX_DELIVERY_MAX_AGE_MINUTES"
-            step="1"
-            inputmode="numeric"
-            autocomplete="off"
-            aria-describedby="delivery-max-age-help"
-          />
-          <strong>分钟</strong>
-        </span>
-        <small id="delivery-max-age-help">非直播动态可补发的最长时间，默认 30 分钟</small>
-      </label>
-      <div class="strip-metric" :class="{ 'is-error': statusIsError }">
-        <span>状态</span><strong :title="status" aria-live="polite">{{ status }}</strong>
+    <AModal centered :footer="null" :open="settingsOpen" title="订阅设置" :width="440" class="hub-dialog" @cancel="settingsOpen = false">
+      <div class="panel-form">
+        <label class="switch-row"><span>启用订阅推送</span><input id="enabled-input" v-model="settings.enabled" type="checkbox" /></label>
+        <label class="panel-field field" for="delivery-max-age-input"><span>投递时效（分钟）</span><input id="delivery-max-age-input" v-model.number="settings.delivery_max_age_minutes" type="number" :min="MIN_DELIVERY_MAX_AGE_MINUTES" :max="MAX_DELIVERY_MAX_AGE_MINUTES" step="1" /><small>非直播动态可补发的最长时间，默认 30 分钟。</small></label>
+        <div class="panel-field"><span>可选推送范围</span><small>{{ targetMetric }}</small><button type="button" class="button" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button></div>
+        <div class="panel-field"><span>推送卡片预览</span><div class="preview-options"><button v-for="platform in ['bilibili', 'weibo', 'douyin']" :key="platform" type="button" class="button" @click="openPreview(`${platform}-update`)"><PlatformLogo :platform="platform" />{{ platformLabel(platform as Platform) }}<UiIcon name="chevron" :size="14" /></button></div></div>
+        <button type="button" class="button" :disabled="saving" @click="resetCurrentPage">恢复默认</button>
+        <p class="panel-description">修改后，点击页面底部的“保存设置”生效。</p>
       </div>
-      <button type="button" class="button button--small" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button>
-    </section>
+    </AModal>
 
     <ResolverSettingsPanel
       v-if="!isSubscriptionsPage"
@@ -766,32 +751,18 @@ function errorMessage(error: unknown, fallback: string): string {
       @request-avatars="hydrateResolverAvatarURLs"
     />
 
-    <section v-if="isSubscriptionsPage" class="panel">
-      <div class="section-title section-title--inline">
-        <div><h2>订阅管理</h2><p>同一平台账号的群聊和私聊目标合并在同一卡片编辑。</p></div>
-        <button type="button" class="button button--primary-accent" @click="addSubscription">添加订阅</button>
+    <section v-if="isSubscriptionsPage" class="subscription-workspace">
+      <div class="workspace-toolbar">
+        <label class="search-control"><UiIcon name="search" /><input id="subscription-search-input" v-model="search" type="search" aria-label="搜索订阅" placeholder="搜索账号、推送对象或订阅人" /></label>
+        <div class="toolbar-actions"><button type="button" class="button" :disabled="checking || saving" @click="checkNow"><UiIcon name="refresh" :class="{ 'is-spinning': checking }" />{{ checking ? '检查中…' : '立即检查' }}</button><button type="button" class="button" @click="settingsOpen = true"><UiIcon name="settings" />订阅设置</button><button type="button" class="button button--primary" @click="addSubscription"><UiIcon name="plus" />添加订阅</button></div>
       </div>
-
-      <div class="toolbar" role="search">
-        <label class="field field--search" for="subscription-search-input">
-          <span>搜索</span>
-          <input id="subscription-search-input" v-model="search" name="subscription_search" type="search" autocomplete="off" placeholder="搜索平台、账号、推送对象或订阅人…" />
-        </label>
-        <label class="field" for="status-filter-input">
-          <span>状态</span>
-          <select id="status-filter-input" v-model="statusFilter" name="status_filter" autocomplete="off">
-            <option value="all">全部</option><option value="enabled">启用</option><option value="disabled">停用</option>
-          </select>
-        </label>
-        <label class="field" for="service-filter-input">
-          <span>类型</span>
-          <select id="service-filter-input" v-model="serviceFilter" name="service_filter" autocomplete="off">
-            <option value="all">全部类型</option><option value="live">直播</option><option value="video">视频</option><option value="image_text">图文</option><option value="article">专栏</option><option value="repost">转发</option><option value="post">微博</option><option value="image">图片</option><option value="song">歌曲</option><option value="album">专辑</option><option value="playlist">歌单</option><option value="artist">音乐人</option>
-          </select>
-        </label>
+      <div class="filter-bar">
+        <div class="filter-chips" role="group" aria-label="订阅平台筛选"><button type="button" class="filter-chip" :aria-pressed="platformFilter === 'all'" @click="platformFilter = 'all'">全部平台<span class="filter-count">{{ rows.length }}</span></button><button v-for="platform in PLATFORM_OPTIONS" :key="platform.value" type="button" class="filter-chip" :aria-pressed="platformFilter === platform.value" @click="platformFilter = platform.value"><PlatformLogo :platform="platform.value" :size="20" />{{ platform.label }}</button></div>
+        <div class="filter-chips filter-chips--secondary" role="group" aria-label="订阅状态筛选"><button v-for="item in (['all', 'enabled', 'disabled'] as const)" :key="item" type="button" class="filter-chip" :aria-pressed="statusFilter === item" @click="statusFilter = item">{{ item === 'all' ? '全部状态' : item === 'enabled' ? '已启用' : '已停用' }}</button><select id="service-filter-input" v-model="serviceFilter" class="filter-select" aria-label="订阅类型"><option value="all">全部类型</option><option value="live">直播</option><option value="video">视频</option><option value="image_text">图文</option><option value="article">专栏</option><option value="repost">转发</option><option value="post">微博</option><option value="image">图片</option><option value="song">歌曲</option><option value="album">专辑</option><option value="playlist">歌单</option><option value="artist">音乐人</option></select></div>
       </div>
-
-      <div ref="listRef" class="subscription-list" aria-live="polite">
+      <div class="collection-caption"><span>{{ visibleRows.length }} 个订阅对象</span><span :class="{ 'is-warning': !settings.enabled }">{{ settings.enabled ? '订阅推送已启用' : '订阅推送已停用' }}</span></div>
+      <AAlert v-if="statusIsError" class="host-alert" type="error" :message="status" show-icon />
+      <div ref="listRef"><TransitionGroup name="cards" tag="div" class="subscription-list">
         <SubscriptionCard
           v-for="row in visibleRows"
           :key="row.row_id"
@@ -816,8 +787,7 @@ function errorMessage(error: unknown, fallback: string): string {
           @query-change="scheduleResolve(row)"
           @query-composition-start="clearResolveTimer(row.row_id)"
         />
-        <div v-if="visibleRows.length === 0" class="empty-state"><p>没有匹配的订阅</p><p>可添加订阅或调整筛选条件</p></div>
-      </div>
+      </TransitionGroup><div v-if="visibleRows.length === 0" class="empty-state"><UiIcon name="inbox" :size="32" /><h2>没有匹配的订阅</h2><p>添加订阅，或调整平台与状态筛选。</p><button type="button" class="button" @click="search = ''; platformFilter = 'all'; statusFilter = 'all'; serviceFilter = 'all'">清除筛选</button></div></div>
     </section>
 
     <footer class="actions-bar">
@@ -827,13 +797,8 @@ function errorMessage(error: unknown, fallback: string): string {
       </div>
       <div class="footer-buttons">
         <button type="button" class="button" :disabled="saving" @click="reloadSettings">重新载入</button>
-        <button type="button" class="button" :disabled="saving" @click="resetCurrentPage">{{ isSubscriptionsPage ? '恢复默认' : activePage === 'resolver-strategy' ? '恢复默认策略' : '关闭本页全部解析' }}</button>
+        <button v-if="!isSubscriptionsPage" type="button" class="button" :disabled="saving" @click="resetCurrentPage">{{ activePage === 'resolver-strategy' ? '恢复默认策略' : '关闭本页全部解析' }}</button>
         <button v-if="!isSubscriptionsPage && activePage !== 'resolver-strategy'" type="button" class="button" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button>
-        <button v-if="isSubscriptionsPage" type="button" class="button" :disabled="checking || saving" @click="checkNow">{{ checking ? '检查中…' : '立即检查' }}</button>
-        <button v-if="isSubscriptionsPage" type="button" class="button" @click="openPreview('bilibili-update')">打开 Bilibili 卡片预览</button>
-        <button v-if="isSubscriptionsPage" type="button" class="button" @click="openPreview('weibo-update')">打开微博卡片预览</button>
-        <button v-if="isSubscriptionsPage" type="button" class="button" @click="openPreview('douyin-update')">打开抖音卡片预览</button>
-        <button v-if="!isSubscriptionsPage" type="button" class="button" @click="openPreview('resolver-help')">打开解析帮助预览</button>
         <button type="button" class="button button--primary" :disabled="!loaded || errors.length > 0 || saving" @click="saveSettings">{{ saving ? '保存中…' : '保存设置' }}</button>
       </div>
     </footer>
