@@ -334,6 +334,7 @@ func testRuntimeRoutesManagementCommandsAndPreviews(t *testing.T, aliases bool) 
 		}
 		if event != nil {
 			frame["event"] = event
+			frame["deadline_at_ms"] = time.Now().Add(5 * time.Second).UnixMilli()
 		}
 		if kind == "shutdown" {
 			frame["reason"] = "stop"
