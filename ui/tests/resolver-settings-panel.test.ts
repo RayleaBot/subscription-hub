@@ -1,4 +1,4 @@
-import { createApp, nextTick, reactive } from 'vue'
+import { createApp, h, nextTick, reactive } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('ant-design-vue', () => ({ Modal: { props: ['open'], template: '<section v-if="open" role="dialog"><slot /></section>' } }))
@@ -28,6 +28,33 @@ describe('resolver settings panel', () => {
       expect(root.textContent).toContain(title)
       app.unmount()
     }
+  })
+
+  it('hides the empty state until the host settings have loaded', async () => {
+    const root = document.createElement('div')
+    const props = reactive({
+      modelValue: normalizeResolverSettings({}),
+      avatarDataUrls: new Map<string, string>(),
+      targets: emptyTargets(),
+      view: 'targets' as const,
+      loaded: false,
+    })
+    const app = createApp({ render: () => h(ResolverSettingsPanel, props) })
+    app.mount(root)
+
+    expect(root.querySelector('.resolver-empty')).toBeNull()
+
+    props.modelValue = normalizeResolverSettings({ targets: [{ target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true }] })
+    props.loaded = true
+    await settle()
+    expect(root.querySelectorAll('.resolver-target-card')).toHaveLength(1)
+    expect(root.querySelector('.resolver-empty')).toBeNull()
+
+    props.modelValue = normalizeResolverSettings({})
+    await settle()
+    expect(root.querySelectorAll('.resolver-target-card:not(.cards-leave-active)')).toHaveLength(0)
+    expect(root.querySelector('.resolver-empty')?.textContent).toContain('尚未添加解析对象')
+    app.unmount()
   })
 
   it('adds a protocol object by clicking its avatar card and keeps unselected objects out of management', async () => {

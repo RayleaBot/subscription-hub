@@ -731,6 +731,7 @@ function errorMessage(error: unknown, fallback: string): string {
       v-model="settings.resolver"
       :avatar-data-urls="avatarDataURLs"
       :targets="targets"
+      :loaded="loaded"
       :view="resolverView"
       @open-help="openPreview('resolver-help')"
       @request-avatars="hydrateResolverAvatarURLs"

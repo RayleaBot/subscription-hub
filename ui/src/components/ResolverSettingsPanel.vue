@@ -20,12 +20,13 @@ import {
 type ResolverPage = 'targets' | 'strategy'
 type ScopeFilter = 'all' | TargetType
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: ResolverSettings
   avatarDataUrls: Map<string, string>
   targets: TargetsState
   view: ResolverPage
-}>()
+  loaded?: boolean
+}>(), { loaded: true })
 const emit = defineEmits<{
   'update:modelValue': [value: ResolverSettings]
   'open-help': []
@@ -268,7 +269,8 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
           <span>搜索可添加{{ pickerTypeLabel }}</span>
           <input v-model="pickerSearch" type="search" autocomplete="off" :placeholder="pickerPlaceholder" />
         </label>
-        <TransitionGroup name="cards" tag="div" class="candidate-grid">
+        <div class="candidate-grid">
+          <TransitionGroup name="cards">
           <button
             v-for="target in visibleCandidateTargets"
             :key="target.key"
@@ -288,11 +290,12 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
             </span>
             <UiIcon name="plus" :size="16" class="target-choice-card__plus" />
           </button>
-          <div v-if="visibleCandidateTargets.length === 0" key="picker-empty" class="picker-empty">
+          </TransitionGroup>
+          <div v-if="visibleCandidateTargets.length === 0" class="picker-empty">
             <strong>{{ !targets.loaded ? `正在读取连接协议中的${pickerTypeLabel}…` : pickerSearch ? '没有匹配项' : `暂无可添加${pickerTypeLabel}` }}</strong>
             <span v-if="targets.loaded && !pickerSearch">{{ targets.available ? `连接协议中的${pickerTypeLabel}已全部添加。` : '请确认连接协议在线，并刷新可选范围。' }}</span>
           </div>
-        </TransitionGroup>
+        </div>
         <p v-if="targets.issues.length" class="picker-issue">{{ targets.issues.map((issue) => issue.message).join('；') }}</p>
         <p v-if="candidateTargets.length > visibleCandidateTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
       </section></AModal>
@@ -330,13 +333,11 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
           </div>
         </article>
       </TransitionGroup>
-      <Transition name="fade">
-        <div v-if="visibleConfiguredTargets.length === 0" class="resolver-empty">
-          <UiIcon name="inbox" :size="28" />
-          <strong>{{ emptyCopy.title }}</strong>
-          <span>{{ emptyCopy.hint }}</span>
-        </div>
-      </Transition>
+      <div v-if="loaded && visibleConfiguredTargets.length === 0" class="resolver-empty">
+        <UiIcon name="inbox" :size="28" />
+        <strong>{{ emptyCopy.title }}</strong>
+        <span>{{ emptyCopy.hint }}</span>
+      </div>
       <p v-if="filteredConfiguredTargets.length > visibleConfiguredTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
     </div>
 
@@ -652,8 +653,6 @@ select:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
 .resolver-empty strong { color: var(--text); }
 .resolver-empty span { max-width: 48ch; font-size: 13px; line-height: 1.6; }
 .result-limit { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
-.fade-enter-active, .fade-leave-active { transition: opacity 180ms ease-out, transform 220ms var(--motion-ease); }
-.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(6px); }
 
 /* Strategy page */
 .strategy-page { max-width: 1120px; }
