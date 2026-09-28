@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/assets"
 )
 
@@ -25,6 +26,9 @@ func TestResolverDefaultConfigIsClosedAndUsesTenSecondLinkCooldown(t *testing.T)
 	if settings.Resolver.Media.LiveRecordSeconds != 30 || !settings.Resolver.Media.UploadOversize {
 		t.Fatalf("media defaults = %#v", settings.Resolver.Media)
 	}
+	if settings.Resolver.SuperAdminWhitelist {
+		t.Fatal("super admin whitelist must default off")
+	}
 }
 
 func TestResolverCommandsAreRouted(t *testing.T) {
@@ -33,12 +37,54 @@ func TestResolverCommandsAreRouted(t *testing.T) {
 		"解析帮助": "resolver_help", "开启B站解析": "resolver_enable_bilibili", "关闭B站解析": "resolver_disable_bilibili",
 		"开启微博解析": "resolver_enable_weibo", "关闭微博解析": "resolver_disable_weibo",
 		"开启抖音解析": "resolver_enable_douyin", "关闭抖音解析": "resolver_disable_douyin",
+		"开启超管解析": "resolver_enable_super_admin", "关闭超管解析": "resolver_disable_super_admin",
 	}
 	for command, operation := range want {
 		_, got := handler.CommandOperation(command)
 		if got != operation {
 			t.Fatalf("command %q operation = %q, want %q", command, got, operation)
 		}
+	}
+}
+
+func TestResolverTargetForEventLetsSuperAdminsBypassTargetSwitches(t *testing.T) {
+	settings := NormalizeResolverSettings(ResolverSettings{
+		SuperAdminWhitelist: true,
+		Targets:             []ResolverTarget{{TargetType: "group", TargetID: "100", TargetName: "测试群", Bilibili: true}},
+	})
+	event := func(actor, targetType, targetID string) *rayleabot.EventContext {
+		return &rayleabot.EventContext{SuperAdmins: []string{"7"}, Event: rayleabot.Event{
+			Actor:  rayleabot.Actor{ID: actor},
+			Target: rayleabot.Target{Type: targetType, ID: targetID},
+		}}
+	}
+
+	target, enabled := resolverTargetForEvent(settings, event("7", "private", "300"))
+	if !enabled || !target.Bilibili || !target.Weibo || !target.Douyin || target.TargetType != "private" || target.TargetID != "300" {
+		t.Fatalf("super admin in an unconfigured private chat = %#v, enabled=%t", target, enabled)
+	}
+	target, enabled = resolverTargetForEvent(settings, event("7", "group", "100"))
+	if !enabled || !target.Weibo || target.TargetName != "测试群" {
+		t.Fatalf("super admin in a configured group = %#v, enabled=%t", target, enabled)
+	}
+	if _, enabled := resolverTargetForEvent(settings, event("8", "private", "300")); enabled {
+		t.Fatal("whitelist must not open unconfigured chats for ordinary members")
+	}
+	target, enabled = resolverTargetForEvent(settings, event("8", "group", "100"))
+	if !enabled || !target.Bilibili || target.Weibo || target.Douyin {
+		t.Fatalf("ordinary member keeps the configured switches: %#v, enabled=%t", target, enabled)
+	}
+
+	settings.SuperAdminWhitelist = false
+	if _, enabled := resolverTargetForEvent(settings, event("7", "private", "300")); enabled {
+		t.Fatal("disabled whitelist must not bypass target switches")
+	}
+	target, enabled = resolverTargetForEvent(settings, event("7", "group", "100"))
+	if !enabled || target.Weibo {
+		t.Fatalf("disabled whitelist keeps configured switches for super admins: %#v, enabled=%t", target, enabled)
+	}
+	if _, enabled := resolverTargetForEvent(NormalizeResolverSettings(ResolverSettings{SuperAdminWhitelist: true}), event("7", "group", "")); enabled {
+		t.Fatal("events without a target cannot be resolved")
 	}
 }
 

@@ -52,8 +52,8 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 	if err != nil {
 		return err
 	}
-	target, exists := current.Resolver.Target(event.Event.Target.Type, event.Event.Target.ID)
-	if !exists || (!target.Bilibili && !target.Weibo && !target.Douyin) {
+	target, enabled := resolverTargetForEvent(current.Resolver, event)
+	if !enabled {
 		return event.Result(map[string]any{"handled": false})
 	}
 	rawURL := firstResolverURL(event.Event.Message.PlainText)
@@ -154,6 +154,18 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		}
 	}
 	return event.Result(map[string]any{"handled": true, "card": true, "media": len(plan.Sources) > 0})
+}
+
+// resolverTargetForEvent returns the resolver switches that apply to the
+// current message. Super admins bypass the per-target switches when the
+// whitelist is enabled; cooldowns still key on the real target.
+func resolverTargetForEvent(settings ResolverSettings, event *rayleabot.EventContext) (ResolverTarget, bool) {
+	target, exists := settings.Target(event.Event.Target.Type, event.Event.Target.ID)
+	if settings.SuperAdminWhitelist && ActorIsSuperAdmin(event) {
+		target.Bilibili, target.Weibo, target.Douyin = true, true, true
+		return target, target.TargetID != ""
+	}
+	return target, exists && (target.Bilibili || target.Weibo || target.Douyin)
 }
 
 func resolverTemplateID(platform string) string {

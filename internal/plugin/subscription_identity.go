@@ -23,10 +23,33 @@ func CurrentTargetName(event *rayleabot.EventContext) string {
 	return name
 }
 
+// ActorID returns the sender of the current event, falling back to the
+// OneBot payload when the protocol actor frame is absent.
+func ActorID(event *rayleabot.EventContext) string {
+	onebot := MapValue(event.Event.Payload["onebot"])
+	sender := MapValue(onebot["sender"])
+	return FirstText(event.Event.Actor.ID, sender["user_id"], onebot["user_id"])
+}
+
+// ActorIsSuperAdmin reports whether the current event was sent by one of the
+// host-declared super admins.
+func ActorIsSuperAdmin(event *rayleabot.EventContext) bool {
+	id := ActorID(event)
+	if id == "" {
+		return false
+	}
+	for _, superAdmin := range event.SuperAdmins {
+		if strings.TrimSpace(superAdmin) == id {
+			return true
+		}
+	}
+	return false
+}
+
 func MergeSubscriber(items []Subscriber, event *rayleabot.EventContext) []Subscriber {
 	onebot := MapValue(event.Event.Payload["onebot"])
 	sender := MapValue(onebot["sender"])
-	id := FirstText(event.Event.Actor.ID, sender["user_id"], onebot["user_id"])
+	id := ActorID(event)
 	if id == "" {
 		return items
 	}
@@ -34,11 +57,8 @@ func MergeSubscriber(items []Subscriber, event *rayleabot.EventContext) []Subscr
 	senderRole := strings.ToLower(strings.TrimSpace(StringScalar(sender["role"])))
 	baseRole := strongestSubscriberBaseRole(actorRole, senderRole)
 	role := strongestSubscriberRole(actorRole, senderRole)
-	for _, superAdmin := range event.SuperAdmins {
-		if strings.TrimSpace(superAdmin) == id {
-			role = "super_admin"
-			break
-		}
+	if ActorIsSuperAdmin(event) {
+		role = "super_admin"
 	}
 	next := Subscriber{
 		ID: id, Nickname: FirstText(event.Event.Actor.Nickname, sender["nickname"], id),

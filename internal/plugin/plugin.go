@@ -112,6 +112,8 @@ func (handler *Handler) handleCommand(ctx context.Context, event *rayleabot.Even
 		return event.SendText(handler.FormatStatus(current))
 	case "resolver_enable_bilibili", "resolver_disable_bilibili", "resolver_enable_weibo", "resolver_disable_weibo", "resolver_enable_douyin", "resolver_disable_douyin":
 		return handler.toggleResolverForCurrentTarget(ctx, event, &current, operation)
+	case "resolver_enable_super_admin", "resolver_disable_super_admin":
+		return handler.toggleResolverSuperAdminWhitelist(ctx, event, &current, operation == "resolver_enable_super_admin")
 	case "add", "remove":
 		var outcome SubscriptionOutcome
 		if operation == "add" {

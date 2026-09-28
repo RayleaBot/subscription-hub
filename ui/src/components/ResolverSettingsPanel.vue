@@ -13,10 +13,12 @@ import {
   type LiveTarget,
   type ResolverPlatform,
   type ResolverSettings,
+  type TargetType,
   type TargetsState,
 } from '../model'
 
-type ResolverPage = 'group' | 'private' | 'strategy'
+type ResolverPage = 'targets' | 'strategy'
+type ScopeFilter = 'all' | TargetType
 
 const props = defineProps<{
   modelValue: ResolverSettings
@@ -34,7 +36,13 @@ const page = computed(() => props.view)
 const manageSearch = ref('')
 const pickerSearch = ref('')
 const pickerOpen = ref(false)
+const pickerType = ref<TargetType>('group')
+const scopeFilter = ref<ScopeFilter>('all')
 const draft = ref<ResolverSettings>(normalizeResolverSettings(props.modelValue))
+
+const resolverPlatforms: ResolverPlatform[] = ['bilibili', 'weibo', 'douyin']
+const scopeOrder: ScopeFilter[] = ['all', 'group', 'private']
+const pickerTypes: TargetType[] = ['group', 'private']
 
 watch(
   () => props.modelValue,
@@ -56,13 +64,14 @@ watch(page, () => {
   manageSearch.value = ''
   pickerSearch.value = ''
   pickerOpen.value = false
+  scopeFilter.value = 'all'
 })
 
 const configured = computed(() => new Map(draft.value.targets.map((target) => [targetKey(target.target_type, target.target_id), target])))
 const liveTargets = computed(() => new Map(allTargets(props.targets).map((target) => [target.key, target])))
-const configuredTargets = computed(() => {
-  if (page.value === 'strategy') return []
-  return draft.value.targets.filter((target) => target.target_type === page.value).map((target) => {
+const configuredTargets = computed<LiveTarget[]>(() => {
+  if (page.value !== 'targets') return []
+  return draft.value.targets.map((target) => {
     const key = targetKey(target.target_type, target.target_id)
     const live = liveTargets.value.get(key)
     return {
@@ -74,16 +83,29 @@ const configuredTargets = computed(() => {
     }
   })
 })
+const scopeCounts = computed<Record<ScopeFilter, number>>(() => {
+  const counts = { all: 0, group: 0, private: 0 }
+  for (const target of configuredTargets.value) {
+    counts.all += 1
+    counts[target.target_type] += 1
+  }
+  return counts
+})
+const scopeOptions = computed(() => scopeOrder.map((value) => ({ value, label: scopeLabel(value), count: scopeCounts.value[value] })))
+const scopeIndex = computed(() => scopeOrder.indexOf(scopeFilter.value))
+const pickerIndex = computed(() => pickerTypes.indexOf(pickerType.value))
 const filteredConfiguredTargets = computed(() => {
-  if (page.value === 'strategy') return []
   const query = manageSearch.value.trim().toLowerCase()
-  return configuredTargets.value.filter((target) => !query || targetMatches(target, query))
+  return configuredTargets.value.filter((target) => (
+    (scopeFilter.value === 'all' || target.target_type === scopeFilter.value)
+    && (!query || targetMatches(target, query))
+  ))
 })
 const candidateTargets = computed(() => {
-  if (page.value === 'strategy') return []
+  if (page.value !== 'targets') return []
   const query = pickerSearch.value.trim().toLowerCase()
   return allTargets(props.targets).filter((target) => (
-    target.target_type === page.value
+    target.target_type === pickerType.value
     && !configured.value.has(target.key)
     && (!query || targetMatches(target, query))
   ))
@@ -96,10 +118,15 @@ const visibleAvatarSources = computed(() => {
     : visibleConfiguredTargets.value
   return [...new Set(targets.map((target) => target.avatar_url).filter(Boolean))]
 })
-const targetTypeLabel = computed(() => page.value === 'group' ? '群聊' : '用户')
+const pickerTypeLabel = computed(() => typeLabel(pickerType.value))
+const pickerPlaceholder = computed(() => `输入${pickerType.value === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`)
+const emptyCopy = computed(() => {
+  if (manageSearch.value) return { title: '没有匹配项', hint: '请调整搜索条件或切换会话类型。' }
+  if (scopeFilter.value !== 'all' && scopeCounts.value.all > 0) return { title: `尚未添加${scopeLabel(scopeFilter.value)}`, hint: `点击“添加对象”从连接协议选择${scopeLabel(scopeFilter.value)}。` }
+  return { title: '尚未添加解析对象', hint: '点击“添加对象”从连接协议选择群聊或私聊；在聊天中开启解析后也会自动加入。' }
+})
 const pageCopy = computed(() => {
-  if (page.value === 'group') return { title: '群聊解析', description: '从连接协议添加需要管理的群聊，再分别开启 B站、微博或抖音解析。' }
-  if (page.value === 'private') return { title: '用户解析', description: '从连接协议添加需要管理的私聊用户，再分别开启 B站、微博或抖音解析。' }
+  if (page.value === 'targets') return { title: '链接解析', description: '在一个列表里管理群聊与私聊的 B站、微博、抖音解析开关。' }
   return { title: '防抖与媒体策略', description: '管理解析冷却、直播录制、视频发送和平台清晰度策略。' }
 })
 
@@ -110,6 +137,15 @@ watch(
   },
   { immediate: true },
 )
+
+function scopeLabel(scope: ScopeFilter): string {
+  if (scope === 'group') return '群聊'
+  return scope === 'private' ? '私聊' : '全部'
+}
+
+function typeLabel(type: TargetType): string {
+  return type === 'group' ? '群聊' : '私聊'
+}
 
 function targetMatches(target: LiveTarget, query: string): boolean {
   return `${target.label} ${target.target_id}`.toLowerCase().includes(query)
@@ -134,6 +170,16 @@ function resolverPlatformLabel(platform: ResolverPlatform): string {
 
 function platformEnabled(target: LiveTarget, platform: ResolverPlatform): boolean {
   return configured.value.get(target.key)?.[platform] === true
+}
+
+function enabledCount(target: LiveTarget): number {
+  return resolverPlatforms.filter((platform) => platformEnabled(target, platform)).length
+}
+
+function openPicker() {
+  pickerType.value = scopeFilter.value === 'private' ? 'private' : 'group'
+  pickerSearch.value = ''
+  pickerOpen.value = true
 }
 
 function addTarget(target: LiveTarget) {
@@ -168,30 +214,61 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 <template>
   <section class="resolver-panel" aria-labelledby="resolver-settings-title">
     <h2 id="resolver-settings-title" class="sr-only">{{ pageCopy.title }}</h2>
-    <div v-if="page !== 'strategy'" class="target-page">
+    <div v-if="page === 'targets'" class="target-page">
+      <section class="admin-rule" :class="{ 'is-on': draft.super_admin_whitelist }" aria-labelledby="admin-rule-title">
+        <span class="admin-rule__icon" aria-hidden="true"><UiIcon name="shield" :size="22" /></span>
+        <div class="admin-rule__copy">
+          <h3 id="admin-rule-title">超级管理员白名单</h3>
+          <p>开启后，超级管理员发送的 B站、微博、抖音链接不受下方群聊、私聊开关限制，全部解析；冷却与媒体策略仍然生效。聊天中可用 <code>开启超管解析</code> / <code>关闭超管解析</code> 切换。</p>
+        </div>
+        <label class="admin-rule__control">
+          <span class="admin-rule__state" aria-live="polite">{{ draft.super_admin_whitelist ? '已开启' : '已关闭' }}</span>
+          <span class="compact-switch compact-switch--large">
+            <input v-model="draft.super_admin_whitelist" type="checkbox" aria-label="超级管理员白名单" />
+            <span aria-hidden="true"></span>
+          </span>
+        </label>
+      </section>
+
       <div class="target-toolbar">
         <label class="target-search">
-          <span class="sr-only">筛选已添加{{ targetTypeLabel }}</span>
-          <input v-model="manageSearch" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
+          <span class="sr-only">搜索已添加的群聊或私聊</span>
+          <UiIcon name="search" :size="16" />
+          <input v-model="manageSearch" type="search" autocomplete="off" placeholder="搜索群名、昵称或号码…" />
         </label>
-        <button type="button" class="button" @click="$emit('open-help')">解析帮助</button>
-        <button type="button" class="target-button target-button--primary" :aria-expanded="pickerOpen" @click="pickerOpen = !pickerOpen">
-          <UiIcon name="plus" />{{ `添加${targetTypeLabel}` }}
-        </button>
+        <div class="scope-tabs" role="group" aria-label="会话类型筛选" :style="{ '--tab-count': scopeOptions.length, '--tab-index': scopeIndex }">
+          <span class="scope-tabs__indicator" aria-hidden="true"></span>
+          <button
+            v-for="scope in scopeOptions"
+            :key="scope.value"
+            type="button"
+            class="scope-tab"
+            :aria-pressed="scopeFilter === scope.value"
+            @click="scopeFilter = scope.value"
+          >{{ scope.label }}<span class="scope-tab__count">{{ scope.count }}</span></button>
+        </div>
+        <div class="target-toolbar__actions">
+          <button type="button" class="button" @click="$emit('open-help')">解析帮助</button>
+          <button type="button" class="target-button target-button--primary" :aria-expanded="pickerOpen" @click="openPicker">
+            <UiIcon name="plus" />添加对象
+          </button>
+        </div>
       </div>
 
-      <AModal centered :footer="null" :open="pickerOpen" :title="`添加${targetTypeLabel}`" :width="480" class="hub-dialog" @cancel="pickerOpen = false"><section class="target-picker" aria-labelledby="target-picker-title">
+      <AModal centered :footer="null" :open="pickerOpen" title="添加对象" :width="480" class="hub-dialog" @cancel="pickerOpen = false"><section class="target-picker" aria-labelledby="target-picker-title">
         <div class="target-picker-heading">
-          <div>
-            <h3 id="target-picker-title">从连接协议添加{{ targetTypeLabel }}</h3>
-            <p>这里只列出尚未添加的对象；添加后才会出现在解析开关列表中。</p>
-          </div>
+          <h3 id="target-picker-title">从连接协议添加{{ pickerTypeLabel }}</h3>
+          <p>这里只列出尚未添加的对象；添加后才会出现在解析开关列表中。</p>
+        </div>
+        <div class="scope-tabs scope-tabs--picker" role="group" aria-label="添加对象类型" :style="{ '--tab-count': pickerTypes.length, '--tab-index': pickerIndex }">
+          <span class="scope-tabs__indicator" aria-hidden="true"></span>
+          <button v-for="type in pickerTypes" :key="type" type="button" class="scope-tab" :aria-pressed="pickerType === type" @click="pickerType = type">{{ typeLabel(type) }}</button>
         </div>
         <label class="picker-search">
-          <span>搜索可添加{{ targetTypeLabel }}</span>
-          <input v-model="pickerSearch" type="search" autocomplete="off" :placeholder="`输入${page === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`" />
+          <span>搜索可添加{{ pickerTypeLabel }}</span>
+          <input v-model="pickerSearch" type="search" autocomplete="off" :placeholder="pickerPlaceholder" />
         </label>
-        <div class="candidate-grid">
+        <TransitionGroup name="cards" tag="div" class="candidate-grid">
           <button
             v-for="target in visibleCandidateTargets"
             :key="target.key"
@@ -209,19 +286,23 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
               <strong :title="target.label">{{ target.label }}</strong>
               <span>{{ targetNumberLabel(target) }}</span>
             </span>
+            <UiIcon name="plus" :size="16" class="target-choice-card__plus" />
           </button>
-          <div v-if="visibleCandidateTargets.length === 0" class="picker-empty">
-            <strong>{{ !targets.loaded ? `正在读取连接协议中的${targetTypeLabel}…` : pickerSearch ? '没有匹配项' : `暂无可添加${targetTypeLabel}` }}</strong>
-            <span v-if="targets.loaded && !pickerSearch">{{ targets.available ? `连接协议中的${targetTypeLabel}已全部添加。` : '请确认连接协议在线，并刷新可选范围。' }}</span>
+          <div v-if="visibleCandidateTargets.length === 0" key="picker-empty" class="picker-empty">
+            <strong>{{ !targets.loaded ? `正在读取连接协议中的${pickerTypeLabel}…` : pickerSearch ? '没有匹配项' : `暂无可添加${pickerTypeLabel}` }}</strong>
+            <span v-if="targets.loaded && !pickerSearch">{{ targets.available ? `连接协议中的${pickerTypeLabel}已全部添加。` : '请确认连接协议在线，并刷新可选范围。' }}</span>
           </div>
-        </div>
+        </TransitionGroup>
         <p v-if="targets.issues.length" class="picker-issue">{{ targets.issues.map((issue) => issue.message).join('；') }}</p>
         <p v-if="candidateTargets.length > visibleCandidateTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
       </section></AModal>
 
-      <div class="collection-caption"><span>{{ filteredConfiguredTargets.length }} 个{{ targetTypeLabel }}</span><span>按平台独立开启解析</span></div>
-      <TransitionGroup name="cards" tag="div" class="resolver-target-grid" :aria-label="`${page === 'group' ? '群聊' : '用户'}解析开关`">
-        <article v-for="target in visibleConfiguredTargets" :key="target.key" class="resolver-target-card">
+      <div class="collection-caption">
+        <span>{{ filteredConfiguredTargets.length }} 个{{ scopeFilter === 'all' ? '解析对象' : scopeLabel(scopeFilter) }}<template v-if="scopeFilter === 'all' && scopeCounts.all > 0">（{{ scopeCounts.group }} 群聊 / {{ scopeCounts.private }} 私聊）</template></span>
+        <span>按平台独立开启解析</span>
+      </div>
+      <TransitionGroup name="cards" tag="div" class="resolver-target-grid" aria-label="群聊与私聊解析开关">
+        <article v-for="target in visibleConfiguredTargets" :key="target.key" class="resolver-target-card" :class="{ 'is-active': enabledCount(target) > 0 }">
           <div class="resolver-target-card__head">
             <span class="target-avatar" aria-hidden="true">
               <img v-if="avatarURL(target)" :src="avatarURL(target)" alt="" />
@@ -229,12 +310,12 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
             </span>
             <div class="target-identity">
               <strong :title="target.label">{{ target.label }}</strong>
-              <span>{{ targetNumberLabel(target) }}</span>
+              <span><em class="type-chip" :class="`type-chip--${target.target_type}`">{{ typeLabel(target.target_type) }}</em>{{ targetNumberLabel(target) }}</span>
             </div>
             <button type="button" class="target-remove" :aria-label="`移除${target.label}`" @click="removeTarget(target)">移除</button>
           </div>
           <div class="resolver-platforms">
-            <label v-for="platform in (['bilibili', 'weibo', 'douyin'] as ResolverPlatform[])" :key="platform" class="platform-switch">
+            <label v-for="platform in resolverPlatforms" :key="platform" class="platform-switch" :class="{ 'is-on': platformEnabled(target, platform) }">
               <span class="platform-switch__label"><PlatformLogo :platform="platform" :size="24" />{{ resolverPlatformLabel(platform) }}</span>
               <span class="compact-switch">
                 <input
@@ -249,10 +330,13 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
           </div>
         </article>
       </TransitionGroup>
+      <Transition name="fade">
         <div v-if="visibleConfiguredTargets.length === 0" class="resolver-empty">
-          <strong>{{ manageSearch ? '没有匹配项' : `尚未添加${targetTypeLabel}` }}</strong>
-          <span>{{ manageSearch ? '请调整筛选条件。' : `点击“添加${targetTypeLabel}”从连接协议选择；在聊天中开启解析后也会自动加入。` }}</span>
+          <UiIcon name="inbox" :size="28" />
+          <strong>{{ emptyCopy.title }}</strong>
+          <span>{{ emptyCopy.hint }}</span>
         </div>
+      </Transition>
       <p v-if="filteredConfiguredTargets.length > visibleConfiguredTargets.length" class="result-limit">当前显示前 100 项，输入名称或号码可继续筛选。</p>
     </div>
 
@@ -318,137 +402,177 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 </template>
 
 <style scoped>
-.resolver-panel {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface);
-}
+.resolver-panel { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.target-page, .strategy-page { padding: 0; }
 
-.resolver-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 24px 26px 20px;
-}
-
-.resolver-heading h2,
-.strategy-title h3 { margin: 0; color: var(--text); }
-.resolver-heading h2 { font-size: 24px; letter-spacing: -0.02em; }
-.resolver-heading p,
-.strategy-title p { margin: 7px 0 0; color: var(--muted); line-height: 1.6; }
-
-.preview-help {
-  flex: 0 0 auto;
-  min-height: 40px;
-  padding: 0 15px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.target-page,
-.strategy-page { padding: 22px 26px 26px; }
-
-.target-toolbar {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.target-search,
-.picker-search {
+/* Global rule: super admin whitelist */
+.admin-rule {
   display: grid;
-  gap: 7px;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color 220ms var(--motion-ease), background-color 220ms var(--motion-ease), box-shadow 220ms var(--motion-ease);
 }
+.admin-rule.is-on { border-color: var(--border-accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 6%, transparent); }
+.admin-rule__icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  transition: color 220ms ease-out, background-color 220ms ease-out, transform 320ms var(--motion-ease);
+}
+.admin-rule.is-on .admin-rule__icon { color: var(--on-accent); background: var(--accent); transform: rotate(-6deg) scale(1.04); }
+.admin-rule__copy { min-width: 0; }
+.admin-rule__copy h3 { margin: 0; color: var(--text); font-size: 15px; font-weight: 650; }
+.admin-rule__copy p { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.admin-rule__copy code { padding: 1px 6px; border-radius: 5px; background: var(--surface-strong); color: var(--text); font-family: "Cascadia Mono", "SFMono-Regular", ui-monospace, monospace; font-size: 12px; }
+.admin-rule__control { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.admin-rule__state { min-width: 3em; color: var(--muted); font-size: 13px; font-weight: 600; text-align: end; transition: color 200ms ease-out; }
+.admin-rule.is-on .admin-rule__state { color: var(--accent-strong); }
 
-.target-search { width: min(620px, 100%); }
-.picker-search { margin-top: 18px; }
+/* Toolbar */
+.target-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+.target-toolbar__actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; margin-left: auto; }
+.target-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(380px, 100%);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--surface);
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.target-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
+.target-search input { width: 100%; min-width: 0; height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 13px; }
+.target-search input:focus-visible { outline: 0; }
 
-.target-search input,
-.picker-search input,
-.number-field input,
-.select-field select {
-  min-width: 0;
-  height: 42px;
+.scope-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--tab-count, 3), minmax(0, 1fr));
+  isolation: isolate;
+  padding: 3px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  color: var(--text);
-  background: var(--surface);
-  font: inherit;
+  background: var(--surface-soft);
 }
-
-.target-search input,
-.picker-search input { padding: 0 13px; font-size: 16px; }
+.scope-tabs__indicator {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--tab-count, 3));
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%), 0 0 0 1px var(--border);
+  transform: translateX(calc(var(--tab-index, 0) * 100%));
+  transition: transform 260ms var(--motion-ease);
+}
+.scope-tab {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 180ms ease-out;
+}
+.scope-tab:hover { color: var(--text); }
+.scope-tab[aria-pressed='true'] { color: var(--text); font-weight: 650; }
+.scope-tab__count { display: inline-flex; min-width: 18px; height: 18px; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; background: var(--surface-strong); color: var(--muted); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; transition: background-color 180ms ease-out, color 180ms ease-out; }
+.scope-tab[aria-pressed='true'] .scope-tab__count { background: var(--accent-soft); color: var(--accent-strong); }
+.scope-tabs--picker { width: 100%; margin-top: 16px; }
+.scope-tabs--picker .scope-tab { min-height: 36px; }
 
 .target-button {
-  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
   background: var(--surface);
   font: inherit;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
+  transition: color 160ms ease-out, background-color 160ms ease-out, border-color 160ms ease-out, transform 160ms var(--motion-ease);
 }
 .target-button:hover { border-color: var(--accent); color: var(--accent-strong); }
-.target-button--primary { flex: 0 0 auto; min-height: 42px; color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
+.target-button:active { transform: translateY(1px); }
+.target-button--primary { flex: 0 0 auto; color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
 .target-button--primary:hover { color: var(--on-accent); border-color: var(--accent-strong); background: var(--accent-strong); }
 
-.target-picker {
-  margin-bottom: 22px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface-soft);
-}
+/* Picker */
+.target-picker { padding: 0; margin: 0; border: 0; background: transparent; box-shadow: none; }
 .target-picker-heading h3 { margin: 0; color: var(--text); font-size: 17px; }
 .target-picker-heading p { max-width: 70ch; margin: 6px 0 0; color: var(--muted); line-height: 1.55; }
-.candidate-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
-  gap: 10px;
-  margin-top: 14px;
-}
+.picker-search { display: grid; gap: 7px; margin-top: 14px; color: var(--text); font-size: 13px; font-weight: 600; }
+.picker-search input { min-width: 0; min-height: 40px; padding: 0 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); font: inherit; font-size: 13px; }
+.candidate-grid { position: relative; display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 14px; }
 .target-choice-card {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
   min-height: 68px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 12px;
+  border: 1px solid transparent;
   border-radius: 10px;
   color: var(--text);
-  background: var(--surface);
+  background: var(--surface-soft);
   font: inherit;
   text-align: start;
   cursor: pointer;
-  transition: border-color 160ms ease-out, background 160ms ease-out, transform 160ms ease-out;
+  transition: border-color 160ms ease-out, background-color 160ms ease-out, transform 160ms var(--motion-ease);
 }
-.target-choice-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--surface));  }
+.target-choice-card:hover { border-color: var(--border-accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.target-choice-card:active { transform: scale(.985); }
+.target-choice-card__plus { color: var(--muted); transition: color 160ms ease-out, transform 200ms var(--motion-ease); }
+.target-choice-card:hover .target-choice-card__plus { color: var(--accent-strong); transform: rotate(90deg); }
 .picker-empty { display: grid; grid-column: 1 / -1; gap: 5px; place-items: center; min-height: 126px; padding: 22px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); background: var(--surface); text-align: center; }
 .picker-empty strong { color: var(--text); }
 .picker-issue { margin: 12px 0 0; color: var(--danger); font-size: 13px; line-height: 1.55; }
 
-.resolver-target-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: 14px;
+/* Target cards */
+.resolver-target-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 18px; }
+.resolver-target-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color 200ms ease-out, background-color 200ms ease-out;
 }
-.resolver-target-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.resolver-target-card:hover { border-color: var(--border-strong); }
+.resolver-target-card.is-active { border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
 .resolver-target-card__head { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; }
 .target-avatar {
   display: grid;
@@ -470,13 +594,20 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 .target-identity strong,
 .target-identity span { display: block; min-width: 0; }
 .target-identity strong { display: -webkit-box; overflow: hidden; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.target-identity span { overflow: hidden; margin-top: 3px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-.target-remove { min-height: 36px; padding: 0 9px; border: 0; border-radius: 8px; color: var(--danger); background: transparent; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.target-identity span { display: flex; align-items: center; gap: 6px; overflow: hidden; margin-top: 4px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.type-chip { display: inline-flex; flex-shrink: 0; align-items: center; padding: 1px 7px; border-radius: 999px; background: var(--surface-strong); color: var(--text); font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: .02em; }
+.type-chip--group { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent-strong); }
+.type-chip--private { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--warning); }
+.target-remove { min-height: 36px; padding: 0 9px; border: 0; border-radius: 8px; color: var(--danger); background: transparent; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 160ms ease-out; }
 .target-remove:hover { background: color-mix(in srgb, var(--danger) 9%, transparent); }
-.resolver-platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--border); }
-.platform-switch { display: grid; min-width: 0; place-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 750; }
+.resolver-platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); }
+.platform-switch { display: grid; min-width: 0; place-items: center; gap: 7px; padding: 8px 4px; border-radius: 10px; color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: background-color 200ms ease-out, color 200ms ease-out; }
+.platform-switch:hover { background: var(--surface-soft); }
+.platform-switch.is-on { color: var(--text); }
+.platform-switch__label { display: flex; align-items: center; gap: 6px; }
 
-.compact-switch { display: grid; place-items: center; }
+/* Switches */
+.compact-switch { position: relative; display: grid; place-items: center; }
 .compact-switch input { position: absolute; opacity: 0; pointer-events: none; }
 .compact-switch span {
   position: relative;
@@ -485,7 +616,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   border-radius: 999px;
   background: color-mix(in srgb, var(--muted) 35%, var(--surface));
   cursor: pointer;
-  transition: background 160ms ease-out;
+  transition: background-color 200ms ease-out;
 }
 .compact-switch span::after {
   position: absolute;
@@ -497,77 +628,82 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   background: #fff;
   box-shadow: 0 2px 6px rgba(24, 32, 51, 0.2);
   content: '';
-  transition: transform 160ms ease-out;
+  transition: transform 220ms var(--motion-ease), width 160ms ease-out;
 }
+.compact-switch span:active::after { width: 20px; }
 .compact-switch input:checked + span { background: var(--accent); }
 .compact-switch input:checked + span::after { transform: translateX(16px); }
+.compact-switch input:checked + span:active::after { transform: translateX(12px); }
+.compact-switch--large span { width: 46px; height: 26px; }
+.compact-switch--large span::after { width: 20px; height: 20px; }
+.compact-switch--large span:active::after { width: 24px; }
+.compact-switch--large input:checked + span::after { transform: translateX(20px); }
+.compact-switch--large input:checked + span:active::after { transform: translateX(16px); }
 .compact-switch input:focus-visible + span,
-.preview-help:focus-visible,
 .target-button:focus-visible,
+.scope-tab:focus-visible,
 .target-choice-card:focus-visible,
 .target-remove:focus-visible,
 input:focus-visible,
 select:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
 
-.resolver-empty { display: grid; grid-column: 1 / -1; gap: 5px; place-items: center; min-height: 160px; padding: 24px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; }
+.resolver-empty { display: grid; gap: 6px; place-items: center; min-height: 200px; padding: 24px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); text-align: center; }
+.resolver-empty .ui-icon { margin-bottom: 4px; color: var(--muted); }
 .resolver-empty strong { color: var(--text); }
+.resolver-empty span { max-width: 48ch; font-size: 13px; line-height: 1.6; }
 .result-limit { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+.fade-enter-active, .fade-leave-active { transition: opacity 180ms ease-out, transform 220ms var(--motion-ease); }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(6px); }
 
-.strategy-section + .strategy-section { margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--border); }
-.strategy-title h3 { font-size: 18px; }
-.strategy-title p { font-size: 14px; }
-.setting-grid { display: grid; gap: 16px 20px; margin-top: 19px; }
+/* Strategy page */
+.strategy-page { max-width: 1120px; }
+.strategy-section { display: grid; grid-template-columns: 220px minmax(0, 1fr); column-gap: 40px; padding: 24px 0; }
+.strategy-section + .strategy-section { margin: 0; padding-top: 28px; border-top: 1px solid var(--border); }
+.strategy-title { grid-column: 1; grid-row: 1 / 3; }
+.strategy-title h3 { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text); font-size: 16px; }
+.strategy-title p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.setting-grid { display: grid; grid-column: 2; gap: 20px; margin-top: 0; }
 .setting-grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .setting-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-
-.setting-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  min-width: 0;
-}
+.setting-toggle { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 0; }
 .setting-toggle span { min-width: 0; }
 .setting-toggle strong,
 .setting-toggle small { display: block; }
-.setting-toggle strong { color: var(--text); }
-.setting-toggle small { margin-top: 4px; color: var(--muted); line-height: 1.45; }
+.setting-toggle strong { color: var(--text); font-size: 13px; font-weight: 500; }
+.setting-toggle small { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .setting-toggle input,
 .inline-toggles input { width: 18px; height: 18px; accent-color: var(--accent); }
-
 .number-field,
-.select-field { display: grid; gap: 7px; color: var(--text); font-size: 14px; font-weight: 700; }
+.select-field { display: grid; gap: 7px; color: var(--text); font-size: 13px; font-weight: 500; }
 .number-field div { position: relative; }
-.number-field input { width: 100%; padding: 0 50px 0 12px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.number-field input,
+.select-field select { min-width: 0; min-height: 38px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); font: inherit; font-size: 14px; }
+.number-field input { width: 100%; padding: 0 50px 0 12px; font-variant-numeric: tabular-nums; }
 .number-field em { position: absolute; top: 50%; inset-inline-end: 12px; color: var(--muted); font-style: normal; transform: translateY(-50%); }
-.select-field select { width: 100%; padding: 0 10px; font-size: 16px; }
+.select-field select { width: 100%; padding: 0 10px; }
+.inline-toggles { display: flex; grid-column: 2; flex-direction: column; gap: 16px; margin-top: 18px; }
+.inline-toggles label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; font-weight: 400; }
 
-.inline-toggles { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 18px; }
-.inline-toggles label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; font-weight: 700; }
-
-@media (max-width: 820px) {
-  .resolver-heading { align-items: stretch; flex-direction: column; }
-  .preview-help { width: 100%; }
+@media (max-width: 860px) {
+  .strategy-section { grid-template-columns: 1fr; gap: 20px; }
+  .strategy-title, .setting-grid, .inline-toggles { grid-column: 1; grid-row: auto; }
   .setting-grid--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .target-search { width: 100%; flex: 1 1 100%; }
+  .target-toolbar__actions { margin-left: 0; }
 }
 
 @media (max-width: 560px) {
-  .resolver-heading,
-  .target-page,
-  .strategy-page { padding-inline: 18px; }
   .setting-grid--two,
   .setting-grid--three { grid-template-columns: 1fr; }
-  .target-toolbar { align-items: stretch; flex-direction: column; }
-  .target-button--primary { width: 100%; }
-  .target-picker { padding: 16px; }
+  .admin-rule { grid-template-columns: auto minmax(0, 1fr); row-gap: 14px; padding: 16px; }
+  .admin-rule__control { grid-column: 1 / -1; justify-content: space-between; }
+  .scope-tabs { width: 100%; }
+  .target-toolbar__actions { width: 100%; }
+  .target-toolbar__actions > * { flex: 1 1 auto; }
   .resolver-target-card__head { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; }
   .target-avatar { width: 44px; height: 44px; }
+  .platform-switch__label { gap: 4px; }
+  .target-remove, .target-button, .scope-tab { min-height: 44px; }
+  .compact-switch { min-height: 44px; }
 }
-
-.resolver-panel { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.target-page, .strategy-page { padding: 0; }.target-toolbar { gap: 12px; margin-bottom: 20px; }.target-search { margin-right: auto; width: min(440px, 100%); }.target-search input, .picker-search input { min-height: 40px; font-size: 13px; background: var(--surface); }
-.target-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 14px; min-height: 36px; }.target-picker { padding: 0; margin: 0; border: 0; background: transparent; box-shadow: none; }.candidate-grid { grid-template-columns: 1fr; }.target-choice-card { border: 0; background: var(--surface-soft); padding: 12px; }.resolver-target-grid { position: relative; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 18px; }.resolver-target-card { padding: 20px; border-radius: 14px; }.platform-switch__label { display: flex; align-items: center; gap: 6px; font-weight: 500; }.resolver-platforms { margin-top: 22px; padding-top: 16px; }
-.strategy-page { max-width: 1120px; }.strategy-section { display: grid; grid-template-columns: 220px minmax(0, 1fr); column-gap: 40px; padding: 24px 0; }.strategy-section + .strategy-section { margin: 0; padding-top: 28px; }.strategy-title { grid-column: 1; grid-row: 1 / 3; }.strategy-title h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }.strategy-title p { font-size: 12px; margin-top: 8px; }.setting-grid { grid-column: 2; margin-top: 0; gap: 20px; }.inline-toggles { grid-column: 2; flex-direction: column; gap: 16px; }.inline-toggles label { font-size: 13px; font-weight: 400; }.number-field, .select-field { font-size: 13px; font-weight: 500; }.number-field input, .select-field select { font-size: 14px; min-height: 38px; background: var(--surface); }.setting-toggle strong { font-size: 13px; font-weight: 500; }.setting-toggle small { font-size: 12px; }
-@media (max-width: 860px) { .strategy-section { grid-template-columns: 1fr; gap: 20px; }.strategy-title, .setting-grid, .inline-toggles { grid-column: 1; grid-row: auto; }.target-toolbar { flex-wrap: wrap; }.target-search { width: 100%; flex: 1 1 100%; } }
-@media (max-width: 560px) { .target-page, .strategy-page { padding: 0; }.target-toolbar { flex-direction: row; }.target-button--primary { width: auto; }.target-picker { padding: 0; }.platform-switch__label { gap: 4px; }.target-remove, .target-button { min-height: 44px; }.compact-switch { min-height: 44px; } }
 </style>

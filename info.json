@@ -32,6 +32,7 @@
     "subscriptions": [],
     "resolver": {
       "targets": [],
+      "super_admin_whitelist": false,
       "cooldowns": {
         "same_link_enabled": true,
         "same_link_seconds": 10,
@@ -173,6 +174,42 @@
           "关闭抖音解析",
           "禁用抖音解析",
           "停用抖音解析"
+        ]
+      }
+    },
+    {
+      "id": "enable-super-admin-resolver",
+      "name": "开启超管解析",
+      "description": "开启超级管理员白名单：超级管理员发送的链接不受群聊、私聊解析开关限制，全部解析",
+      "usage": "/开启超管解析",
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "开启超管解析",
+          "开启超级管理员解析",
+          "启用超管解析",
+          "打开超管解析",
+          "开启超管白名单",
+          "开启超级管理员白名单"
+        ]
+      }
+    },
+    {
+      "id": "disable-super-admin-resolver",
+      "name": "关闭超管解析",
+      "description": "关闭超级管理员白名单：超级管理员发送的链接按各会话的解析开关处理",
+      "usage": "/关闭超管解析",
+      "permission": "super_admin",
+      "trigger": {
+        "type": "exact",
+        "names": [
+          "关闭超管解析",
+          "关闭超级管理员解析",
+          "禁用超管解析",
+          "停用超管解析",
+          "关闭超管白名单",
+          "关闭超级管理员白名单"
         ]
       }
     },
@@ -566,7 +603,9 @@
         "enable-weibo-resolver",
         "disable-weibo-resolver",
         "enable-douyin-resolver",
-        "disable-douyin-resolver"
+        "disable-douyin-resolver",
+        "enable-super-admin-resolver",
+        "disable-super-admin-resolver"
       ]
     },
     {
@@ -634,12 +673,8 @@
         "label": "订阅设置"
       },
       {
-        "id": "resolver-groups",
-        "label": "群聊解析"
-      },
-      {
-        "id": "resolver-users",
-        "label": "用户解析"
+        "id": "resolver",
+        "label": "链接解析"
       },
       {
         "id": "resolver-strategy",

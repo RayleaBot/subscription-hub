@@ -19,6 +19,7 @@
         "additionalProperties": false
       }
     },
+    "super_admin_whitelist": { "type": "boolean" },
     "same_link_enabled": { "type": "boolean" },
     "same_link_seconds": { "type": "integer" },
     "same_platform_enabled": { "type": "boolean" },

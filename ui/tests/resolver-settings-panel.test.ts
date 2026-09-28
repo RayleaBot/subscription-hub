@@ -13,8 +13,7 @@ describe('resolver settings panel', () => {
     const settings = reactive(normalizeResolverSettings({}))
 
     for (const [view, title] of [
-      ['group', '群聊解析'],
-      ['private', '用户解析'],
+      ['targets', '链接解析'],
       ['strategy', '防抖与媒体策略'],
     ] as const) {
       const root = document.createElement('div')
@@ -42,16 +41,16 @@ describe('resolver settings panel', () => {
         available: true,
         groups: [{ target_id: '200', target_name: '测试群聊' }],
       }),
-      view: 'group',
+      view: 'targets',
       'onUpdate:modelValue': (value: ResolverSettings) => { updated = value },
     })
     app.mount(root)
 
     expect(root.querySelectorAll('.resolver-target-card')).toHaveLength(0)
-    expect(root.textContent).toContain('尚未添加群聊')
+    expect(root.textContent).toContain('尚未添加解析对象')
     expect(root.textContent).not.toContain('测试群聊')
 
-    findButton(root, '添加群聊').click()
+    findButton(root, '添加对象').click()
     await nextTick()
     expect(root.textContent).toContain('测试群聊')
     expect(root.textContent).toContain('群号 200')
@@ -83,7 +82,7 @@ describe('resolver settings panel', () => {
           { target_id: '301', nickname: '未添加用户' },
         ],
       }),
-      view: 'private',
+      view: 'targets',
     })
     app.mount(root)
 
@@ -93,10 +92,83 @@ describe('resolver settings panel', () => {
     expect(root.textContent).not.toContain('未添加用户')
     app.unmount()
   })
+
+  it('lists groups and private chats together and filters them by scope', async () => {
+    const root = document.createElement('div')
+    const app = createApp(ResolverSettingsPanel, {
+      modelValue: reactive(normalizeResolverSettings({
+        targets: [
+          { target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true },
+          { target_type: 'private', target_id: '300', target_name: '测试用户', weibo: true },
+        ],
+      })),
+      avatarDataUrls: new Map(),
+      targets: emptyTargets(),
+      view: 'targets',
+    })
+    app.mount(root)
+
+    expect(root.querySelectorAll('.resolver-target-card')).toHaveLength(2)
+    expect(root.textContent).toContain('群号 200')
+    expect(root.textContent).toContain('QQ 300')
+
+    findScopeTab(root, '私聊').click()
+    await settle()
+    expect(stayingCards(root)).toHaveLength(1)
+    expect(stayingCards(root)[0]?.textContent).toContain('QQ 300')
+
+    findScopeTab(root, '群聊').click()
+    await settle()
+    expect(stayingCards(root)).toHaveLength(1)
+    expect(stayingCards(root)[0]?.textContent).toContain('群号 200')
+    app.unmount()
+  })
+
+  it('toggles the super admin whitelist as part of the resolver settings', async () => {
+    const root = document.createElement('div')
+    let updated: ResolverSettings | undefined
+    const app = createApp(ResolverSettingsPanel, {
+      modelValue: reactive(normalizeResolverSettings({})),
+      avatarDataUrls: new Map(),
+      targets: emptyTargets(),
+      view: 'targets',
+      'onUpdate:modelValue': (value: ResolverSettings) => { updated = value },
+    })
+    app.mount(root)
+
+    const toggle = root.querySelector<HTMLInputElement>('input[aria-label="超级管理员白名单"]')
+    if (!toggle) throw new Error('whitelist toggle not found')
+    expect(toggle.checked).toBe(false)
+    expect(root.querySelector('.admin-rule')?.textContent).toContain('已关闭')
+
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    await nextTick()
+    expect(updated?.super_admin_whitelist).toBe(true)
+    expect(root.querySelector('.admin-rule')?.textContent).toContain('已开启')
+    app.unmount()
+  })
 })
+
+function findScopeTab(root: HTMLElement, text: string): HTMLButtonElement {
+  const button = [...root.querySelectorAll<HTMLButtonElement>('.scope-tab')].find((item) => item.textContent?.trim().startsWith(text))
+  if (!button) throw new Error(`scope tab not found: ${text}`)
+  return button
+}
 
 function findButton(root: HTMLElement, text: string): HTMLButtonElement {
   const button = [...root.querySelectorAll('button')].find((item) => item.textContent?.trim() === text)
   if (!button) throw new Error(`button not found: ${text}`)
   return button
+}
+
+function stayingCards(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>('.resolver-target-card:not(.cards-leave-active)')]
+}
+
+async function settle() {
+  for (let index = 0; index < 4; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+  }
 }

@@ -40,6 +40,7 @@ describe('subscription settings model', () => {
   it('defaults parsing off per target and enables only explicitly configured platforms', () => {
     const defaults = normalizeSettings({})
     expect(defaults.resolver.targets).toEqual([])
+    expect(defaults.resolver.super_admin_whitelist).toBe(false)
     expect(defaults.resolver.cooldowns).toMatchObject({ same_link_enabled: true, same_link_seconds: 10, same_platform_enabled: false })
     expect(defaults.resolver.media).toMatchObject({ live_record_seconds: 30, video_size_limit_mb: 70, media_concurrency: 1 })
 
@@ -52,6 +53,8 @@ describe('subscription settings model', () => {
       target_type: 'group', target_id: '200', target_name: '测试群', bilibili: true, weibo: false, douyin: false,
     }])
     expect(buildSettingsPayload(settings, [], new Map()).resolver.targets[0]?.bilibili).toBe(true)
+    expect(normalizeSettings({ resolver: { super_admin_whitelist: true } }).resolver.super_admin_whitelist).toBe(true)
+    expect(normalizeSettings({ resolver: { super_admin_whitelist: 'yes' } }).resolver.super_admin_whitelist).toBe(false)
   })
 
   it('normalizes resolver strategy values to supported bounds', () => {

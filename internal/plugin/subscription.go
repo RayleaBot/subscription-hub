@@ -11,9 +11,10 @@ type Settings struct {
 }
 
 type ResolverSettings struct {
-	Targets   []ResolverTarget         `json:"targets"`
-	Cooldowns ResolverCooldownSettings `json:"cooldowns"`
-	Media     ResolverMediaSettings    `json:"media"`
+	Targets             []ResolverTarget         `json:"targets"`
+	SuperAdminWhitelist bool                     `json:"super_admin_whitelist"`
+	Cooldowns           ResolverCooldownSettings `json:"cooldowns"`
+	Media               ResolverMediaSettings    `json:"media"`
 }
 
 type ResolverTarget struct {

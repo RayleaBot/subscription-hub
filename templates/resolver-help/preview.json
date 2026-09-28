@@ -6,6 +6,7 @@
     { "name": "微博", "enabled": false, "enable_command": "/开启微博解析", "disable_command": "/关闭微博解析" },
     { "name": "抖音", "enabled": true, "enable_command": "/开启抖音解析", "disable_command": "/关闭抖音解析" }
   ],
+  "super_admin_whitelist": true,
   "same_link_enabled": true,
   "same_link_seconds": 10,
   "same_platform_enabled": false,

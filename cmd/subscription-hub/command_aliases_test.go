@@ -34,7 +34,7 @@ func TestManifestCommandAliasesRouteToTheSameOperation(t *testing.T) {
 		}
 		wantPermission := "everyone"
 		switch operation {
-		case "add", "remove", "list_all", "check", "preview", "resolver_enable_bilibili", "resolver_disable_bilibili", "resolver_enable_weibo", "resolver_disable_weibo", "resolver_enable_douyin", "resolver_disable_douyin":
+		case "add", "remove", "list_all", "check", "preview", "resolver_enable_bilibili", "resolver_disable_bilibili", "resolver_enable_weibo", "resolver_disable_weibo", "resolver_enable_douyin", "resolver_disable_douyin", "resolver_enable_super_admin", "resolver_disable_super_admin":
 			wantPermission = "super_admin"
 		}
 		if command.Permission != wantPermission {

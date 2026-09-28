@@ -205,6 +205,7 @@ func NewHandler(options Options) (*Handler, error) {
 		"开启B站解析": "resolver_enable_bilibili", "关闭B站解析": "resolver_disable_bilibili",
 		"开启微博解析": "resolver_enable_weibo", "关闭微博解析": "resolver_disable_weibo",
 		"开启抖音解析": "resolver_enable_douyin", "关闭抖音解析": "resolver_disable_douyin",
+		"开启超管解析": "resolver_enable_super_admin", "关闭超管解析": "resolver_disable_super_admin",
 	} {
 		handler.commands[command] = commandRoute{operation: operation}
 	}

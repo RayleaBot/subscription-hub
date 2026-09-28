@@ -54,6 +54,18 @@ func (handler *Handler) toggleResolverForCurrentTarget(ctx context.Context, even
 	return event.SendText(fmt.Sprintf("已为当前%s%s%s解析。", targetTypeLabel(targetType), state, resolverPlatformLabel(platform)))
 }
 
+func (handler *Handler) toggleResolverSuperAdminWhitelist(ctx context.Context, event *rayleabot.EventContext, current *Settings, enabled bool) error {
+	current.Resolver.SuperAdminWhitelist = enabled
+	current.Resolver = NormalizeResolverSettings(current.Resolver)
+	if err := handler.saveSettings(ctx, event, *current); err != nil {
+		return err
+	}
+	if enabled {
+		return event.SendText("已开启超级管理员白名单：超级管理员发送的链接不受群聊、私聊解析开关限制，全部解析。")
+	}
+	return event.SendText("已关闭超级管理员白名单：超级管理员发送的链接按各会话的解析开关处理。")
+}
+
 func (handler *Handler) replyResolverHelp(ctx context.Context, event *rayleabot.EventContext, current Settings) error {
 	target, _ := current.Resolver.Target(event.Event.Target.Type, event.Event.Target.ID)
 	prefix := "/"
@@ -68,6 +80,7 @@ func (handler *Handler) replyResolverHelp(ctx context.Context, event *rayleabot.
 			{"name": "微博", "enabled": target.Weibo, "enable_command": prefix + "开启微博解析", "disable_command": prefix + "关闭微博解析"},
 			{"name": "抖音", "enabled": target.Douyin, "enable_command": prefix + "开启抖音解析", "disable_command": prefix + "关闭抖音解析"},
 		},
+		"super_admin_whitelist": current.Resolver.SuperAdminWhitelist,
 		"same_link_enabled":     current.Resolver.Cooldowns.SameLinkEnabled,
 		"same_link_seconds":     current.Resolver.Cooldowns.SameLinkSeconds,
 		"same_platform_enabled": current.Resolver.Cooldowns.SamePlatformEnabled,
@@ -86,9 +99,9 @@ func resolverHelpText(target ResolverTarget, settings ResolverSettings, prefix s
 		}
 		return "关闭"
 	}
-	return fmt.Sprintf("订阅与解析\nB站：%s\n微博：%s\n抖音：%s\n同链接冷却：%s（%d秒）\n同平台冷却：%s（%d秒）\n管理指令：%s开启/关闭XX解析",
-		state(target.Bilibili), state(target.Weibo), state(target.Douyin), state(settings.Cooldowns.SameLinkEnabled), settings.Cooldowns.SameLinkSeconds,
-		state(settings.Cooldowns.SamePlatformEnabled), settings.Cooldowns.SamePlatformSeconds, prefix)
+	return fmt.Sprintf("订阅与解析\nB站：%s\n微博：%s\n抖音：%s\n超管白名单：%s\n同链接冷却：%s（%d秒）\n同平台冷却：%s（%d秒）\n管理指令：%s开启/关闭XX解析、%s开启/关闭超管解析",
+		state(target.Bilibili), state(target.Weibo), state(target.Douyin), state(settings.SuperAdminWhitelist), state(settings.Cooldowns.SameLinkEnabled), settings.Cooldowns.SameLinkSeconds,
+		state(settings.Cooldowns.SamePlatformEnabled), settings.Cooldowns.SamePlatformSeconds, prefix, prefix)
 }
 
 func targetTypeLabel(value string) string {

@@ -54,7 +54,7 @@ import {
 import { loadProtocolTargets, resolveProtocolIdentities } from './protocol'
 
 const host = usePluginHost()
-type ManagementPage = 'subscriptions' | 'resolver-groups' | 'resolver-users' | 'resolver-strategy' | 'accounts'
+type ManagementPage = 'subscriptions' | 'resolver' | 'resolver-strategy' | 'accounts'
 
 const defaultSettings: SubscriptionSettings = {
   enabled: true,
@@ -90,20 +90,15 @@ let rowCounter = 0
 
 const activePage = computed<ManagementPage>(() => {
   const pageID = host.init.value?.page.id
-  if (pageID === 'accounts' || pageID === 'resolver-groups' || pageID === 'resolver-users' || pageID === 'resolver-strategy') return pageID
+  if (pageID === 'accounts' || pageID === 'resolver' || pageID === 'resolver-strategy') return pageID
   return 'subscriptions'
 })
 const isSubscriptionsPage = computed(() => activePage.value === 'subscriptions')
-const resolverView = computed<'group' | 'private' | 'strategy'>(() => {
-  if (activePage.value === 'resolver-groups') return 'group'
-  if (activePage.value === 'resolver-users') return 'private'
-  return 'strategy'
-})
+const resolverView = computed<'targets' | 'strategy'>(() => activePage.value === 'resolver' ? 'targets' : 'strategy')
 const pageLabels: Record<ManagementPage, string> = {
   accounts: '账号管理',
   subscriptions: '订阅设置',
-  'resolver-groups': '群聊解析',
-  'resolver-users': '用户解析',
+  resolver: '链接解析',
   'resolver-strategy': '防抖与媒体策略',
 }
 const currentPageLabel = computed(() => pageLabels[activePage.value])
@@ -600,24 +595,14 @@ function resetCurrentPage() {
     resetSettings()
     return
   }
-  if (activePage.value === 'resolver-groups') {
+  if (activePage.value === 'resolver') {
     for (const target of settings.value.resolver.targets) {
-      if (target.target_type !== 'group') continue
       target.bilibili = false
       target.weibo = false
       target.douyin = false
     }
-    setStatus('已关闭全部群聊解析，保存后生效')
-    return
-  }
-  if (activePage.value === 'resolver-users') {
-    for (const target of settings.value.resolver.targets) {
-      if (target.target_type !== 'private') continue
-      target.bilibili = false
-      target.weibo = false
-      target.douyin = false
-    }
-    setStatus('已关闭全部用户解析，保存后生效')
+    settings.value.resolver.super_admin_whitelist = false
+    setStatus('已关闭超级管理员白名单和全部群聊、私聊解析，保存后生效')
     return
   }
   settings.value.resolver.cooldowns = structuredClone(DEFAULT_RESOLVER_SETTINGS.cooldowns)

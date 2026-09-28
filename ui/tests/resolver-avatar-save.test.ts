@@ -12,7 +12,7 @@ const host = vi.hoisted(() => {
   }
   const init = {
     config: initialConfig,
-    page: { id: 'resolver-groups', label: '群聊解析' },
+    page: { id: 'resolver', label: '链接解析' },
     theme: { mode: 'light', tokens: {} },
   }
   const client = {
@@ -66,7 +66,7 @@ describe('resolver avatar lifecycle', () => {
     app.mount(root)
     await settle()
 
-    findButton(root, '添加群聊').click()
+    findButton(root, '添加对象').click()
     await settle()
 
     const avatarBeforeSave = root.querySelector<HTMLImageElement>('.target-choice-card img')

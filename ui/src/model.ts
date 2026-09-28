@@ -99,12 +99,14 @@ export interface ResolverMediaSettings {
 
 export interface ResolverSettings {
   targets: ResolverTargetSettings[]
+  super_admin_whitelist: boolean
   cooldowns: ResolverCooldownSettings
   media: ResolverMediaSettings
 }
 
 export const DEFAULT_RESOLVER_SETTINGS: ResolverSettings = {
   targets: [],
+  super_admin_whitelist: false,
   cooldowns: {
     same_link_enabled: true,
     same_link_seconds: 10,
@@ -251,6 +253,7 @@ export function normalizeResolverSettings(value: unknown): ResolverSettings {
     : []
   return {
     targets: [...new Map(targets.map((target) => [targetKey(target.target_type, target.target_id), target])).values()],
+    super_admin_whitelist: source.super_admin_whitelist === true,
     cooldowns: {
       same_link_enabled: cooldowns.same_link_enabled !== false,
       same_link_seconds: boundedInteger(cooldowns.same_link_seconds, 10, 1, 3600),

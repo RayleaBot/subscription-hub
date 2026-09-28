@@ -13,7 +13,10 @@
           <h1>链接解析状态</h1>
           <p class="target">{{ if .target_type }}{{ .target_type }}{{ else }}当前会话{{ end }}{{ if .target_name }} · {{ .target_name }}{{ end }}</p>
         </div>
-        <span class="default-note">默认关闭 · 按会话生效</span>
+        <div class="hero-notes">
+          <span class="default-note">默认关闭 · 按会话生效</span>
+          <span class="admin-note{{ if .super_admin_whitelist }} admin-note--on{{ end }}">超管白名单 {{ if .super_admin_whitelist }}已开启 · 超管链接全部解析{{ else }}已关闭{{ end }}</span>
+        </div>
       </header>
 
       <section class="platforms" aria-label="平台解析开关">

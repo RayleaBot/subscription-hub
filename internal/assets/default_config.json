@@ -7,6 +7,7 @@
   "subscriptions": [],
   "resolver": {
     "targets": [],
+    "super_admin_whitelist": false,
     "cooldowns": {
       "same_link_enabled": true,
       "same_link_seconds": 10,
