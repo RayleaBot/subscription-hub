@@ -59,7 +59,7 @@
         <section class="media-grid {{ .media_grid_class }}" aria-label="动态图片">
           {{ range .media_items }}
           <figure class="{{ .class }}">
-            <img src="{{ .url }}" alt="" />
+            <img src="{{ .url }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
             {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
             {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}
           </figure>
@@ -97,7 +97,7 @@
           <div class="repost-media {{ .media_grid_class }}">
             {{ range .media_items }}
             <figure class="{{ .class }}">
-              <img src="{{ .url }}" alt="" />
+              <img src="{{ .url }}"{{ if .resource_id }} data-render-resource="{{ .resource_id }}"{{ end }}{{ if .fallback }} data-fallback="{{ .fallback }}"{{ end }} alt="" />
               {{ if .label }}<figcaption>{{ .label }}</figcaption>{{ end }}
               {{ if .duration_text }}<span class="duration-badge">{{ .duration_text }}</span>{{ end }}
             </figure>

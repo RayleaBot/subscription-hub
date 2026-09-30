@@ -84,7 +84,7 @@ func (session *session) Prepare(ctx context.Context, update plugin.Update) (plug
 }
 func (session *session) UpdateCard(item plugin.Subscription, update plugin.Update) plugin.CardRequest {
 	data := buildBilibiliRenderData(item, update)
-	return plugin.CardRequest{Template: "bilibili-update", Data: data, Resources: nil, Fallback: buildBilibiliFallback(data), InlineAvatars: true}
+	return plugin.CardRequest{Template: "bilibili-update", Data: data, Resources: prepareBilibiliUpdateResources(data), Fallback: buildBilibiliFallback(data), InlineAvatars: true}
 }
 func (session *session) Preview(ctx context.Context, input string) (plugin.Update, bool, error) {
 	if ref := parseBilibiliPreviewURL(input); ref != nil {

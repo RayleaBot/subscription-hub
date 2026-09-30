@@ -288,7 +288,7 @@ func BuildMediaItems(images []map[string]any, duration, service string) []map[st
 
 // MediaItemCandidates 提取单条媒体数据的镜像候选地址（渲染资源取图重试用）。
 func MediaItemCandidates(value any) []string {
-	values := SliceValue(value)
+	values := stringSlice(value)
 	result := make([]string, 0, len(values))
 	for _, raw := range values {
 		if text := strings.TrimSpace(StringScalar(raw)); text != "" {
