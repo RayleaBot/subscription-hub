@@ -2,6 +2,7 @@ package bilibili
 
 import (
 	"html"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -523,15 +524,12 @@ func dynamicImages(major map[string]any, service string) []map[string]any {
 		}
 		appendBilibiliImage(&images, plugin.NestedValue(major, "common", "cover"))
 	}
-	if len(images) > 9 {
-		images = images[:9]
-	}
 	return images
 }
 
 func appendBilibiliImage(images *[]map[string]any, value any) {
 	if text, ok := value.(string); ok {
-		if normalized := plugin.NormalizeMediaURL(text); normalized != "" {
+		if normalized := bilibiliImageURL(text); normalized != "" {
 			*images = append(*images, map[string]any{"url": normalized})
 		}
 		return
@@ -540,7 +538,7 @@ func appendBilibiliImage(images *[]map[string]any, value any) {
 	if object == nil {
 		return
 	}
-	imageURL := plugin.NormalizeMediaURL(plugin.FirstNonNil(object["url"], object["src"], object["cover"]))
+	imageURL := bilibiliImageURL(plugin.FirstNonNil(object["url"], object["src"], object["cover"]))
 	if imageURL == "" {
 		return
 	}
@@ -551,6 +549,20 @@ func appendBilibiliImage(images *[]map[string]any, value any) {
 		}
 	}
 	*images = append(*images, image)
+}
+
+func bilibiliImageURL(value any) string {
+	imageURL := plugin.NormalizeMediaURL(value)
+	parsed, err := url.Parse(imageURL)
+	if err == nil && parsed.Scheme == "http" {
+		host := strings.ToLower(parsed.Hostname())
+		// 动态和 opus 接口仍返回 HTTP 原图；B 站图片 CDN 支持 HTTPS。
+		if host == "hdslb.com" || strings.HasSuffix(host, ".hdslb.com") {
+			parsed.Scheme = "https"
+			return parsed.String()
+		}
+	}
+	return imageURL
 }
 
 func liveUpdate(location *time.Location, document map[string]any, uid string) map[string]any {

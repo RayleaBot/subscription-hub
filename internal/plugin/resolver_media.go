@@ -29,7 +29,7 @@ type preparedResolverMedia struct {
 	Name string
 }
 
-func (handler *Handler) deliverResolverMedia(ctx context.Context, event *rayleabot.EventContext, platform string, update Update, plan ResolverMediaPlan, settings ResolverMediaSettings) (sendErr error) {
+func (handler *Handler) deliverResolverMedia(ctx context.Context, actions HostActions, platform string, plan ResolverMediaPlan, settings ResolverMediaSettings, target resolverSendTarget) (sendErr error) {
 	job := &deferredMediaJob{}
 	dispatched := false
 	if !handler.deferredMedia.push(job) {
@@ -58,24 +58,54 @@ func (handler *Handler) deliverResolverMedia(ctx context.Context, event *rayleab
 	if len(prepared) == 0 {
 		return nil
 	}
-	actions := handler.hostActions(event)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	dispatched = true
-	return sendPreparedResolverMedia(ctx, actions, platform, prepared, settings, resolverSendTarget{
-		TargetType: NormalizedTargetType(event.Event.Target.Type),
-		TargetID:   event.Event.Target.ID,
-		Bot:        event.Bot,
-		ActorID:    event.Event.Actor.ID,
-	})
+	return sendPreparedResolverMedia(ctx, actions, platform, prepared, settings, target)
 }
 
 type resolverSendTarget struct {
-	TargetType string
-	TargetID   string
-	Bot        rayleabot.Bot
-	ActorID    string
+	TargetType    string
+	TargetID      string
+	SubjectName   string
+	SenderID      string
+	SenderName    string
+	SourceAdapter string
+}
+
+func resolverMediaTarget(event *rayleabot.EventContext, platform string, update Update) resolverSendTarget {
+	target := subscriptionMediaTarget(Subscription{
+		Platform: platform, TargetType: event.Event.Target.Type, TargetID: event.Event.Target.ID,
+		Subscribers: MergeSubscriber(nil, event),
+	}, update)
+	target.SourceAdapter = event.Event.SourceAdapter
+	if target.SenderID == "" {
+		target.SenderID = event.Bot.ID
+		target.SenderName = FirstText(event.Bot.Nickname, "订阅与解析")
+	}
+	return target
+}
+
+func subscriptionMediaTarget(item Subscription, update Update) resolverSendTarget {
+	target := resolverSendTarget{
+		TargetType: NormalizedTargetType(item.TargetType), TargetID: item.TargetID,
+		SubjectName: FirstText(NestedValue(update, "author", "name"), item.Name, item.UID, resolverPlatformLabel(item.Platform)),
+		SenderName:  "订阅与解析",
+	}
+	for _, subscriber := range item.Subscribers {
+		if id := strings.TrimSpace(subscriber.ID); id != "" {
+			target.SenderID = id
+			target.SenderName = FirstText(subscriber.GroupNickname, subscriber.Nickname, id)
+			break
+		}
+	}
+	// 旧订阅可能没有订阅人；群聊不借用触发检查的管理员身份。
+	if target.SenderID == "" && target.TargetType == "private" {
+		target.SenderID = target.TargetID
+		target.SenderName = FirstText(item.TargetName, target.TargetID)
+	}
+	return target
 }
 
 func prepareResolverMediaSources(ctx context.Context, tempRoot string, sources []ResolverMediaSource, settings ResolverMediaSettings) ([]preparedResolverMedia, error) {
@@ -92,24 +122,6 @@ func prepareResolverMediaSources(ctx context.Context, tempRoot string, sources [
 }
 
 func sendPreparedResolverMedia(ctx context.Context, actions HostActions, platform string, prepared []preparedResolverMedia, settings ResolverMediaSettings, target resolverSendTarget) error {
-	if len(prepared) == 1 && prepared[0].Kind == "video" {
-		return sendResolverVideo(ctx, actions, platform, target, prepared[0], settings)
-	}
-	allImages := true
-	for _, item := range prepared {
-		allImages = allImages && item.Kind == "image"
-	}
-	if allImages && settings.ImageForwardThreshold > 0 && len(prepared) <= settings.ImageForwardThreshold {
-		segments := make([]rayleabot.Segment, 0, len(prepared))
-		for _, item := range prepared {
-			segments = append(segments, rayleabot.Image(item.Path))
-		}
-		_, err := actions.MessageSend(ctx, rayleabot.MessageSendRequest{
-			TargetType: target.TargetType, TargetID: target.TargetID,
-			Message: rayleabot.MessageOut{Segments: segments},
-		})
-		return err
-	}
 	return sendResolverForward(ctx, actions, platform, prepared, settings.ImageBatchSize, target)
 }
 
@@ -366,41 +378,16 @@ func runResolverCommand(ctx context.Context, executable string, args ...string) 
 	return fmt.Errorf("FFmpeg 处理失败：%s", detail)
 }
 
-func sendResolverVideo(ctx context.Context, actions HostActions, platform string, target resolverSendTarget, media preparedResolverMedia, settings ResolverMediaSettings) error {
-	info, err := os.Stat(media.Path)
-	if err != nil {
-		return err
-	}
-	// 抖音解析结果必须保持视频消息；通用的超限文件策略仅用于其他平台。
-	if platform != "douyin" && settings.UploadOversize && info.Size() > int64(settings.VideoSizeLimitMB)<<20 {
-		caller, ok := actions.(GenericLocalActionCaller)
-		if !ok {
-			return errors.New("文件上传动作不可用")
-		}
-		action := "file.group.upload"
-		request := map[string]any{"group_id": target.TargetID, "file": media.Path, "name": media.Name}
-		if target.TargetType == "private" {
-			action = "file.private.upload"
-			request = map[string]any{"user_id": target.TargetID, "file": media.Path, "name": media.Name}
-		}
-		var result map[string]any
-		return caller.Call(ctx, action, request, &result)
-	}
-	_, err = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
-		TargetType: target.TargetType, TargetID: target.TargetID,
-		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Passthrough("video", map[string]any{"file": media.Path})}},
-	})
-	return err
-}
-
 func sendResolverForward(ctx context.Context, actions HostActions, platform string, media []preparedResolverMedia, batchSize int, target resolverSendTarget) error {
+	if len(media) == 0 {
+		return nil
+	}
 	caller, ok := actions.(GenericLocalActionCaller)
 	if !ok {
 		return errors.New("合并转发动作不可用")
 	}
 	batchSize = boundedSetting(batchSize, 50, 1, 100)
-	name := FirstText(target.Bot.Nickname, resolverPlatformLabel(platform), "订阅与解析")
-	uin := FirstText(target.Bot.ID, target.ActorID)
+	name := FirstText(target.SenderName, target.SenderID, "订阅与解析")
 	for offset := 0; offset < len(media); offset += batchSize {
 		end := offset + batchSize
 		if end > len(media) {
@@ -408,16 +395,25 @@ func sendResolverForward(ctx context.Context, actions HostActions, platform stri
 		}
 		nodes := make([]map[string]any, 0, end-offset)
 		for _, item := range media[offset:end] {
-			segmentType := item.Kind
-			data := map[string]any{"file": item.Path}
+			data := map[string]any{
+				"name":    name,
+				"content": []map[string]any{{"type": item.Kind, "data": map[string]any{"file": item.Path}}},
+			}
+			if target.SenderID != "" {
+				data["uin"] = target.SenderID
+			}
 			nodes = append(nodes, map[string]any{
 				"type": "node",
-				"data": map[string]any{"name": name, "uin": uin, "content": []map[string]any{{"type": segmentType, "data": data}}},
+				"data": data,
 			})
 		}
 		request := map[string]any{
 			"target_type": target.TargetType, "target_id": target.TargetID,
 			"messages": nodes,
+			"source":   FirstText(target.SubjectName, resolverPlatformLabel(platform), "订阅与解析"),
+		}
+		if target.SourceAdapter != "" {
+			request["source_adapter"] = target.SourceAdapter
 		}
 		var result map[string]any
 		if err := caller.Call(ctx, "message.forward.send", request, &result); err != nil {

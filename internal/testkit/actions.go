@@ -28,6 +28,8 @@ type Actions struct {
 	RenderErrors       []error
 	Messages           []rayleabot.MessageSendRequest
 	MessageErrors      []error
+	ForwardRequests    []map[string]any
+	ForwardErrors      []error
 	Logs               []rayleabot.LoggerWriteRequest
 	GroupMembers       map[string]rayleabot.ActionResult
 	GroupErrors        map[string]error
@@ -186,6 +188,18 @@ func (fake *Actions) Call(_ context.Context, action string, input any, output an
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
 	switch action {
+	case "message.forward.send":
+		var request map[string]any
+		if err := decodeInput(input, &request); err != nil {
+			return err
+		}
+		fake.ForwardRequests = append(fake.ForwardRequests, request)
+		if len(fake.ForwardErrors) > 0 {
+			err := fake.ForwardErrors[0]
+			fake.ForwardErrors = fake.ForwardErrors[1:]
+			return err
+		}
+		return nil
 	case "render.image":
 		var request RenderRequest
 		if err := decodeInput(input, &request); err != nil {

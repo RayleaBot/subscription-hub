@@ -315,9 +315,6 @@ func normalizeOpusDetailItem(location *time.Location, item map[string]any, canon
 		return nil
 	}
 	pubTS := plugin.IntScalar(plugin.FirstNonNil(author["pub_ts"], basic["pub_ts"]))
-	if len(images) > 9 {
-		images = images[:9]
-	}
 	return map[string]any{
 		"id": id, "type": plugin.FirstText(item["type"], "DYNAMIC_TYPE_DRAW"), "service": "image_text", "category": dynamicCategory("image_text"),
 		"title": title, "summary": plugin.TruncateRunes(strings.Join(summaryParts, "\n"), 420), "summary_html": strings.Join(htmlParts, "<br>"),

@@ -241,7 +241,8 @@ func TestSubscriptionCheckBaselinesThenRendersNewDynamic(t *testing.T) {
 		videoDynamic("old", "已有视频", now.Add(-time.Minute).Unix()),
 	)}
 	second := checkAt(t, context.Background(), fake, current, now.Add(2*time.Minute))
-	if plugin.IntScalar(second["sent"]) != 1 || plugin.BoolScalar(second["degraded"]) {
+	// 此样例只有卡片数据；缺少视频标识应报告媒体失败，卡片仍成功去重。
+	if plugin.IntScalar(second["sent"]) != 1 || !plugin.BoolScalar(second["degraded"]) || !plugin.ContainsService(second["failure_causes"].([]string), "bilibili:media:unspecified") {
 		t.Fatalf("second check result = %#v", second)
 	}
 	if len(fake.Renders) != 1 || len(fake.Messages) != 1 {

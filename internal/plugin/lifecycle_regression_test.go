@@ -15,32 +15,36 @@ import (
 
 type delayedMediaActions struct {
 	*testkit.Actions
-	received chan rayleabot.MessageSendRequest
+	received chan map[string]any
 	confirm  <-chan struct{}
 }
 
-func (actions *delayedMediaActions) MessageSend(ctx context.Context, request rayleabot.MessageSendRequest) (rayleabot.ActionResult, error) {
+func (actions *delayedMediaActions) Call(ctx context.Context, action string, input any, output any) error {
+	if action != "message.forward.send" {
+		return actions.Actions.Call(ctx, action, input, output)
+	}
+	request := input.(map[string]any)
 	actions.received <- request
 	select {
 	case <-actions.confirm:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
-	path, _ := request.Message.Segments[0].Data["file"].(string)
+	path := StringScalar(NestedValue(forwardMedia(request, 0), "data", "file"))
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if string(data) != "fixture" {
-		return nil, fmt.Errorf("unexpected media content")
+		return fmt.Errorf("unexpected media content")
 	}
-	return actions.Actions.MessageSend(ctx, request)
+	return actions.Actions.Call(ctx, action, input, output)
 }
 
 func TestMediaIsReleasedOnlyAfterDelayedAdapterConfirmation(t *testing.T) {
 	handler := newWorkflowHandler(t)
 	confirm := make(chan struct{})
-	actions := &delayedMediaActions{Actions: testkit.NewActions(), received: make(chan rayleabot.MessageSendRequest, 2), confirm: confirm}
+	actions := &delayedMediaActions{Actions: testkit.NewActions(), received: make(chan map[string]any, 2), confirm: confirm}
 	handler.actions = actions
 	root, err := handler.deferredMedia.createTemp()
 	if err != nil {
@@ -63,7 +67,7 @@ func TestMediaIsReleasedOnlyAfterDelayedAdapterConfirmation(t *testing.T) {
 	}()
 	select {
 	case request := <-actions.received:
-		if request.Message.Segments[0].Data["file"] != file {
+		if NestedValue(forwardMedia(request, 0), "data", "file") != file {
 			t.Error("adapter did not receive the original media path")
 		}
 	case <-ctx.Done():
@@ -74,8 +78,8 @@ func TestMediaIsReleasedOnlyAfterDelayedAdapterConfirmation(t *testing.T) {
 	}
 	close(confirm)
 	<-done
-	if len(actions.Messages) != 1 {
-		t.Fatalf("confirmed sends = %d, want 1", len(actions.Messages))
+	if len(actions.ForwardRequests) != 1 {
+		t.Fatalf("confirmed sends = %d, want 1", len(actions.ForwardRequests))
 	}
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Fatal("confirmed media was not released")
@@ -85,7 +89,7 @@ func TestMediaIsReleasedOnlyAfterDelayedAdapterConfirmation(t *testing.T) {
 func TestExplicitRateLimitRetainsMediaForOnlyTheNextAttempt(t *testing.T) {
 	handler := newWorkflowHandler(t)
 	actions := testkit.NewActions()
-	actions.MessageErrors = []error{&rayleabot.ActionError{Code: "platform.rate_limited", Message: "fixture explicit refusal"}, nil}
+	actions.ForwardErrors = []error{&rayleabot.ActionError{Code: "platform.rate_limited", Message: "fixture explicit refusal"}, nil}
 	handler.actions = actions
 	root, err := handler.deferredMedia.createTemp()
 	if err != nil {
@@ -104,8 +108,8 @@ func TestExplicitRateLimitRetainsMediaForOnlyTheNextAttempt(t *testing.T) {
 	}
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
-	if len(actions.Messages) != 2 {
-		t.Fatalf("attempts = %d, want refusal then success", len(actions.Messages))
+	if len(actions.ForwardRequests) != 2 {
+		t.Fatalf("attempts = %d, want refusal then success", len(actions.ForwardRequests))
 	}
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Fatal("successful retry retained media")
@@ -201,7 +205,7 @@ func TestCheckWarningsAggregateByStructuredCauseAndKeepNewFailuresVisible(t *tes
 func TestUnconfirmedMediaKeepsFileAndDoesNotResend(t *testing.T) {
 	handler := newWorkflowHandler(t)
 	actions := testkit.NewActions()
-	actions.MessageErrors = []error{&rayleabot.ActionError{Code: "adapter.send_unconfirmed", Message: "fixture receipt timeout"}}
+	actions.ForwardErrors = []error{&rayleabot.ActionError{Code: "adapter.send_unconfirmed", Message: "fixture receipt timeout"}}
 	handler.actions = actions
 	root, err := handler.deferredMedia.createTemp()
 	if err != nil {
@@ -217,8 +221,8 @@ func TestUnconfirmedMediaKeepsFileAndDoesNotResend(t *testing.T) {
 	}
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
-	if len(actions.Messages) != 1 {
-		t.Fatalf("uncertain send replayed or sent a second notice: %d", len(actions.Messages))
+	if len(actions.Messages) != 0 || len(actions.ForwardRequests) != 1 {
+		t.Fatalf("uncertain send replayed or sent a second notice: %d, %d", len(actions.Messages), len(actions.ForwardRequests))
 	}
 	if _, err := os.Stat(file); err != nil {
 		t.Fatalf("media removed before late reader: %v", err)

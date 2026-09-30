@@ -41,9 +41,6 @@
       },
       "media": {
         "live_record_seconds": 30,
-        "video_size_limit_mb": 70,
-        "upload_oversize": true,
-        "image_forward_threshold": 0,
         "image_batch_size": 50,
         "media_concurrency": 1,
         "video_codec": "auto",

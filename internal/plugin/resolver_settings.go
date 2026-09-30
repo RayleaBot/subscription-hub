@@ -8,8 +8,6 @@ func NormalizeResolverSettings(settings ResolverSettings) ResolverSettings {
 	settings.Cooldowns.SamePlatformSeconds = boundedSetting(settings.Cooldowns.SamePlatformSeconds, 10, 1, 3600)
 	media := &settings.Media
 	media.LiveRecordSeconds = boundedSetting(media.LiveRecordSeconds, 30, 5, 50)
-	media.VideoSizeLimitMB = boundedSetting(media.VideoSizeLimitMB, 70, 1, 2048)
-	media.ImageForwardThreshold = boundedSettingAllowZero(media.ImageForwardThreshold, 0, 100)
 	media.ImageBatchSize = boundedSetting(media.ImageBatchSize, 50, 1, 100)
 	media.MediaConcurrency = boundedSetting(media.MediaConcurrency, 1, 1, 8)
 	switch strings.ToLower(strings.TrimSpace(media.VideoCodec)) {

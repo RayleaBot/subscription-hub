@@ -23,6 +23,19 @@ func (session *session) ResolverMedia(ctx context.Context, update plugin.Update,
 		live := plugin.MapValue(update["_resolver_live"])
 		streamURL := douyinResolverLiveURL(live)
 		if streamURL == "" {
+			// 订阅主页的直播状态可能没有流地址，按直播间链接补齐。
+			if ref := parseDouyinPreviewURL(plugin.StringScalar(update["url"])); ref != nil && (ref.Kind == "live" || ref.Kind == "live_reflow") {
+				detailed, err := fetchDouyinPreview(ctx, session.actions, ref)
+				if err != nil {
+					return plugin.ResolverMediaPlan{}, err
+				}
+				if detailed["live_status"] != nil && plugin.IntScalar(detailed["live_status"]) != 1 {
+					return plugin.ResolverMediaPlan{}, nil
+				}
+				streamURL = douyinResolverLiveURL(plugin.MapValue(detailed["_resolver_live"]))
+			}
+		}
+		if streamURL == "" {
 			return plugin.ResolverMediaPlan{}, errors.New("没有获取到抖音直播流")
 		}
 		return plugin.ResolverMediaPlan{Sources: []plugin.ResolverMediaSource{{Kind: "live", URLs: []string{streamURL}, Headers: headers, FileName: "douyin-live.mp4"}}}, nil

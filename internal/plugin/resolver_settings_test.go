@@ -23,7 +23,7 @@ func TestResolverDefaultConfigIsClosedAndUsesTenSecondLinkCooldown(t *testing.T)
 	if settings.Resolver.Cooldowns.SamePlatformEnabled {
 		t.Fatal("same-platform cooldown must default off")
 	}
-	if settings.Resolver.Media.LiveRecordSeconds != 30 || !settings.Resolver.Media.UploadOversize {
+	if settings.Resolver.Media.LiveRecordSeconds != 30 || settings.Resolver.Media.ImageBatchSize != 50 {
 		t.Fatalf("media defaults = %#v", settings.Resolver.Media)
 	}
 	if settings.Resolver.SuperAdminWhitelist {

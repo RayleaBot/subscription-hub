@@ -42,7 +42,7 @@ describe('subscription settings model', () => {
     expect(defaults.resolver.targets).toEqual([])
     expect(defaults.resolver.super_admin_whitelist).toBe(false)
     expect(defaults.resolver.cooldowns).toMatchObject({ same_link_enabled: true, same_link_seconds: 10, same_platform_enabled: false })
-    expect(defaults.resolver.media).toMatchObject({ live_record_seconds: 30, video_size_limit_mb: 70, media_concurrency: 1 })
+    expect(defaults.resolver.media).toMatchObject({ live_record_seconds: 30, image_batch_size: 50, media_concurrency: 1 })
 
     const settings = normalizeSettings({
       resolver: {
@@ -60,14 +60,22 @@ describe('subscription settings model', () => {
   it('normalizes resolver strategy values to supported bounds', () => {
     const resolver = normalizeResolverSettings({
       cooldowns: { same_link_seconds: 0, same_platform_seconds: 9000 },
-      media: { live_record_seconds: 500, media_concurrency: 0, video_codec: 'vp9', image_forward_threshold: -1 },
+      media: { live_record_seconds: 500, media_concurrency: 0, video_codec: 'vp9', image_batch_size: -1 },
     })
     expect(resolver.cooldowns.same_link_seconds).toBe(1)
     expect(resolver.cooldowns.same_platform_seconds).toBe(3600)
     expect(resolver.media.live_record_seconds).toBe(50)
     expect(resolver.media.media_concurrency).toBe(1)
     expect(resolver.media.video_codec).toBe('auto')
-    expect(resolver.media.image_forward_threshold).toBe(0)
+    expect(resolver.media.image_batch_size).toBe(1)
+  })
+
+  it('ignores obsolete direct-image and file-upload settings', () => {
+    const resolver = normalizeResolverSettings({ media: { image_forward_threshold: 100, upload_oversize: true, video_size_limit_mb: 1 } })
+    expect(resolver.media).not.toHaveProperty('image_forward_threshold')
+    expect(resolver.media).not.toHaveProperty('upload_oversize')
+    expect(resolver.media).not.toHaveProperty('video_size_limit_mb')
+    expect(resolver.media.image_batch_size).toBe(50)
   })
 
   it('clones reactive-style resolver proxies without structured clone failures', () => {

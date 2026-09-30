@@ -70,6 +70,7 @@ func TestDeferredMediaDownloadAndFlush(t *testing.T) {
 	handler.actions = actions
 	job := &deferredMediaJob{
 		TargetType: "group", TargetID: "12345", Platform: "douyin",
+		SubjectName: "抖音作者", SenderID: "20002", SenderName: "链接发送人", SourceAdapter: "qq-main",
 		Sources:  []ResolverMediaSource{{Kind: "video", URLs: []string{videoServer.URL}, FileName: "douyin-test.mp4"}},
 		Settings: ResolverMediaSettings{},
 	}
@@ -88,17 +89,19 @@ func TestDeferredMediaDownloadAndFlush(t *testing.T) {
 	if len(handler.deferredMedia.jobs) != 0 {
 		t.Fatalf("flushed job still queued: %#v", handler.deferredMedia.jobs)
 	}
-	if len(actions.Messages) != 1 {
-		t.Fatalf("flush sent %d messages, want 1", len(actions.Messages))
+	if len(actions.Messages) != 0 || len(actions.ForwardRequests) != 1 {
+		t.Fatalf("flush delivery = %#v, %#v", actions.Messages, actions.ForwardRequests)
 	}
-	segments := actions.Messages[0].Message.Segments
-	if len(segments) != 1 || segments[0].Type != "video" || !strings.Contains(segments[0].Data["file"].(string), "douyin-test.mp4") {
-		t.Fatalf("flush message = %#v", segments)
+	request := actions.ForwardRequests[0]
+	media := forwardMedia(request, 0)
+	path := StringScalar(NestedValue(media, "data", "file"))
+	if media["type"] != "video" || !strings.Contains(path, "douyin-test.mp4") {
+		t.Fatalf("flush message = %#v", media)
 	}
-	if actions.Messages[0].TargetID != "12345" {
-		t.Fatalf("flush target = %#v", actions.Messages[0])
+	if request["target_id"] != "12345" || request["source"] != "抖音作者" || request["source_adapter"] != "qq-main" || forwardNode(request, 0)["uin"] != "20002" || forwardNode(request, 0)["name"] != "链接发送人" {
+		t.Fatalf("flush identity = %#v", request)
 	}
-	if _, err := os.Stat(segments[0].Data["file"].(string)); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("flushed media temp file was not cleaned up: %v", err)
 	}
 }
@@ -125,7 +128,7 @@ func TestEnsureSchedulerRegistersDedicatedMediaFlush(t *testing.T) {
 func TestDeferredMediaSendFailureCleansTempFiles(t *testing.T) {
 	handler := newWorkflowHandler(t)
 	actions := testkit.NewActions()
-	actions.MessageErrors = []error{errors.New("send failed"), nil}
+	actions.ForwardErrors = []error{errors.New("send failed")}
 	handler.actions = actions
 	tempRoot, err := os.MkdirTemp("", "raylea-deferred-test-*")
 	if err != nil {
@@ -150,7 +153,7 @@ func TestDeferredMediaSendFailureCleansTempFiles(t *testing.T) {
 	if len(handler.deferredMedia.jobs) != 0 {
 		t.Fatalf("failed media job still queued")
 	}
-	if len(actions.Messages) != 2 {
+	if len(actions.Messages) != 1 || len(actions.ForwardRequests) != 1 {
 		t.Fatalf("send failure should emit one failure notice: %#v", actions.Messages)
 	}
 }

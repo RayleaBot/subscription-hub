@@ -156,6 +156,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 				}
 				if handler.deliverUpdate(ctx, stateCtx, actions, item, update, card, avatars, &failures) {
 					sent++
+					handler.enqueueSubscriptionMedia(ctx, actions, session, item, content.value, current.Resolver.Media, &failures)
 				}
 			}
 			if polled.ReadyUIDs[strings.TrimSpace(item.UID)] && stateErr == nil && !initialized && needsBaseline {
@@ -189,6 +190,33 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 	}
 	result["failure_causes"] = failures.keys()
 	return result
+}
+
+func (handler *Handler) enqueueSubscriptionMedia(ctx context.Context, actions HostActions, session CheckSession, item Subscription, update Update, settings ResolverMediaSettings, failures *checkFailures) {
+	settings = NormalizeResolverSettings(ResolverSettings{Media: settings}).Media
+	plan, err := planUpdateMedia(ctx, session, update, settings)
+	var skipped *ResolverMediaSkippedError
+	if errors.As(err, &skipped) {
+		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+			Level: "debug", Message: skipped.Reason,
+			Fields: map[string]any{"platform": item.Platform, "subscription_id": item.ID},
+		})
+		return
+	}
+	if err == nil && len(plan.Sources) == 0 {
+		return
+	}
+	if err == nil && !handler.enqueueDeferredMedia(subscriptionMediaTarget(item, update), item.Platform, plan, settings) {
+		err = errors.New("后台媒体队列已满")
+	}
+	if err != nil {
+		// 卡片已发送并写入去重记录；媒体失败不能触发整条订阅重发。
+		failures.add(item.Platform, "media", "订阅媒体发送未完成："+err.Error(), err)
+		_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+			Level: "warn", Message: "订阅卡片已发送，媒体未入队：" + DiagnosticExcerpt(err.Error(), 240),
+			Fields: map[string]any{"platform": item.Platform, "stage": "media", "subscription_id": item.ID, "target_type": item.TargetType, "target_id": item.TargetID},
+		})
+	}
 }
 
 func usesBaseline(platform Platform, item Subscription) bool {

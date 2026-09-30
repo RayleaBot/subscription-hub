@@ -12,5 +12,5 @@
   "same_platform_enabled": false,
   "same_platform_seconds": 10,
   "live_record_seconds": 30,
-  "video_size_limit_mb": 70
+  "image_batch_size": 50
 }

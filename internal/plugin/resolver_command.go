@@ -86,7 +86,7 @@ func (handler *Handler) replyResolverHelp(ctx context.Context, event *rayleabot.
 		"same_platform_enabled": current.Resolver.Cooldowns.SamePlatformEnabled,
 		"same_platform_seconds": current.Resolver.Cooldowns.SamePlatformSeconds,
 		"live_record_seconds":   current.Resolver.Media.LiveRecordSeconds,
-		"video_size_limit_mb":   current.Resolver.Media.VideoSizeLimitMB,
+		"image_batch_size":      current.Resolver.Media.ImageBatchSize,
 	}
 	card := CardRequest{Template: "resolver-help", Data: data, Fallback: resolverHelpText(target, current.Resolver, prefix)}
 	return handler.replyCard(ctx, event, "resolver", card)

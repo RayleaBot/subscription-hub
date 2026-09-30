@@ -45,12 +45,12 @@
         <article class="policy-card">
           <p>直播录制</p>
           <strong>{{ .live_record_seconds }} 秒</strong>
-          <span>直播链接命中后发送短视频</span>
+          <span>直播片段通过合并转发发送</span>
         </article>
         <article class="policy-card">
-          <p>文件上传阈值</p>
-          <strong>{{ .video_size_limit_mb }} MB</strong>
-          <span>B站、微博超出时转为文件；抖音保持视频消息</span>
+          <p>合并转发</p>
+          <strong>每批 {{ .image_batch_size }} 条</strong>
+          <span>原图与视频共用，解析与订阅推送均生效</span>
         </article>
       </section>
 

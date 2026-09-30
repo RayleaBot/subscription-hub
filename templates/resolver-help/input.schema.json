@@ -25,7 +25,7 @@
     "same_platform_enabled": { "type": "boolean" },
     "same_platform_seconds": { "type": "integer" },
     "live_record_seconds": { "type": "integer" },
-    "video_size_limit_mb": { "type": "integer" }
+    "image_batch_size": { "type": "integer" }
   },
   "additionalProperties": true
 }

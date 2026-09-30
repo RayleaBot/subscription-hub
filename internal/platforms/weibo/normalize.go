@@ -201,9 +201,6 @@ func weiboMblogImages(mblog map[string]any, service string) []map[string]any {
 			"url": imageURL, "width": plugin.IntScalar(plugin.FirstNonNil(plugin.NestedValue(pic, "large", "geo", "width"), plugin.NestedValue(pic, "geo", "width"))),
 			"height": plugin.IntScalar(plugin.FirstNonNil(plugin.NestedValue(pic, "large", "geo", "height"), plugin.NestedValue(pic, "geo", "height"))),
 		})
-		if len(images) == 9 {
-			return images
-		}
 	}
 	if len(images) > 0 {
 		return images

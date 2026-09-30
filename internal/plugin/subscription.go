@@ -35,9 +35,6 @@ type ResolverCooldownSettings struct {
 
 type ResolverMediaSettings struct {
 	LiveRecordSeconds          int    `json:"live_record_seconds"`
-	VideoSizeLimitMB           int    `json:"video_size_limit_mb"`
-	UploadOversize             bool   `json:"upload_oversize"`
-	ImageForwardThreshold      int    `json:"image_forward_threshold"`
 	ImageBatchSize             int    `json:"image_batch_size"`
 	MediaConcurrency           int    `json:"media_concurrency"`
 	VideoCodec                 string `json:"video_codec"`

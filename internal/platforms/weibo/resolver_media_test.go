@@ -1,6 +1,23 @@
 package weibo
 
-import "testing"
+import (
+	"fmt"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"testing"
+)
+
+func TestWeiboOriginalImagesAreNotLimitedByCardGrid(t *testing.T) {
+	pics := make([]any, 12)
+	for index := range pics {
+		pics[index] = map[string]any{"large": map[string]any{"url": fmt.Sprintf("https://wx1.sinaimg.cn/large/original-%d.jpg", index)}}
+	}
+	update := plugin.Update{"service": "image", "images": weiboMblogImages(map[string]any{"pics": pics}, "image")}
+	plan, err := (&session{actions: testkit.NewActions()}).ResolverMedia(t.Context(), update, plugin.ResolverMediaSettings{})
+	if err != nil || len(plan.Sources) != len(pics) || plan.Sources[11].URLs[0] != "https://wx1.sinaimg.cn/large/original-11.jpg" {
+		t.Fatalf("original plan = %#v, %v", plan, err)
+	}
+}
 
 func TestWeiboResolverVideoURLsPrefersHighDefinitionAndDeduplicates(t *testing.T) {
 	urls := weiboResolverVideoURLs(map[string]any{

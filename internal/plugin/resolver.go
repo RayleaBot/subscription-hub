@@ -113,20 +113,15 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		return err
 	}
 
-	plan := genericResolverMedia(update)
-	if planner, ok := session.(ResolverMediaPlanningSession); ok {
-		planned, planErr := planner.ResolverMedia(resolverCtx, update, current.Resolver.Media)
-		if planErr != nil {
-			handler.sendResolverFailure(resolverCtx, event, resolverMediaPlanMessage(planErr))
-			return event.Result(map[string]any{"handled": true, "card": true, "media": false})
-		}
-		if len(planned.Sources) > 0 {
-			plan = planned
-		}
+	plan, planErr := planUpdateMedia(resolverCtx, session, update, current.Resolver.Media)
+	if planErr != nil {
+		handler.sendResolverFailure(resolverCtx, event, resolverMediaPlanMessage(planErr))
+		return event.Result(map[string]any{"handled": true, "card": true, "media": false})
 	}
+	mediaTarget := resolverMediaTarget(event, platform, update)
 	if len(plan.Sources) > 0 {
 		if handler.deferMediaForBackground(platform, plan) {
-			if handler.enqueueDeferredMedia(event, platform, plan, current.Resolver.Media) {
+			if handler.enqueueDeferredMedia(mediaTarget, platform, plan, current.Resolver.Media) {
 				noticeCtx, noticeCancel := context.WithTimeout(resolverCtx, resolverFailureSendTimeout)
 				defer noticeCancel()
 				_, _ = handler.hostActions(event).MessageSend(noticeCtx, rayleabot.MessageSendRequest{
@@ -142,7 +137,7 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		if gateErr != nil {
 			return gateErr
 		}
-		mediaErr := handler.deliverResolverMedia(resolverCtx, event, platform, update, plan, current.Resolver.Media)
+		mediaErr := handler.deliverResolverMedia(resolverCtx, handler.hostActions(event), platform, plan, current.Resolver.Media, mediaTarget)
 		release()
 		if mediaErr != nil {
 			if mediaOutcomeUncertain(mediaErr) {
@@ -154,6 +149,16 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		}
 	}
 	return event.Result(map[string]any{"handled": true, "card": true, "media": len(plan.Sources) > 0})
+}
+
+func planUpdateMedia(ctx context.Context, session any, update Update, settings ResolverMediaSettings) (ResolverMediaPlan, error) {
+	if planner, ok := session.(ResolverMediaPlanningSession); ok {
+		plan, err := planner.ResolverMedia(ctx, update, settings)
+		if err != nil || len(plan.Sources) > 0 {
+			return plan, err
+		}
+	}
+	return genericResolverMedia(update), nil
 }
 
 // resolverTargetForEvent returns the resolver switches that apply to the
@@ -323,7 +328,8 @@ func resolverUpdateImages(update Update) []string {
 	appendImages := func(value any) {
 		for _, image := range MapSliceValue(value) {
 			for _, candidate := range append([]string{StringScalar(image["url"])}, MediaItemCandidates(image["candidates"])...) {
-				if strings.HasPrefix(candidate, "https://") && !seen[candidate] {
+				candidate = NormalizeMediaURL(candidate)
+				if candidate != "" && !seen[candidate] {
 					seen[candidate] = true
 					result = append(result, candidate)
 					break

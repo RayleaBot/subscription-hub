@@ -23,7 +23,7 @@ func (session *session) ResolverMedia(ctx context.Context, update plugin.Update,
 		if plugin.IntScalar(update["live_status"]) != 1 {
 			return plugin.ResolverMediaPlan{}, nil
 		}
-		roomID := plugin.StringScalar(plugin.NestedValue(update, "_resolver_live", "room_id"))
+		roomID := plugin.FirstText(plugin.NestedValue(update, "_resolver_live", "room_id"), update["room_id"])
 		if roomID == "" {
 			roomID = strings.TrimPrefix(plugin.StringScalar(update["id"]), "live-")
 		}
@@ -66,6 +66,25 @@ func (session *session) ResolverMedia(ctx context.Context, update plugin.Update,
 	}
 	if video == nil {
 		return plugin.ResolverImagePlan(update, headers, "bilibili-image"), nil
+	}
+	// 动态列表的 archive 通常只有 bvid/aid；播放接口还需要分 P 的 cid。
+	if plugin.StringScalar(video["cid"]) == "" {
+		query := url.Values{}
+		if bvid := plugin.StringScalar(video["bvid"]); bvid != "" {
+			query.Set("bvid", bvid)
+		} else if aid := plugin.FirstText(video["aid"], video["avid"]); aid != "" {
+			query.Set("aid", aid)
+		} else {
+			return plugin.ResolverMediaPlan{}, errors.New("没有获取到 Bilibili 视频标识")
+		}
+		document, err := newBilibiliClient(session.actions).requestJSON(ctx, "GET", bilibiliVideoViewURL+"?"+query.Encode(), account, false, false, "", false)
+		if err != nil {
+			return plugin.ResolverMediaPlan{}, errors.New(friendlyBilibiliSourceError("Bilibili 视频详情获取失败", err))
+		}
+		video = plugin.MapValue(document["data"])
+		if plugin.StringScalar(video["cid"]) == "" {
+			return plugin.ResolverMediaPlan{}, errors.New("没有获取到 Bilibili 视频分 P 标识")
+		}
 	}
 	duration := bilibiliResolverDuration(update, video)
 	if duration > settings.BilibiliMaxDurationSeconds {

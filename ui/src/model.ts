@@ -77,9 +77,6 @@ export interface ResolverCooldownSettings {
 
 export interface ResolverMediaSettings {
   live_record_seconds: number
-  video_size_limit_mb: number
-  upload_oversize: boolean
-  image_forward_threshold: number
   image_batch_size: number
   media_concurrency: number
   video_codec: 'auto' | 'avc' | 'hevc' | 'av1'
@@ -115,9 +112,6 @@ export const DEFAULT_RESOLVER_SETTINGS: ResolverSettings = {
   },
   media: {
     live_record_seconds: 30,
-    video_size_limit_mb: 70,
-    upload_oversize: true,
-    image_forward_threshold: 0,
     image_batch_size: 50,
     media_concurrency: 1,
     video_codec: 'auto',
@@ -262,9 +256,6 @@ export function normalizeResolverSettings(value: unknown): ResolverSettings {
     },
     media: {
       live_record_seconds: boundedInteger(media.live_record_seconds, 30, 5, 50),
-      video_size_limit_mb: boundedInteger(media.video_size_limit_mb, 70, 1, 2048),
-      upload_oversize: media.upload_oversize !== false,
-      image_forward_threshold: boundedInteger(media.image_forward_threshold, 0, 0, 100),
       image_batch_size: boundedInteger(media.image_batch_size, 50, 1, 100),
       media_concurrency: boundedInteger(media.media_concurrency, 1, 1, 8),
       video_codec: codecs.has(trim(media.video_codec)) ? trim(media.video_codec) as ResolverMediaSettings['video_codec'] : 'auto',

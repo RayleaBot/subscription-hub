@@ -142,7 +142,8 @@ func TestDouyinSubscriptionCheckBaselinesThenRendersNewAweme(t *testing.T) {
 		douyinVideoAweme("old", secUID, "测试用户", "已有作品", now.Add(-time.Minute).Unix()),
 	)}
 	second := checkAt(t, context.Background(), fake, current, now.Add(2*time.Minute))
-	if plugin.IntScalar(second["sent"]) != 1 || plugin.BoolScalar(second["degraded"]) {
+	// 此样例没有播放地址；媒体失败不应影响新作品卡片与去重状态。
+	if plugin.IntScalar(second["sent"]) != 1 || !plugin.BoolScalar(second["degraded"]) || !plugin.ContainsService(second["failure_causes"].([]string), "douyin:media:unspecified") {
 		t.Fatalf("second check result = %#v", second)
 	}
 	if len(fake.Renders) != 1 || fake.Renders[0].Template != "douyin-update" {
@@ -200,7 +201,7 @@ func TestDouyinSubscriptionCheckPushesLiveStartOncePerSession(t *testing.T) {
 	// 第三轮：再次开播推送开播卡片。
 	fake.HTTPResponses = []rayleabot.ActionResult{douyinAwemePostResult(liveAweme(1))}
 	third := checkAt(t, context.Background(), fake, current, now.Add(2*time.Minute))
-	if plugin.IntScalar(third["sent"]) != 1 || plugin.BoolScalar(third["degraded"]) {
+	if plugin.IntScalar(third["sent"]) != 1 || !plugin.BoolScalar(third["degraded"]) || !plugin.ContainsService(third["failure_causes"].([]string), "douyin:media:unspecified") {
 		t.Fatalf("live restart was not pushed: %#v", third)
 	}
 	if len(fake.Renders) != 1 || fake.Renders[0].Template != "douyin-update" {
