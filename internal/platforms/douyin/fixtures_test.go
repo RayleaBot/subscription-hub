@@ -14,7 +14,7 @@ import (
 
 func newHandler(t testing.TB, at ...time.Time) *plugin.Handler {
 	t.Helper()
-	options := plugin.Options{Platforms: []plugin.Platform{New()}}
+	options := plugin.Options{Platforms: []plugin.Platform{New()}, MediaTempRoot: t.TempDir()}
 	if len(at) > 0 {
 		options.Now = func() time.Time { return at[0] }
 	}

@@ -73,6 +73,28 @@ func (job *deferredMediaJob) retain() {
 	// A failed update keeps the conservative initial lease valid across restart.
 }
 
+func (job *deferredMediaJob) occupiesMediaSlot() bool {
+	job.mu.Lock()
+	retained, root := !job.retainUntil.IsZero(), job.tempRoot
+	job.mu.Unlock()
+	if !retained {
+		// 下载开始前也要预留任务槽，不能根据目录是否为空判断活动任务。
+		return true
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		// 无法检查目录时保守保留配额；不存在的目录没有待保留媒体。
+		return !os.IsNotExist(err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != mediaLeaseName && entry.Name() != mediaLeaseName+".next" {
+			return true
+		}
+	}
+	// 空记录仍按原期限清理，不占媒体配额，也不提前删除保留标记。
+	return false
+}
+
 func (queue *deferredMediaQueue) loadRetained() {
 	entries, err := os.ReadDir(queue.root)
 	if err != nil {

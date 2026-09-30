@@ -326,14 +326,14 @@ func TestPlatformAssemblyRejectsAmbiguousRoutes(t *testing.T) {
 		{name: "missing source factory", platforms: []Platform{{ID: "alpha", Name: "alpha"}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := NewHandler(Options{Platforms: test.platforms}); err == nil {
+			if _, err := NewHandler(Options{Platforms: test.platforms, MediaTempRoot: t.TempDir()}); err == nil {
 				t.Fatal("ambiguous assembly accepted")
 			}
 		})
 	}
 	platform := workflowPlatform("alpha", &workflowSession{})
 	platform.Commands = map[string]string{"订阅列表": "add"}
-	if _, err := NewHandler(Options{Platforms: []Platform{platform}}); err == nil {
+	if _, err := NewHandler(Options{Platforms: []Platform{platform}, MediaTempRoot: t.TempDir()}); err == nil {
 		t.Fatal("platform overrode a shared command")
 	}
 }

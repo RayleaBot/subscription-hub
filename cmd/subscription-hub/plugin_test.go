@@ -249,7 +249,7 @@ func TestNormalizeDeliveryMaxAgeMinutes(t *testing.T) {
 
 func newHandler(t testing.TB) *plugin.Handler {
 	t.Helper()
-	handler, err := plugin.NewHandler(plugin.Options{Platforms: platforms()})
+	handler, err := plugin.NewHandler(plugin.Options{Platforms: platforms(), MediaTempRoot: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func testRuntimeRoutesManagementCommandsAndPreviews(t *testing.T, aliases bool) 
 		"subscriptions": []any{}, "resolver": map[string]any{},
 	}
 	actions.HTTPDefault = testkit.AvatarHTTPResult()
-	handler, err := plugin.NewHandler(plugin.Options{Platforms: platforms(), Actions: actions, Jitter: func() time.Duration { return 0 }})
+	handler, err := plugin.NewHandler(plugin.Options{Platforms: platforms(), Actions: actions, MediaTempRoot: t.TempDir(), Jitter: func() time.Duration { return 0 }})
 	if err != nil {
 		t.Fatal(err)
 	}

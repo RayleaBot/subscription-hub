@@ -93,8 +93,14 @@ func (queue *deferredMediaQueue) push(job *deferredMediaJob) bool {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	queue.pruneRetainedLocked(time.Now())
-	if len(queue.jobs) >= deferredMediaMaxJobs {
-		return false
+	occupied := 0
+	for _, existing := range queue.jobs {
+		if existing.occupiesMediaSlot() {
+			occupied++
+			if occupied >= deferredMediaMaxJobs {
+				return false
+			}
+		}
 	}
 	queue.jobs = append(queue.jobs, job)
 	return true
