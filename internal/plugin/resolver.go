@@ -23,6 +23,7 @@ type ResolverMediaSource struct {
 }
 
 const resolverFailureSendTimeout = 10 * time.Second
+const resolverMediaFailureMessage = "媒体处理失败，请稍后重试；管理员可查看插件日志。"
 
 type ResolverMediaPlan struct {
 	Sources []ResolverMediaSource
@@ -115,6 +116,10 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 
 	plan, planErr := planUpdateMedia(resolverCtx, session, update, current.Resolver.Media)
 	if planErr != nil {
+		var skipped *ResolverMediaSkippedError
+		if !errors.As(planErr, &skipped) {
+			logResolverMediaFailure(resolverCtx, handler.hostActions(event), platform, resolverMediaTarget(event, platform, update), planErr)
+		}
 		handler.sendResolverFailure(resolverCtx, event, resolverMediaPlanMessage(planErr))
 		return event.Result(map[string]any{"handled": true, "card": true, "media": false})
 	}
@@ -140,11 +145,7 @@ func (handler *Handler) handleResolverMessage(ctx context.Context, event *raylea
 		mediaErr := handler.deliverResolverMedia(resolverCtx, handler.hostActions(event), platform, plan, current.Resolver.Media, mediaTarget)
 		release()
 		if mediaErr != nil {
-			if mediaOutcomeUncertain(mediaErr) {
-				handler.sendResolverFailure(resolverCtx, event, "媒体发送结果未确认，可能仍会送达；文件保留 24 小时，未自动重发")
-			} else {
-				handler.sendResolverFailure(resolverCtx, event, "媒体发送失败："+mediaErr.Error())
-			}
+			handler.reportResolverMediaFailure(resolverCtx, event, platform, mediaTarget, mediaErr)
 			return event.Result(map[string]any{"handled": true, "card": true, "media": false})
 		}
 	}
@@ -187,7 +188,28 @@ func resolverMediaPlanMessage(err error) string {
 	if errors.As(err, &skipped) {
 		return skipped.Error()
 	}
-	return "媒体解析失败：" + err.Error()
+	return resolverMediaFailureMessage
+}
+
+func logResolverMediaFailure(ctx context.Context, actions HostActions, platform string, target resolverSendTarget, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	fields := actionErrorLogFields(err)
+	fields["platform"] = platform
+	fields["target"] = target.TargetType + ":" + target.TargetID
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+		Level: "warn", Message: "媒体发送未完成", Fields: fields,
+	})
+}
+
+func (handler *Handler) reportResolverMediaFailure(ctx context.Context, event *rayleabot.EventContext, platform string, target resolverSendTarget, err error) {
+	logResolverMediaFailure(ctx, handler.hostActions(event), platform, target, err)
+	message := resolverMediaFailureMessage
+	if mediaOutcomeUncertain(err) {
+		message = "媒体发送结果未确认，可能仍会送达；文件保留 24 小时，未自动重发"
+	}
+	handler.sendResolverFailure(ctx, event, message)
 }
 
 func firstResolverURL(text string) string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -81,9 +80,6 @@ type deferredMediaQueue struct {
 }
 
 func newDeferredMediaQueue(root string) *deferredMediaQueue {
-	if root == "" {
-		root = filepath.Join(os.TempDir(), "raylea-subscription-media")
-	}
 	queue := &deferredMediaQueue{root: root}
 	queue.loadRetained()
 	return queue
@@ -258,14 +254,10 @@ func (handler *Handler) sendDeferredFailure(ctx context.Context, actions HostAct
 	if ctx.Err() != nil {
 		return
 	}
-	message := EnsureSentence(reason)
+	logResolverMediaFailure(ctx, actions, job.Platform, resolverSendTarget{TargetType: job.TargetType, TargetID: job.TargetID}, errors.New(reason))
 	_, _ = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
 		SourceAdapter: job.SourceAdapter,
 		TargetType:    job.TargetType, TargetID: job.TargetID,
-		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text(message)}},
-	})
-	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-		Level: "warn", Message: "媒体发送未完成：" + message,
-		Fields: map[string]any{"platform": job.Platform, "target": job.TargetType + ":" + job.TargetID},
+		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text(resolverMediaFailureMessage)}},
 	})
 }

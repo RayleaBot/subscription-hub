@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -182,5 +183,68 @@ func TestDeferredMediaDownloadFailureNotifies(t *testing.T) {
 	}
 	if len(actions.Messages) != 1 {
 		t.Fatalf("failure notice sent %d messages, want 1", len(actions.Messages))
+	}
+	assertMediaFailureIsPrivate(t, actions, "127.0.0.1:1")
+}
+
+func TestDeferredMediaCacheFailureKeepsLocalPathInLogs(t *testing.T) {
+	handler := newWorkflowHandler(t)
+	actions := testkit.NewActions()
+	handler.actions = actions
+	blocked := filepath.Join(t.TempDir(), "private-media-cache")
+	if err := os.WriteFile(blocked, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler.deferredMedia = newDeferredMediaQueue(blocked)
+	job := &deferredMediaJob{TargetType: "group", TargetID: "fixture-group", Platform: "douyin", SourceAdapter: "fixture-adapter"}
+	if !handler.deferredMedia.push(job) {
+		t.Fatal("queue push failed")
+	}
+	handler.downloadDeferredMedia(job)
+	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
+	assertMediaFailureIsPrivate(t, actions, blocked)
+	if len(handler.deferredMedia.jobs) != 0 || actions.Messages[0].SourceAdapter != job.SourceAdapter {
+		t.Fatal("failed job was not removed or notice lost its source adapter")
+	}
+}
+
+func TestDeferredMediaFailureRedactsCredentialsInLogs(t *testing.T) {
+	handler := newWorkflowHandler(t)
+	actions := testkit.NewActions()
+	handler.sendDeferredFailure(t.Context(), actions, &deferredMediaJob{TargetType: "group", TargetID: "fixture-group"}, "open /private/media.mp4: Access is denied; access_token=fixture-sensitive-token")
+	assertMediaFailureIsPrivate(t, actions, "/private/media.mp4")
+	if strings.Contains(StringScalar(actions.Logs[0].Fields["error"]), "fixture-sensitive-token") {
+		t.Fatal("media diagnostics leaked a credential")
+	}
+}
+
+func TestMediaCacheUsesHostDirectory(t *testing.T) {
+	cacheRoot := filepath.Join(t.TempDir(), "cache", "plugins", "raylea.subscription-hub")
+	t.Setenv("RAYLEABOT_PLUGIN_CACHE_DIR", cacheRoot)
+	handler, err := NewHandler(Options{Platforms: []Platform{workflowPlatform("fixture", &workflowSession{})}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(handler.accountQR.Close)
+	jobRoot, err := handler.deferredMedia.createTemp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(jobRoot) != filepath.Join(cacheRoot, "media") {
+		t.Fatalf("media cache escaped the host cache: %q", jobRoot)
+	}
+	if _, err := os.Stat(filepath.Join(jobRoot, mediaLeaseName)); err != nil {
+		t.Fatalf("media lease not created: %v", err)
+	}
+}
+
+func TestMediaCacheRequiresAbsoluteHostDirectory(t *testing.T) {
+	for _, root := range []string{"", "relative-cache"} {
+		t.Run(root, func(t *testing.T) {
+			t.Setenv("RAYLEABOT_PLUGIN_CACHE_DIR", root)
+			if _, err := NewHandler(Options{Platforms: []Platform{workflowPlatform("fixture", &workflowSession{})}}); err == nil {
+				t.Fatal("missing or relative host cache must not fall back to the system temp directory")
+			}
+		})
 	}
 }

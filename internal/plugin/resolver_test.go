@@ -7,9 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
+	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
 )
 
@@ -98,11 +101,49 @@ func TestResolverMediaPlanMessageDistinguishesLimitsFromFailures(t *testing.T) {
 	})
 
 	t.Run("planning failure", func(t *testing.T) {
-		message := resolverMediaPlanMessage(errors.New("没有获取到视频地址"))
-		if message != "媒体解析失败：没有获取到视频地址" {
+		message := resolverMediaPlanMessage(errors.New("open /private/media.mp4: permission denied"))
+		if !strings.Contains(message, "失败") || strings.Contains(message, "/private/") || strings.Contains(message, "permission denied") {
 			t.Fatalf("unexpected failure message: %q", message)
 		}
 	})
+}
+
+func TestResolverCacheFailureKeepsLocalPathInLogs(t *testing.T) {
+	handler := newWorkflowHandler(t)
+	actions := testkit.NewActions()
+	handler.actions = actions
+	blocked := filepath.Join(t.TempDir(), "private-media-cache")
+	if err := os.WriteFile(blocked, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler.deferredMedia = newDeferredMediaQueue(blocked)
+	target := resolverSendTarget{TargetType: "group", TargetID: "fixture-group"}
+	err := handler.deliverResolverMedia(t.Context(), actions, "bilibili", ResolverMediaPlan{}, ResolverMediaSettings{}, target)
+	if err == nil || !strings.Contains(err.Error(), blocked) {
+		t.Fatalf("expected local cache failure, got %v", err)
+	}
+	event := &rayleabot.EventContext{Event: rayleabot.Event{Target: rayleabot.Target{Type: target.TargetType, ID: target.TargetID}}}
+	handler.reportResolverMediaFailure(t.Context(), event, "bilibili", target, err)
+	assertMediaFailureIsPrivate(t, actions, blocked)
+	if len(handler.deferredMedia.jobs) != 0 {
+		t.Fatal("failed synchronous job still occupies the queue")
+	}
+}
+
+func assertMediaFailureIsPrivate(t *testing.T, actions *testkit.Actions, privateDetail string) {
+	t.Helper()
+	if len(actions.Messages) != 1 || len(actions.Logs) != 1 {
+		t.Fatalf("failure reporting: messages=%#v logs=%#v", actions.Messages, actions.Logs)
+	}
+	message := actions.Messages[0]
+	text := StringScalar(message.Message.Segments[0].Data["text"])
+	if !strings.Contains(text, "失败") || strings.Contains(text, privateDetail) || strings.Contains(text, "mkdir") || strings.Contains(text, "Access is denied") {
+		t.Fatalf("failure notice leaked internal details: %q", text)
+	}
+	log := actions.Logs[0]
+	if !strings.Contains(StringScalar(log.Fields["error"]), privateDetail) || log.Level != "warn" || log.Fields["target"] != message.TargetType+":"+message.TargetID {
+		t.Fatalf("failure diagnostics missing: %#v", log)
+	}
 }
 
 func TestExpandResolverURLLeavesDouyinShortLinksToPlatform(t *testing.T) {

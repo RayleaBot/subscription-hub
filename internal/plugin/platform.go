@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -150,7 +152,7 @@ type AvatarPolicy struct {
 }
 
 type Options struct {
-	// MediaTempRoot isolates owned media leases; empty selects the process temp directory.
+	// MediaTempRoot isolates owned media leases; empty uses the host's plugin cache.
 	MediaTempRoot string
 	Platforms     []Platform
 	Actions       RuntimeActions
@@ -186,10 +188,18 @@ func NewHandler(options Options) (*Handler, error) {
 	if len(options.Platforms) == 0 {
 		return nil, errors.New("subscription hub requires at least one platform")
 	}
+	mediaRoot := options.MediaTempRoot
+	if mediaRoot == "" {
+		cacheRoot := os.Getenv("RAYLEABOT_PLUGIN_CACHE_DIR")
+		if !filepath.IsAbs(cacheRoot) {
+			return nil, errors.New("宿主未提供有效的插件缓存目录 RAYLEABOT_PLUGIN_CACHE_DIR")
+		}
+		mediaRoot = filepath.Join(cacheRoot, "media")
+	}
 	handler := &Handler{
 		byID: map[string]Platform{}, commands: map[string]commandRoute{}, resolverCooldowns: map[string]time.Time{},
 		actions: options.Actions, now: options.Now, jitter: options.Jitter,
-		deferredMedia: newDeferredMediaQueue(options.MediaTempRoot),
+		deferredMedia: newDeferredMediaQueue(mediaRoot),
 		checkGate:     make(chan struct{}, 1), schedulerGate: make(chan struct{}, 1),
 	}
 	if handler.now == nil {
