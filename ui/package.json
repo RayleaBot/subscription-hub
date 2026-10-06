@@ -7,7 +7,8 @@
   "scripts": {
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
-    "build": "vue-tsc --noEmit && vite build"
+    "build": "vue-tsc --noEmit && vite build",
+    "pnpm:devPreinstall": "node ../scripts/prepare-sdk.mjs"
   },
   "dependencies": {
     "@rayleabot/plugin-ui": "link:../.rayleabot/sdk/vue",
