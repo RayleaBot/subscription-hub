@@ -4,7 +4,7 @@
   "version": "0.6.0",
   "manifest_version": "4",
   "license": "MIT",
-  "min_core_version": "0.7.0",
+  "min_core_version": "0.4.0",
   "metadata": {
     "description": "订阅平台内容，解析 B 站、微博与抖音链接，并管理平台账号与 CK",
     "author": "raylea",
