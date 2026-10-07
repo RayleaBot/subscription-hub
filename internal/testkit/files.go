@@ -14,7 +14,7 @@ func RepositoryPath(t testing.TB, relative string) string {
 		t.Fatal(err)
 	}
 	for {
-		if data, err := os.ReadFile(filepath.Join(path, "go.mod")); err == nil && strings.Contains(string(data), "module github.com/RayleaBot/plugin-subscription-hub") {
+		if data, err := os.ReadFile(filepath.Join(path, "go.mod")); err == nil && strings.Contains(string(data), "module github.com/RayleaBot/subscription-hub") {
 			return filepath.Join(path, filepath.FromSlash(relative))
 		}
 		parent := filepath.Dir(path)

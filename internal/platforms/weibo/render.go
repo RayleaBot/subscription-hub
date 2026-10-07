@@ -3,7 +3,7 @@ package weibo
 import (
 	"strings"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 func buildWeiboRenderData(item plugin.Subscription, update map[string]any) map[string]any {

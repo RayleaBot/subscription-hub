@@ -3,7 +3,7 @@ package bilibili
 import (
 	"context"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 func prepareUpdate(ctx context.Context, actions plugin.SourceActions, update map[string]any) (map[string]any, error) {

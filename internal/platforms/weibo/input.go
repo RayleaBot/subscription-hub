@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 func subjectIDFromInput(value string) string {

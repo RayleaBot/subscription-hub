@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"github.com/RayleaBot/subscription-hub/internal/testkit"
 )
 
 const bilibiliOfficialDefaultAvatarSHA256 = "a1cc0fa827befd75d9c248a16e7fc0f37fa1501cd65c78c35d86812b4bab595c"

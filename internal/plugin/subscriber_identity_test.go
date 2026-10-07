@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"github.com/RayleaBot/subscription-hub/internal/testkit"
 )
 
 func TestSubscriberIdentityRefreshUsesLiveGroupMemberInfoAndCaches(t *testing.T) {

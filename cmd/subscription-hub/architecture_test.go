@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"github.com/RayleaBot/subscription-hub/internal/testkit"
 )
 
 func TestPlatformDependenciesKeepSharedRuntimeIndependent(t *testing.T) {
 	root := testkit.RepositoryPath(t, "internal")
-	const module = "github.com/RayleaBot/plugin-subscription-hub/internal/"
+	const module = "github.com/RayleaBot/subscription-hub/internal/"
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

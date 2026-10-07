@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/testkit"
 )
 
 func TestPrepareWeiboCardKeepsAllMainAndRepostImagesBeyondInlineBudget(t *testing.T) {

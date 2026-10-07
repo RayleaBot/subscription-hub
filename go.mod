@@ -1,4 +1,4 @@
-module github.com/RayleaBot/plugin-subscription-hub
+module github.com/RayleaBot/subscription-hub
 
 go 1.27.1
 

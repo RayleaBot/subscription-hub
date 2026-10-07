@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 type session struct {

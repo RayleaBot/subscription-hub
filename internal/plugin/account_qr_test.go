@@ -2,7 +2,7 @@ package plugin
 
 import (
 	"context"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"github.com/RayleaBot/subscription-hub/internal/testkit"
 	"sync/atomic"
 	"testing"
 	"time"

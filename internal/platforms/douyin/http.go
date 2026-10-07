@@ -17,8 +17,8 @@ import (
 	"unicode/utf8"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/httpaction"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 const douyinWebOrigin = "https://www.douyin.com"

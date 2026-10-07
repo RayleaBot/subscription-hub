@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 const (

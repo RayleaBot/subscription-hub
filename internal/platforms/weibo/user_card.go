@@ -3,7 +3,7 @@ package weibo
 import (
 	"context"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 const weiboUserCardTemplate = "weibo-user-card"

@@ -3,7 +3,7 @@ package douyin
 import (
 	"testing"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 // 抖音号（unique_id）可被用户修改，是用户可见的正式标识；sec_uid 是后台

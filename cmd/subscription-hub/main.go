@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/platforms/bilibili"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/platforms/douyin"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/platforms/netease_music"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/platforms/weibo"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/platforms/bilibili"
+	"github.com/RayleaBot/subscription-hub/internal/platforms/douyin"
+	"github.com/RayleaBot/subscription-hub/internal/platforms/netease_music"
+	"github.com/RayleaBot/subscription-hub/internal/platforms/weibo"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 func main() {

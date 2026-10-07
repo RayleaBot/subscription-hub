@@ -32,7 +32,7 @@ RayleaBot 官方插件 · `raylea.subscription-hub`
 
 ### 本地安装包
 
-也可以在插件列表中安装本仓库 [GitHub Release](https://github.com/RayleaBot/plugin-subscription-hub/releases) 里对应平台的 ZIP：
+也可以在插件列表中安装本仓库 [GitHub Release](https://github.com/RayleaBot/subscription-hub/releases) 里对应平台的 ZIP：
 
 | 平台 | 资源 |
 | --- | --- |
@@ -255,7 +255,7 @@ Bilibili 的「图文」也可写成「动态」。对象可以是 UID、昵称�
 ### 目录结构
 
 ```text
-plugin-subscription-hub/
+subscription-hub/
   cmd/subscription-hub/              进程入口
   internal/plugin/                   订阅命令、检查流程、调度与公共渲染
   internal/platforms/                各平台的请求、内容解析与卡片适配
@@ -276,7 +276,7 @@ plugin-subscription-hub/
   "workspace_version": "2",
   "plugins": [
     {
-      "path": "../RayleaBotPlugins/plugin-subscription-hub"
+      "path": "../RayleaBotPlugins/subscription-hub"
     }
   ]
 }

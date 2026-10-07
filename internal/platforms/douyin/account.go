@@ -15,7 +15,7 @@ import (
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 func normalizeDouyinAweme(location *time.Location, aweme map[string]any) map[string]any {

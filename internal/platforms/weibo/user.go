@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/httpaction"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/httpaction"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 var weiboNumericIDPattern = regexp.MustCompile(`^[0-9]+$`)

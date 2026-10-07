@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 func (session *session) ResolverMedia(ctx context.Context, update plugin.Update, settings plugin.ResolverMediaSettings) (plugin.ResolverMediaPlan, error) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"github.com/RayleaBot/subscription-hub/internal/testkit"
 )
 
 type stubAccountQRProvider struct{}

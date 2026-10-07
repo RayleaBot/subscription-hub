@@ -8,7 +8,7 @@
   "metadata": {
     "description": "订阅平台内容，解析 B 站、微博与抖音链接，并管理平台账号与 CK",
     "author": "raylea",
-    "repo": "https://github.com/RayleaBot/plugin-subscription-hub",
+    "repo": "https://github.com/RayleaBot/subscription-hub",
     "keywords": [
       "subscription",
       "bilibili",

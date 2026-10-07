@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 var douyinRSCPushPattern = regexp.MustCompile(`(?:self|window)\.__rsc_f\.push\(\s*`)

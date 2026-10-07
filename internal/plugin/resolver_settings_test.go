@@ -6,7 +6,7 @@ import (
 	"time"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
-	"github.com/RayleaBot/plugin-subscription-hub/internal/assets"
+	"github.com/RayleaBot/subscription-hub/internal/assets"
 )
 
 func TestResolverDefaultConfigIsClosedAndUsesTenSecondLinkCooldown(t *testing.T) {

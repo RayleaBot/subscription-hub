@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 func (session *session) PrepareResolverCard(_ context.Context, card plugin.CardRequest) plugin.CardRequest {

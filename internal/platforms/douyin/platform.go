@@ -3,7 +3,7 @@ package douyin
 import (
 	"strings"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/plugin"
+	"github.com/RayleaBot/subscription-hub/internal/plugin"
 )
 
 var catalog = plugin.NewServiceCatalog(

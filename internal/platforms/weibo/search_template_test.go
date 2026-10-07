@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RayleaBot/plugin-subscription-hub/internal/testkit"
+	"github.com/RayleaBot/subscription-hub/internal/testkit"
 )
 
 func TestWeiboSearchTemplatePreservesInlineAvatarOutsideURLContext(t *testing.T) {
