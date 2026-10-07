@@ -78,7 +78,7 @@ func TestDeferredMediaDownloadAndFlush(t *testing.T) {
 	if !handler.deferredMedia.push(job) {
 		t.Fatalf("queue push failed")
 	}
-	handler.downloadDeferredMedia(job)
+	handler.downloadDeferredMedia(t.Context(), job)
 	job.mu.Lock()
 	if job.failed != "" || len(job.prepared) == 0 {
 		job.mu.Unlock()
@@ -169,7 +169,7 @@ func TestDeferredMediaDownloadFailureNotifies(t *testing.T) {
 		Settings: ResolverMediaSettings{},
 	}
 	handler.deferredMedia.push(job)
-	handler.downloadDeferredMedia(job)
+	handler.downloadDeferredMedia(t.Context(), job)
 	job.mu.Lock()
 	if job.failed == "" {
 		job.mu.Unlock()
@@ -200,7 +200,7 @@ func TestDeferredMediaCacheFailureKeepsLocalPathInLogs(t *testing.T) {
 	if !handler.deferredMedia.push(job) {
 		t.Fatal("queue push failed")
 	}
-	handler.downloadDeferredMedia(job)
+	handler.downloadDeferredMedia(t.Context(), job)
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
 	assertMediaFailureIsPrivate(t, actions, blocked)
 	if len(handler.deferredMedia.jobs) != 0 || actions.Messages[0].SourceAdapter != job.SourceAdapter {
@@ -225,7 +225,7 @@ func TestMediaCacheUsesHostDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(handler.accountQR.Close)
+	t.Cleanup(handler.Close)
 	jobRoot, err := handler.deferredMedia.createTemp()
 	if err != nil {
 		t.Fatal(err)

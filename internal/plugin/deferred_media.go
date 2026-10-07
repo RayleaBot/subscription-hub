@@ -77,10 +77,18 @@ type deferredMediaQueue struct {
 	mu      sync.Mutex
 	flushMu sync.Mutex
 	jobs    []*deferredMediaJob
+
+	// 后台下载不属于任何事件，生命周期跟随队列：close 取消并等待它们，
+	// 关闭后不再启动新下载。
+	lifetime  context.Context
+	stop      context.CancelFunc
+	downloads sync.WaitGroup
+	closed    bool
 }
 
 func newDeferredMediaQueue(root string) *deferredMediaQueue {
 	queue := &deferredMediaQueue{root: root}
+	queue.lifetime, queue.stop = context.WithCancel(context.Background())
 	queue.loadRetained()
 	return queue
 }
@@ -88,6 +96,32 @@ func newDeferredMediaQueue(root string) *deferredMediaQueue {
 func (queue *deferredMediaQueue) push(job *deferredMediaJob) bool {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
+	return queue.pushLocked(job)
+}
+
+// pushDownload 预留任务槽并启动后台下载。关闭检查与启动在同一把锁内，
+// close 返回后不会再有下载写入 root。
+func (queue *deferredMediaQueue) pushDownload(job *deferredMediaJob, download func(context.Context, *deferredMediaJob)) bool {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	if queue.closed || !queue.pushLocked(job) {
+		return false
+	}
+	queue.downloads.Go(func() { download(queue.lifetime, job) })
+	return true
+}
+
+// close 取消进行中的后台下载并等待退出；被取消的下载会先删除自己的
+// 临时目录。已下载完成的任务留在磁盘上，按租约处理。
+func (queue *deferredMediaQueue) close() {
+	queue.mu.Lock()
+	queue.closed = true
+	queue.mu.Unlock()
+	queue.stop()
+	queue.downloads.Wait()
+}
+
+func (queue *deferredMediaQueue) pushLocked(job *deferredMediaJob) bool {
 	queue.pruneRetainedLocked(time.Now())
 	occupied := 0
 	for _, existing := range queue.jobs {
@@ -148,7 +182,7 @@ func (handler *Handler) deferMediaForBackground(platform string, plan ResolverMe
 }
 
 // enqueueDeferredMedia 把媒体任务转入后台下载队列，下载完成后由下一次
-// 定时任务发送。队列已满时返回 false，由调用方报告未入队原因。
+// 定时任务发送。队列已满或已关闭时返回 false，由调用方报告未入队原因。
 func (handler *Handler) enqueueDeferredMedia(target resolverSendTarget, platform string, plan ResolverMediaPlan, settings ResolverMediaSettings) bool {
 	job := &deferredMediaJob{
 		TargetType:  target.TargetType,
@@ -159,15 +193,11 @@ func (handler *Handler) enqueueDeferredMedia(target resolverSendTarget, platform
 		Sources:       plan.Sources,
 		Settings:      settings,
 	}
-	if !handler.deferredMedia.push(job) {
-		return false
-	}
-	go handler.downloadDeferredMedia(job)
-	return true
+	return handler.deferredMedia.pushDownload(job, handler.downloadDeferredMedia)
 }
 
-func (handler *Handler) downloadDeferredMedia(job *deferredMediaJob) {
-	ctx, cancel := context.WithTimeout(context.Background(), deferredMediaDownloadTimeout)
+func (handler *Handler) downloadDeferredMedia(ctx context.Context, job *deferredMediaJob) {
+	ctx, cancel := context.WithTimeout(ctx, deferredMediaDownloadTimeout)
 	defer cancel()
 	release, err := handler.mediaGate.acquire(ctx, job.Settings.MediaConcurrency)
 	if err != nil {

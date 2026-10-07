@@ -3,6 +3,8 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -260,5 +262,50 @@ func TestUnconfirmedSubscriptionPushIsNotRepeatedOnNextCheck(t *testing.T) {
 	handler.Check(t.Context(), actions, current)
 	if len(actions.Messages) != 1 {
 		t.Fatal("unconfirmed subscription message automatically resent")
+	}
+}
+
+func TestCloseStopsBackgroundMediaBeforeReturning(t *testing.T) {
+	requested, release := make(chan struct{}, 1), make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case requested <- struct{}{}:
+		default:
+		}
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	handler := newWorkflowHandler(t)
+	target := resolverSendTarget{TargetType: "group", TargetID: "fixture-target"}
+	plan := ResolverMediaPlan{Sources: []ResolverMediaSource{{Kind: "video", URLs: []string{server.URL}, FileName: "fixture.mp4"}}}
+	if !handler.enqueueDeferredMedia(target, "douyin", plan, ResolverMediaSettings{}) {
+		t.Fatal("queue full")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	select {
+	case <-requested:
+	case <-ctx.Done():
+		t.Fatal("background download did not start")
+	}
+	closed := make(chan struct{})
+	go func() {
+		defer close(closed)
+		handler.Close()
+	}()
+	select {
+	case <-closed:
+	case <-ctx.Done():
+		t.Fatal("close did not cancel the background download")
+	}
+	if entries, err := os.ReadDir(handler.deferredMedia.root); err != nil || len(entries) != 0 {
+		t.Fatalf("canceled download left media behind: %v, %v", entries, err)
+	}
+	if handler.enqueueDeferredMedia(target, "douyin", plan, ResolverMediaSettings{}) {
+		t.Fatal("closed handler started a background download")
 	}
 }

@@ -15,8 +15,15 @@ func Run(ctx context.Context, platforms ...Platform) error {
 	if err != nil {
 		return err
 	}
-	defer handler.accountQR.Close()
+	defer handler.Close()
 	return rayleabot.Run(ctx, rayleabot.Options{}, handler)
+}
+
+// Close 取消并等待后台媒体下载，再关闭扫码登录会话。返回后 Handler
+// 不再有后台工作写入媒体缓存目录。
+func (handler *Handler) Close() {
+	handler.deferredMedia.close()
+	handler.accountQR.Close()
 }
 
 func (handler *Handler) hostActions(event *rayleabot.EventContext) RuntimeActions {

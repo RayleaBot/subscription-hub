@@ -22,6 +22,7 @@ func newHandler(t testing.TB, at ...time.Time) *plugin.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(handler.Close)
 	return handler
 }
 func checkAt(t testing.TB, ctx context.Context, actions plugin.HostActions, current plugin.Settings, now time.Time) map[string]any {

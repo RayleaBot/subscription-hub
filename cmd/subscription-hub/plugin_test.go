@@ -253,6 +253,7 @@ func newHandler(t testing.TB) *plugin.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(handler.Close)
 	return handler
 }
 
@@ -280,6 +281,7 @@ func testRuntimeRoutesManagementCommandsAndPreviews(t *testing.T, aliases bool) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(handler.Close)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	inputReader, inputWriter := io.Pipe()

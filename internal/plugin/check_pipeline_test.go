@@ -64,7 +64,7 @@ func newWorkflowHandler(t testing.TB, platforms ...Platform) *Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(handler.accountQR.Close)
+	t.Cleanup(handler.Close)
 	return handler
 }
 
