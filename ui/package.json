@@ -14,7 +14,7 @@
     "@rayleabot/plugin-ui": "link:../.rayleabot/sdk/vue",
     "ant-design-vue": "4.2.6",
     "qrcode-generator": "2.0.4",
-    "vue": "3.5.41"
+    "vue": "3.5.43"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "6.0.8",
