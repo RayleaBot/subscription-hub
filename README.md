@@ -318,6 +318,6 @@ go run github.com/RayleaBot/RayleaBot/sdk/go/cmd/raylea-plugin build-go --plugin
 
 ## 独立构建环境
 
-Go 使用 `go.mod` 中可公开获取的 SDK 提交版本；CI 从 `.rayleabot-sdk-ref` 检出同一提交，使用 Go 1.27.1。
+Go 使用 `go.mod` 中可公开获取的 SDK 提交版本；CI 从 `.rayleabot-sdk-ref` 检出同一提交，使用 Go 1.27.2。
 
 首次执行 `pnpm --dir ui install --frozen-lockfile` 会通过 `pnpm:devPreinstall` 准备 Vue SDK，需要 Git 与网络。使用 `--ignore-scripts` 时，先执行 `node scripts/prepare-sdk.mjs`。主仓库开发工作区已提供 `.rayleabot/sdk/vue` 时直接复用。
