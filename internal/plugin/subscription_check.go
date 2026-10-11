@@ -60,7 +60,7 @@ func logSubscriptionFailure(ctx context.Context, actions HostActions, message st
 		outcome = "未确认是否送达，不自动重发"
 	}
 	completeMessage := fmt.Sprintf("%s（%s）；%s：%s", message, FirstText(item.Name, item.UID, item.ID), outcome, reason)
-	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "warn", Message: completeMessage, Fields: fields})
+	_, _ = actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: completeMessage, Fields: fields})
 }
 
 func rememberSubscriptionCheck(ctx context.Context, actions HostActions, result map[string]any, now time.Time) error {
@@ -80,6 +80,9 @@ func logSubscriptionCheck(ctx context.Context, actions HostActions, result map[s
 	failures := stringSlice(result["errors"])
 	checked, sent := IntScalar(result["checked"]), IntScalar(result["sent"])
 	fields := map[string]any{"checked": checked, "sent": sent, "failure_count": len(failures)}
+	if details, ok := result["failure_details"].([]map[string]any); ok && len(details) > 0 {
+		fields["failure_details"] = details
+	}
 	if causes := stringSlice(result["failure_causes"]); len(causes) > 0 {
 		fields["failure_causes"] = causes
 	}

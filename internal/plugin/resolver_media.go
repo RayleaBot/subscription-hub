@@ -76,6 +76,7 @@ type resolverSendTarget struct {
 
 func resolverMediaTarget(event *rayleabot.EventContext, platform string, update Update) resolverSendTarget {
 	target := subscriptionMediaTarget(Subscription{
+		SourceAdapter: event.Event.SourceAdapter, SourceProtocol: event.Event.SourceProtocol,
 		Platform: platform, TargetType: event.Event.Target.Type, TargetID: event.Event.Target.ID,
 		Subscribers: MergeSubscriber(nil, event),
 	}, update)
@@ -89,7 +90,8 @@ func resolverMediaTarget(event *rayleabot.EventContext, platform string, update 
 
 func subscriptionMediaTarget(item Subscription, update Update) resolverSendTarget {
 	target := resolverSendTarget{
-		TargetType: NormalizedTargetType(item.TargetType), TargetID: item.TargetID,
+		SourceAdapter: item.SourceAdapter,
+		TargetType:    NormalizedTargetType(item.TargetType), TargetID: item.TargetID,
 		SubjectName: FirstText(NestedValue(update, "author", "name"), item.Name, item.UID, resolverPlatformLabel(item.Platform)),
 		SenderName:  "订阅与解析",
 	}

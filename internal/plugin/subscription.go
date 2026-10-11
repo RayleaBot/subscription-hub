@@ -18,12 +18,14 @@ type ResolverSettings struct {
 }
 
 type ResolverTarget struct {
-	TargetType string `json:"target_type"`
-	TargetID   string `json:"target_id"`
-	TargetName string `json:"target_name,omitempty"`
-	Bilibili   bool   `json:"bilibili"`
-	Weibo      bool   `json:"weibo"`
-	Douyin     bool   `json:"douyin"`
+	SourceAdapter  string `json:"source_adapter"`
+	SourceProtocol string `json:"source_protocol"`
+	TargetType     string `json:"target_type"`
+	TargetID       string `json:"target_id"`
+	TargetName     string `json:"target_name,omitempty"`
+	Bilibili       bool   `json:"bilibili"`
+	Weibo          bool   `json:"weibo"`
+	Douyin         bool   `json:"douyin"`
 }
 
 type ResolverCooldownSettings struct {
@@ -53,9 +55,11 @@ type ResolverMediaSettings struct {
 }
 
 type Subscription struct {
-	ID       string `json:"id"`
-	Platform string `json:"platform"`
-	UID      string `json:"uid"`
+	SourceAdapter  string `json:"source_adapter"`
+	SourceProtocol string `json:"source_protocol"`
+	ID             string `json:"id"`
+	Platform       string `json:"platform"`
+	UID            string `json:"uid"`
 	// UniqueID 是可修改的展示标识，UID 是稳定的订阅来源标识。
 	UniqueID    string       `json:"unique_id,omitempty"`
 	Name        string       `json:"name"`

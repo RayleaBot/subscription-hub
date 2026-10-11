@@ -166,7 +166,10 @@ func planUpdateMedia(ctx context.Context, session any, update Update, settings R
 // current message. Super admins bypass the per-target switches when the
 // whitelist is enabled; cooldowns still key on the real target.
 func resolverTargetForEvent(settings ResolverSettings, event *rayleabot.EventContext) (ResolverTarget, bool) {
-	target, exists := settings.Target(event.Event.Target.Type, event.Event.Target.ID)
+	if !validSubscriptionRoute(event.Event.SourceProtocol, event.Event.SourceAdapter) {
+		return ResolverTarget{}, false
+	}
+	target, exists := settings.Target(event.Event.SourceProtocol, event.Event.SourceAdapter, event.Event.Target.Type, event.Event.Target.ID)
 	if settings.SuperAdminWhitelist && ActorIsSuperAdmin(event) {
 		target.Bilibili, target.Weibo, target.Douyin = true, true, true
 		return target, target.TargetID != ""
@@ -280,7 +283,7 @@ func canonicalResolverKey(raw string) string {
 
 func (handler *Handler) resolverCooldownHit(target ResolverTarget, platform, link string, settings ResolverCooldownSettings) bool {
 	now := handler.now()
-	targetKey := target.TargetType + ":" + target.TargetID
+	targetKey := target.SourceProtocol + ":" + target.SourceAdapter + ":" + target.TargetType + ":" + target.TargetID
 	keys := make([]struct {
 		key      string
 		enabled  bool

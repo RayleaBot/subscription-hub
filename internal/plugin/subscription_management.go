@@ -42,10 +42,13 @@ func (handler *Handler) AddSubscription(ctx context.Context, actions SourceActio
 		return SubscriptionOutcome{Message: "当前会话无法绑定订阅目标。"}
 	}
 	targetType := NormalizedTargetType(event.Event.Target.Type)
-	id := SubscriptionID(platform, user.UID, targetType, event.Event.Target.ID)
+	if !validSubscriptionRoute(event.Event.SourceProtocol, event.Event.SourceAdapter) {
+		return SubscriptionOutcome{Message: "请通过已配置的 OneBot11 连接添加订阅。"}
+	}
+	id := SubscriptionID(platform, user.UID, event.Event.SourceProtocol, event.Event.SourceAdapter, targetType, event.Event.Target.ID)
 	for index := range current.Subscriptions {
 		item := &current.Subscriptions[index]
-		if item.ID != id {
+		if item.Platform != platform || item.UID != user.UID || !subscriptionTargetsEvent(*item, event) {
 			continue
 		}
 		item.Enabled, item.Name = true, user.Name
@@ -66,6 +69,7 @@ func (handler *Handler) AddSubscription(ctx context.Context, actions SourceActio
 		}
 	}
 	current.Subscriptions = append(current.Subscriptions, Subscription{
+		SourceProtocol: event.Event.SourceProtocol, SourceAdapter: event.Event.SourceAdapter,
 		ID: id, Platform: platform, UID: user.UID, UniqueID: user.UniqueID, Name: user.Name, AvatarURL: user.AvatarURL,
 		TargetType: targetType, TargetID: event.Event.Target.ID, TargetName: CurrentTargetName(event),
 		Services: services, Subscribers: MergeSubscriber(nil, event), Enabled: true,
@@ -93,7 +97,7 @@ func (handler *Handler) RemoveSubscription(current *Settings, event *rayleabot.E
 	var removedItem *Subscription
 	for _, item := range current.Subscriptions {
 		matches := item.UID == uid || strings.EqualFold(item.Name, strings.TrimSpace(query))
-		if item.Platform == platform && matches && item.TargetType == NormalizedTargetType(event.Event.Target.Type) && item.TargetID == event.Event.Target.ID {
+		if item.Platform == platform && matches && subscriptionTargetsEvent(item, event) {
 			matched := item
 			removedItem = &matched
 			item.Services = definition.Services.Remove(item.Services, services)

@@ -69,7 +69,7 @@ func TestForwardBatchesMixedMediaAndStopsAfterPartialFailure(t *testing.T) {
 
 func TestMediaIdentityUsesActorAndFirstRecordedSubscriber(t *testing.T) {
 	update := Update{"author": map[string]any{"name": "最新作者昵称"}}
-	event := &rayleabot.EventContext{Bot: rayleabot.Bot{ID: "99999", Nickname: "机器人"}, Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Bot: rayleabot.Bot{ID: "99999", Nickname: "机器人"}, Event: rayleabot.Event{SourceProtocol: "onebot11",
 		SourceAdapter: "qq-main", Target: rayleabot.Target{Type: "group", ID: "10001"},
 		Actor:   rayleabot.Actor{ID: "20002", Nickname: "发送人"},
 		Payload: map[string]any{"onebot": map[string]any{"sender": map[string]any{"card": "群名片"}}},
@@ -78,7 +78,7 @@ func TestMediaIdentityUsesActorAndFirstRecordedSubscriber(t *testing.T) {
 	if target.SubjectName != "最新作者昵称" || target.SenderID != "20002" || target.SenderName != "群名片" || target.SourceAdapter != "qq-main" {
 		t.Fatalf("resolver identity = %#v", target)
 	}
-	item := Subscription{Name: "保存作者昵称", TargetType: "group", TargetID: "10001", Subscribers: []Subscriber{
+	item := Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Name: "保存作者昵称", TargetType: "group", TargetID: "10001", Subscribers: []Subscriber{
 		{}, {ID: "30003", Nickname: "订阅人", GroupNickname: "订阅人名片"}, {ID: "40004", Nickname: "第二人"},
 	}}
 	target = subscriptionMediaTarget(item, update)

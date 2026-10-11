@@ -125,7 +125,7 @@ type deadlineRenderActions struct {
 	deadline time.Time
 }
 
-func (actions *deadlineRenderActions) RenderImage(ctx context.Context, request rayleabot.RenderImageRequest) (rayleabot.ActionResult, error) {
+func (actions *deadlineRenderActions) Call(ctx context.Context, action string, input any, output any) error {
 	actions.deadline, _ = ctx.Deadline()
-	return actions.Actions.RenderImage(ctx, request)
+	return actions.Actions.Call(ctx, action, input, output)
 }

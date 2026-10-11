@@ -46,10 +46,10 @@ describe('subscription settings model', () => {
 
     const settings = normalizeSettings({
       resolver: {
-        targets: [{ target_type: 'group', target_id: '200', target_name: '测试群', bilibili: true }],
+        targets: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', target_name: '测试群', bilibili: true }],
       },
     })
-    expect(settings.resolver.targets).toEqual([{
+    expect(settings.resolver.targets).toEqual([{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,
       target_type: 'group', target_id: '200', target_name: '测试群', bilibili: true, weibo: false, douyin: false,
     }])
     expect(buildSettingsPayload(settings, [], new Map()).resolver.targets[0]?.bilibili).toBe(true)
@@ -80,7 +80,7 @@ describe('subscription settings model', () => {
 
   it('clones reactive-style resolver proxies without structured clone failures', () => {
     const source = normalizeResolverSettings({
-      targets: [{ target_type: 'group', target_id: '200', bilibili: true }],
+      targets: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', bilibili: true }],
       cooldowns: { same_link_seconds: 20 },
     })
     const proxy = new Proxy(source, {})
@@ -94,7 +94,7 @@ describe('subscription settings model', () => {
 
   it('clones reactive-style row proxies without structured clone failures', () => {
     const settings = normalizeSettings({
-      subscriptions: [{ platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' }],
+      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' }],
     })
     const [row] = buildRowsFromSettings(settings)
     const proxy = new Proxy(row!, {})
@@ -111,8 +111,8 @@ describe('subscription settings model', () => {
     const settings = normalizeSettings({
       enabled: true,
       subscriptions: [
-        { id: 'one', platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200', services: ['video'] },
-        { id: 'two', platform: 'bilibili', uid: '100', name: 'UP', target_type: 'private', target_id: '300', services: ['live'] },
+        { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  id: 'one', platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200', services: ['video'] },
+        { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  id: 'two', platform: 'bilibili', uid: '100', name: 'UP', target_type: 'private', target_id: '300', services: ['live'] },
       ],
     })
     const rows = buildRowsFromSettings(settings)
@@ -122,8 +122,8 @@ describe('subscription settings model', () => {
 
     const targets = normalizeTargets({
       available: true,
-      groups: [{ target_id: '200', target_name: '测试群' }],
-      private_users: [{ target_id: '300', nickname: '测试用户' }],
+      groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群' }],
+      private_users: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '测试用户' }],
     })
     const payload = buildSettingsPayload(settings, rows, targetMap(targets))
     expect(payload.subscriptions.map((item) => item.id)).toEqual(['one', 'two'])
@@ -133,8 +133,8 @@ describe('subscription settings model', () => {
   it('keeps equal subject IDs separate across platforms', () => {
     const rows = buildRowsFromSettings(normalizeSettings({
       subscriptions: [
-        { platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' },
-        { platform: 'weibo', uid: '100', name: '博主', target_type: 'group', target_id: '200' },
+        { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' },
+        { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  platform: 'weibo', uid: '100', name: '博主', target_type: 'group', target_id: '200' },
       ],
     }))
     expect(rows.map((row) => row.platform)).toEqual(['bilibili', 'weibo'])
@@ -142,7 +142,7 @@ describe('subscription settings model', () => {
 
   it('prefers douyin unique_id as the display identity and persists it', () => {
     const settings = normalizeSettings({
-      subscriptions: [{
+      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,
         platform: 'douyin', uid: 'MS4wLjABAAAAone', unique_id: 'douyin_id', name: '测试用户', target_type: 'group', target_id: '200',
       }],
     })
@@ -155,7 +155,7 @@ describe('subscription settings model', () => {
 
   it('falls back to sec_uid when douyin unique_id is absent', () => {
     const settings = normalizeSettings({
-      subscriptions: [{ platform: 'douyin', uid: 'MS4wLjABAAAAone', name: '测试用户', target_type: 'group', target_id: '200' }],
+      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  platform: 'douyin', uid: 'MS4wLjABAAAAone', name: '测试用户', target_type: 'group', target_id: '200' }],
     })
     const [row] = buildRowsFromSettings(settings)
     expect(row?.unique_id).toBe('')
@@ -164,7 +164,7 @@ describe('subscription settings model', () => {
 
   it('keeps saved targets usable when the live protocol target list is unavailable', () => {
     const settings = normalizeSettings({
-      subscriptions: [{ platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' }],
+      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200' }],
     })
     const rows = buildRowsFromSettings(settings)
     const context = createRowContext(emptyTargets(), rows, new Map())
@@ -174,19 +174,19 @@ describe('subscription settings model', () => {
 
   it('builds one identity request per target and subscriber pair', () => {
     const settings = normalizeSettings({
-      subscriptions: [{
+      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,
         platform: 'bilibili', uid: '100', name: 'UP', target_type: 'group', target_id: '200', subscribers: [{ id: '300' }, { id: '300' }],
       }],
     })
     expect(buildIdentityRequests(buildRowsFromSettings(settings))).toEqual([
-      { target_type: 'group', target_id: '200', user_id: '300' },
+      { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', user_id: '300' },
     ])
   })
 
   it('preserves resolved subscriber identity metadata when settings are saved', () => {
     const settings = normalizeSettings({
       enabled: true,
-      subscriptions: [{
+      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,
         platform: 'bilibili',
         uid: '100',
         name: 'UP',
@@ -205,7 +205,7 @@ describe('subscription settings model', () => {
     })
     const identities = collectSubscriberIdentities(settings)
 
-    expect(identities.get(identityKey('group', '200', '300'))).toMatchObject({
+    expect(identities.get(identityKey('onebot11', 'group', '200', '300'))).toMatchObject({
       id: '300',
       nickname: 'subscriber',
       group_nickname: 'group subscriber',

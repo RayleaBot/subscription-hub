@@ -44,7 +44,7 @@ describe('resolver settings panel', () => {
 
     expect(root.querySelector('.resolver-empty')).toBeNull()
 
-    props.modelValue = normalizeResolverSettings({ targets: [{ target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true }] })
+    props.modelValue = normalizeResolverSettings({ targets: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true }] })
     props.loaded = true
     await settle()
     expect(root.querySelectorAll('.resolver-target-card')).toHaveLength(1)
@@ -66,7 +66,7 @@ describe('resolver settings panel', () => {
       avatarDataUrls: new Map([[avatarSource, avatarDataURL]]),
       targets: normalizeTargets({
         available: true,
-        groups: [{ target_id: '200', target_name: '测试群聊' }],
+        groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
       }),
       view: 'targets',
       'onUpdate:modelValue': (value: ResolverSettings) => { updated = value },
@@ -91,7 +91,7 @@ describe('resolver settings panel', () => {
     expect(root.querySelectorAll('.resolver-target-card')).toHaveLength(1)
     expect(root.querySelector('.resolver-target-card img')?.getAttribute('src')).toBe(avatarDataURL)
     expect(root.querySelectorAll('.resolver-target-card input[type="checkbox"]')).toHaveLength(3)
-    expect(updated?.targets).toEqual([expect.objectContaining({ target_type: 'group', target_id: '200', bilibili: false })])
+    expect(updated?.targets).toEqual([expect.objectContaining({ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', bilibili: false })])
     app.unmount()
   })
 
@@ -99,14 +99,14 @@ describe('resolver settings panel', () => {
     const root = document.createElement('div')
     const app = createApp(ResolverSettingsPanel, {
       modelValue: reactive(normalizeResolverSettings({
-        targets: [{ target_type: 'private', target_id: '300', target_name: '已开启用户', weibo: true }],
+        targets: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'private', target_id: '300', target_name: '已开启用户', weibo: true }],
       })),
       avatarDataUrls: new Map(),
       targets: normalizeTargets({
         available: true,
         private_users: [
-          { target_id: '300', nickname: '已开启用户' },
-          { target_id: '301', nickname: '未添加用户' },
+          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '已开启用户' },
+          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '301', nickname: '未添加用户' },
         ],
       }),
       view: 'targets',
@@ -125,8 +125,8 @@ describe('resolver settings panel', () => {
     const app = createApp(ResolverSettingsPanel, {
       modelValue: reactive(normalizeResolverSettings({
         targets: [
-          { target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true },
-          { target_type: 'private', target_id: '300', target_name: '测试用户', weibo: true },
+          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true },
+          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'private', target_id: '300', target_name: '测试用户', weibo: true },
         ],
       })),
       avatarDataUrls: new Map(),

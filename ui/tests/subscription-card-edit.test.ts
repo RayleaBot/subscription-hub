@@ -5,7 +5,7 @@ const host = vi.hoisted(() => {
   const init = {
     config: {
       enabled: true,
-      subscriptions: [{
+      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,
         id: 'bilibili-100-group-200',
         platform: 'bilibili',
         uid: '100',
@@ -30,7 +30,7 @@ const host = vi.hoisted(() => {
       if (method === 'GET' && path === '/api/adapters/onebot/onebot11/targets') {
         return {
           available: true,
-          groups: [{ target_id: '200', target_name: '测试群聊' }],
+          groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
           private_users: [],
           issues: [],
         }

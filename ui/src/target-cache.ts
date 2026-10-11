@@ -1,7 +1,7 @@
 import { emptyTargets, normalizeTargets, type ProtocolTargetRecord, type TargetsState } from './model'
 
-const TARGET_CACHE_KEY = 'raylea.subscription-hub.protocol-targets.v1'
-const TARGET_CACHE_VERSION = 1
+const TARGET_CACHE_KEY = 'raylea.subscription-hub.protocol-targets.v2'
+const TARGET_CACHE_VERSION = 2
 const TARGET_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 interface CachedTargetScope {

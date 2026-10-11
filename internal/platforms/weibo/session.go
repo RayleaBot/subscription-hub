@@ -78,7 +78,7 @@ func (session *session) UserCard(ctx context.Context, action string, item plugin
 func (session *session) Poll(ctx, stateCtx context.Context, items []plugin.Subscription, notBefore time.Time) plugin.PollResult {
 	result := newWeiboSource(session.actions).PollSinceWithStateContext(ctx, stateCtx, items, notBefore)
 	session.longText = newWeiboLongTextResolver(session.actions, result.Accounts)
-	return plugin.PollResult{Checked: result.Checked, Updates: result.Updates, Errors: result.Errors, ReadyUIDs: result.ReadyUIDs, Summary: map[string]any{"accounts": result.AccountCount, "feed_ok": result.FeedOK}}
+	return plugin.PollResult{Checked: result.Checked, Updates: result.Updates, Errors: result.Errors, FailureKinds: result.FailureKinds, FailureDetails: result.FailureDetails, ReadyUIDs: result.ReadyUIDs, Summary: map[string]any{"accounts": result.AccountCount, "feed_ok": result.FeedOK}}
 }
 func (session *session) Prepare(ctx context.Context, update plugin.Update) (plugin.Update, error) {
 	prepared, incomplete := session.longText.Prepare(ctx, update)

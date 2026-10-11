@@ -68,15 +68,17 @@ watch(page, () => {
   scopeFilter.value = 'all'
 })
 
-const configured = computed(() => new Map(draft.value.targets.map((target) => [targetKey(target.target_type, target.target_id), target])))
+const configured = computed(() => new Map(draft.value.targets.map((target) => [targetKey(target.source_adapter, target.target_type, target.target_id), target])))
 const liveTargets = computed(() => new Map(allTargets(props.targets).map((target) => [target.key, target])))
 const configuredTargets = computed<LiveTarget[]>(() => {
   if (page.value !== 'targets') return []
   return draft.value.targets.map((target) => {
-    const key = targetKey(target.target_type, target.target_id)
+    const key = targetKey(target.source_adapter, target.target_type, target.target_id)
     const live = liveTargets.value.get(key)
     return {
       key,
+      source_adapter: target.source_adapter,
+      source_protocol: target.source_protocol,
       target_type: target.target_type,
       target_id: target.target_id,
       label: live?.label || target.target_name || target.target_id,
@@ -161,7 +163,7 @@ function avatarFallback(target: LiveTarget): string {
 }
 
 function targetNumberLabel(target: LiveTarget): string {
-  return `${target.target_type === 'group' ? '群号' : 'QQ'} ${target.target_id}`
+  return `${target.target_type === 'group' ? '群号' : 'QQ'} ${target.target_id} · ${target.source_adapter}`
 }
 
 function resolverPlatformLabel(platform: ResolverPlatform): string {
@@ -186,6 +188,8 @@ function openPicker() {
 function addTarget(target: LiveTarget) {
   if (configured.value.has(target.key)) return
   draft.value.targets.push({
+    source_adapter: target.source_adapter,
+    source_protocol: target.source_protocol,
     target_type: target.target_type,
     target_id: target.target_id,
     target_name: target.label,
@@ -196,12 +200,12 @@ function addTarget(target: LiveTarget) {
 }
 
 function removeTarget(target: LiveTarget) {
-  const index = draft.value.targets.findIndex((item) => targetKey(item.target_type, item.target_id) === target.key)
+  const index = draft.value.targets.findIndex((item) => targetKey(item.source_adapter, item.target_type, item.target_id) === target.key)
   if (index >= 0) draft.value.targets.splice(index, 1)
 }
 
 function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: boolean) {
-  let index = draft.value.targets.findIndex((item) => targetKey(item.target_type, item.target_id) === target.key)
+  let index = draft.value.targets.findIndex((item) => targetKey(item.source_adapter, item.target_type, item.target_id) === target.key)
   if (index < 0) {
     addTarget(target)
     index = draft.value.targets.length - 1

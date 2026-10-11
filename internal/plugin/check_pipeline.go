@@ -48,6 +48,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 	source := map[string]any{}
 	failures := checkFailures{}
 	pauses := []string{}
+	failureDetails := []map[string]any{}
 	sent, checked := 0, 0
 	avatars := &AvatarCache{}
 	identities := newSubscriberIdentityCache(ctx)
@@ -70,6 +71,12 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 		checked += polled.Checked
 		source[platform.ID] = polled.Summary
 		pauses = append(pauses, polled.PauseReasons...)
+		for _, detail := range polled.FailureDetails {
+			if len(failureDetails) >= 16 {
+				break
+			}
+			failureDetails = append(failureDetails, detail)
+		}
 		if BoolScalar(polled.Summary["paused"]) {
 			result["paused"] = true
 		}
@@ -189,6 +196,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 		result["errors"], result["degraded"] = DedupeStrings(failures.messages), true
 	}
 	result["failure_causes"] = failures.keys()
+	result["failure_details"] = failureDetails
 	return result
 }
 
@@ -232,6 +240,10 @@ func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions Hos
 	if ctx.Err() != nil {
 		return false
 	}
+	if !validSubscriptionRoute(item.SourceProtocol, item.SourceAdapter) {
+		failures.add(item.Platform, "config", "订阅缺少有效的发送连接。", &rayleabot.ActionError{Code: "platform.invalid_request", Message: "subscription route is required"})
+		return false
+	}
 	fields := map[string]any{"platform": item.Platform, "stage": "render", "subscription_id": item.ID, "target_type": item.TargetType, "target_id": item.TargetID}
 	imagePath, err := handler.renderCard(ctx, actions, card, avatars, fields)
 	if err != nil {
@@ -255,6 +267,7 @@ func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions Hos
 		return false
 	}
 	_, err = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
+		SourceAdapter: item.SourceAdapter, SourceProtocol: item.SourceProtocol,
 		TargetType: item.TargetType, TargetID: item.TargetID,
 		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Image(imagePath)}},
 	})

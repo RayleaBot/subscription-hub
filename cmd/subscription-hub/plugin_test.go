@@ -17,15 +17,15 @@ import (
 )
 
 func TestNormalizeSubscriptionsRejectsInvalidAndDeduplicates(t *testing.T) {
-	valid := plugin.Subscription{Platform: "bilibili", UID: "42", TargetType: "group", TargetID: "100", Enabled: true}
-	items := newHandler(t).NormalizeSubscriptions([]plugin.Subscription{valid, valid, plugin.Subscription{Platform: "unknown", UID: "1", TargetType: "group", TargetID: "2"}})
+	valid := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Platform: "bilibili", UID: "42", TargetType: "group", TargetID: "100", Enabled: true}
+	items := newHandler(t).NormalizeSubscriptions([]plugin.Subscription{valid, valid, plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Platform: "unknown", UID: "1", TargetType: "group", TargetID: "2"}})
 	if len(items) != 1 || items[0].ID == "" || len(items[0].Services) != 1 || items[0].Services[0] != "all" {
 		t.Fatalf("unexpected normalized subscriptions: %#v", items)
 	}
 }
 
 func TestNormalizeSubscriptionSubscribersRepairsStoredIdentity(t *testing.T) {
-	items := []plugin.Subscription{{Subscribers: []plugin.Subscriber{{
+	items := []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Subscribers: []plugin.Subscriber{{
 		ID: "2678980697", Nickname: "柒柒", Role: "member", RoleLabel: "成员",
 		AvatarURL: "https://q1.qlogo.cn/g?b=qq&nk=2678980697&s=640",
 	}}}}
@@ -46,7 +46,7 @@ func TestMergeSubscriberUsesLatestRoleAndPreservesProfile(t *testing.T) {
 		ID: "2678980697", Nickname: "柒柒", GroupNickname: "银蝶", Title: "专属头衔",
 		BaseRole: "admin", Role: "super_admin", RoleLabel: "超级管理员",
 	}}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Actor:  rayleabot.Actor{ID: "2678980697", Role: "member"},
 		Target: rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"onebot": map[string]any{
@@ -67,7 +67,7 @@ func TestMergeSubscriberUsesLatestRoleAndPreservesProfile(t *testing.T) {
 }
 
 func TestNormalizeSubscriptionSubscribersRestoresBaseRoleAfterSuperAdminRemoval(t *testing.T) {
-	items := []plugin.Subscription{{Subscribers: []plugin.Subscriber{{
+	items := []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Subscribers: []plugin.Subscriber{{
 		ID: "2678980697", Nickname: "柒柒", BaseRole: "admin", Role: "super_admin", RoleLabel: "超级管理员",
 	}}}}
 
@@ -114,14 +114,14 @@ func TestInteractiveCommandsReserveReplyBudget(t *testing.T) {
 }
 
 func TestStatusAndSubscriptionListPreserveOperationalDetails(t *testing.T) {
-	current := plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{
+	current := plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "one", Platform: "bilibili", UID: "42", Name: "测试UP", TargetType: "group", TargetID: "100",
 		Services: []string{"video"}, Subscribers: []plugin.Subscriber{{ID: "7", Nickname: "柒柒"}}, Enabled: true,
 	}}}
 	if status := newHandler(t).FormatStatus(current); !strings.Contains(status, "检查：") || !strings.Contains(status, "账号：") {
 		t.Fatalf("status omitted operational guidance: %q", status)
 	}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{Target: rayleabot.Target{Type: "group", ID: "100"}}}
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Target: rayleabot.Target{Type: "group", ID: "100"}}}
 	list := newHandler(t).FormatSubscriptions(current, event, "bilibili", false)
 	for _, expected := range []string{"Bilibili 订阅列表", "群聊 100", "测试UP（UID 42）", "订阅人：柒柒"} {
 		if !strings.Contains(list, expected) {
@@ -149,7 +149,7 @@ func TestSubscriptionListTitlesPreserveLegacySpacing(t *testing.T) {
 
 func TestNonBilibiliSubscriptionKeepsOriginalSubjectName(t *testing.T) {
 	current := plugin.Settings{}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": []string{"洛天依"}},
@@ -163,7 +163,7 @@ func TestNonBilibiliSubscriptionKeepsOriginalSubjectName(t *testing.T) {
 }
 
 func TestCurrentTargetNameUsesTargetNameAndPrivateActor(t *testing.T) {
-	group := &rayleabot.EventContext{Event: rayleabot.Event{
+	group := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Target: rayleabot.Target{Type: "group", ID: "100", Name: "测试群"},
 	}}
 	if got := plugin.CurrentTargetName(group); got != "测试群" {
@@ -171,13 +171,13 @@ func TestCurrentTargetNameUsesTargetNameAndPrivateActor(t *testing.T) {
 	}
 	// payload.onebot is a closed projection without group_name, so a group
 	// event that carries no Target.Name has no other source for one.
-	unnamed := &rayleabot.EventContext{Event: rayleabot.Event{
+	unnamed := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Target: rayleabot.Target{Type: "group", ID: "100"},
 	}}
 	if got := plugin.CurrentTargetName(unnamed); got != "" {
 		t.Fatalf("unnamed group target name = %q", got)
 	}
-	private := &rayleabot.EventContext{Event: rayleabot.Event{
+	private := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Actor: rayleabot.Actor{Nickname: "柒柒"}, Target: rayleabot.Target{Type: "private", ID: "7"},
 	}}
 	if got := plugin.CurrentTargetName(private); got != "柒柒" {
@@ -186,8 +186,8 @@ func TestCurrentTargetNameUsesTargetNameAndPrivateActor(t *testing.T) {
 }
 
 func TestSubscriptionIDIsStableAndScoped(t *testing.T) {
-	first := plugin.SubscriptionID("bilibili", "42", "group", "100")
-	if first != plugin.SubscriptionID("bilibili", "42", "group", "100") || first == plugin.SubscriptionID("bilibili", "42", "group", "101") {
+	first := plugin.SubscriptionID("bilibili", "42", "onebot11", "onebot11", "group", "100")
+	if first != plugin.SubscriptionID("bilibili", "42", "onebot11", "onebot11", "group", "100") || first == plugin.SubscriptionID("bilibili", "42", "onebot11", "onebot11", "group", "101") {
 		t.Fatalf("unexpected subscription ids")
 	}
 }
@@ -217,11 +217,11 @@ func TestServiceMergeAndPartialRemoval(t *testing.T) {
 }
 
 func TestRemoveSubscriptionKeepsUnremovedServices(t *testing.T) {
-	current := plugin.Settings{Subscriptions: []plugin.Subscription{{
+	current := plugin.Settings{Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "one", Platform: "bilibili", UID: "42", Name: "UP", TargetType: "group", TargetID: "100",
 		Services: []string{"video", "live"}, Enabled: true,
 	}}}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Target: rayleabot.Target{Type: "group", ID: "100"}, Payload: map[string]any{"args": []string{"直播", "42"}},
 	}}
 	outcome := newHandler(t).RemoveSubscription(&current, event, "bilibili")
@@ -332,7 +332,7 @@ func testRuntimeRoutesManagementCommandsAndPreviews(t *testing.T, aliases bool) 
 			frame["command_prefixes"] = []string{"/"}
 			frame["concurrency"] = 1
 			frame["timezone"] = "Asia/Shanghai"
-			frame["bots"] = []any{map[string]any{"source_adapter": "fixture", "source_protocol": "onebot11", "id": "1001"}}
+			frame["bots"] = []any{map[string]any{"source_adapter": "onebot11", "source_protocol": "onebot11", "id": "1001"}}
 		}
 		if event != nil {
 			frame["event"] = event
@@ -372,7 +372,7 @@ func testRuntimeRoutesManagementCommandsAndPreviews(t *testing.T, aliases bool) 
 			payload = map[string]any{}
 		}
 		return map[string]any{
-			"event_id": "event-fixture", "source_protocol": "onebot11", "source_adapter": "fixture",
+			"event_id": "event-fixture", "source_protocol": "onebot11", "source_adapter": "onebot11",
 			"event_type": kind, "timestamp": time.Now().Unix(),
 			"actor":   map[string]any{"id": "7", "nickname": "fixture"},
 			"target":  map[string]any{"type": "group", "id": "100"},

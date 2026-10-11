@@ -38,7 +38,9 @@ func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContex
 	case "plugin.started":
 		return event.Result(map[string]any{"handled": true, "scheduler_registered": handler.ensureScheduler(ctx, event)})
 	case "config.changed":
-		_, _ = handler.loadSettings(ctx, event)
+		if _, err := handler.loadSettings(ctx, event); err != nil {
+			return err
+		}
 		return event.Result(map[string]any{"handled": true, "reloaded": true})
 	case "scheduler.trigger":
 		ctx, cancel := context.WithTimeout(ctx, interactiveReplyTimeout)

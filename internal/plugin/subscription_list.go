@@ -14,7 +14,7 @@ func (handler *Handler) FormatSubscriptions(current Settings, event *rayleabot.E
 		if platform != "" && item.Platform != platform {
 			continue
 		}
-		if !all && (item.TargetType != NormalizedTargetType(event.Event.Target.Type) || item.TargetID != event.Event.Target.ID) {
+		if !all && !subscriptionTargetsEvent(item, event) {
 			continue
 		}
 		items = append(items, item)

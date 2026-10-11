@@ -362,6 +362,17 @@ func weiboErrorLogFields(err error) map[string]any {
 	} else if err != nil {
 		fields["kind"] = "request"
 	}
+	var requestErr *url.Error
+	if errors.As(err, &requestErr) {
+		if target, parseErr := url.Parse(requestErr.URL); parseErr == nil {
+			fields["host"] = target.Hostname()
+		}
+		fields["operation"] = requestErr.Op
+		fields["error_type"] = fmt.Sprintf("%T", requestErr.Err)
+		if requestErr.Timeout() {
+			fields["kind"] = "timeout"
+		}
+	}
 	return fields
 }
 

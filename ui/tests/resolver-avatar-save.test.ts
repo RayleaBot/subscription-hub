@@ -23,7 +23,7 @@ const host = vi.hoisted(() => {
       if (method === 'GET' && path === '/api/adapters/onebot/onebot11/targets') {
         return {
           available: true,
-          groups: [{ target_id: '200', target_name: '测试群聊' }],
+          groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
           private_users: [],
           issues: [],
         }

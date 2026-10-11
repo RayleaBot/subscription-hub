@@ -42,10 +42,10 @@ func (fake *Actions) MessageSend(_ context.Context, request rayleabot.MessageSen
 	return rayleabot.ActionResult{"message_id": "fixture-message"}, nil
 }
 
-func (fake *Actions) GroupMemberGet(_ context.Context, groupID, userID string) (rayleabot.ActionResult, error) {
+func (fake *Actions) GroupMemberGet(_ context.Context, adapterID, groupID, userID string) (rayleabot.ActionResult, error) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
-	key := strings.TrimSpace(groupID) + "\x00" + strings.TrimSpace(userID)
+	key := strings.TrimSpace(adapterID) + "\x00" + strings.TrimSpace(groupID) + "\x00" + strings.TrimSpace(userID)
 	fake.GroupRequests = append(fake.GroupRequests, key)
 	if err := fake.GroupErrors[key]; err != nil {
 		return nil, err

@@ -385,6 +385,8 @@ function toggleTarget(row: SubscriptionRow, liveTarget: LiveTarget) {
   row.targets.push({
     key: liveTarget.key,
     subscription_id: '',
+    source_adapter: liveTarget.source_adapter,
+    source_protocol: liveTarget.source_protocol,
     target_type: liveTarget.target_type,
     target_id: liveTarget.target_id,
     target_name: liveTarget.label,
@@ -621,15 +623,15 @@ async function saveSettings() {
     if (identityRequests.length > 0) {
       setStatus('正在刷新订阅人身份…')
       const resolved = await resolveProtocolIdentities(host.client, identityRequests)
-      const received = new Set(resolved.items.map((item) => identityKey(item.target_type, item.target_id, item.user_id)))
-      const missing = identityRequests.filter((item) => !received.has(identityKey(item.target_type, item.target_id, item.user_id)))
+      const received = new Set(resolved.items.map((item) => identityKey(item.source_adapter, item.target_type, item.target_id, item.user_id)))
+      const missing = identityRequests.filter((item) => !received.has(identityKey(item.source_adapter, item.target_type, item.target_id, item.user_id)))
       if (resolved.issues.length > 0 || missing.length > 0) {
         throw new Error(resolved.issues[0]?.message || '订阅人身份刷新失败')
       }
       const avatars = new Map(subscriberAvatars.value)
       const identities = new Map(subscriberIdentities.value)
       resolved.items.forEach((item) => {
-        const key = identityKey(item.target_type, item.target_id, item.user_id)
+        const key = identityKey(item.source_adapter, item.target_type, item.target_id, item.user_id)
         const previous = identities.get(key)
         const subscriber: Subscriber = {
           id: item.user_id,

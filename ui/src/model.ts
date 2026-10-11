@@ -1,5 +1,10 @@
 export type Platform = 'bilibili' | 'weibo' | 'douyin' | 'netease_music'
 export type TargetType = 'group' | 'private'
+
+export interface AdapterRoute {
+  source_adapter: string
+  source_protocol: 'onebot11'
+}
 export type ResolveState = 'idle' | 'checking' | 'resolved' | 'error'
 export type ResolverPlatform = 'bilibili' | 'weibo' | 'douyin'
 
@@ -37,7 +42,7 @@ export interface Subscriber {
   avatar_url?: string
 }
 
-export interface Subscription {
+export interface Subscription extends AdapterRoute {
   id: string
   platform: Platform
   uid: string
@@ -59,7 +64,7 @@ export interface SubscriptionSettings {
   resolver: ResolverSettings
 }
 
-export interface ResolverTargetSettings {
+export interface ResolverTargetSettings extends AdapterRoute {
   target_type: TargetType
   target_id: string
   target_name?: string
@@ -130,7 +135,7 @@ export const DEFAULT_RESOLVER_SETTINGS: ResolverSettings = {
   },
 }
 
-export interface RowTarget {
+export interface RowTarget extends AdapterRoute {
   key: string
   subscription_id: string
   target_type: TargetType
@@ -170,7 +175,7 @@ export interface SubscriptionRow {
 
 export type SubscriptionRowSnapshot = Omit<SubscriptionRow, '_editSnapshot'>
 
-export interface ProtocolTargetRecord {
+export interface ProtocolTargetRecord extends AdapterRoute {
   target_type?: TargetType
   target_id: string
   target_name?: string
@@ -191,7 +196,7 @@ export interface TargetsState {
   issues: ProtocolIssue[]
 }
 
-export interface LiveTarget {
+export interface LiveTarget extends AdapterRoute {
   key: string
   target_type: TargetType
   target_id: string
@@ -207,7 +212,7 @@ export interface RowContext {
   avatarDataURLs: Map<string, string>
 }
 
-export interface IdentityResolveItem {
+export interface IdentityResolveItem extends AdapterRoute {
   target_type: TargetType
   target_id: string
   user_id: string
@@ -246,7 +251,7 @@ export function normalizeResolverSettings(value: unknown): ResolverSettings {
     ? source.targets.map(normalizeResolverTarget).filter((item): item is ResolverTargetSettings => item !== null)
     : []
   return {
-    targets: [...new Map(targets.map((target) => [targetKey(target.target_type, target.target_id), target])).values()],
+    targets: [...new Map(targets.map((target) => [targetKey(target.source_adapter, target.target_type, target.target_id), target])).values()],
     super_admin_whitelist: source.super_admin_whitelist === true,
     cooldowns: {
       same_link_enabled: cooldowns.same_link_enabled !== false,
@@ -283,7 +288,10 @@ function normalizeResolverTarget(value: unknown): ResolverTargetSettings | null 
   const targetType = value.target_type === 'private' ? 'private' : value.target_type === 'group' ? 'group' : null
   const targetID = trim(value.target_id)
   if (!targetType || !numericPattern.test(targetID)) return null
+  requireRoute(value)
   return {
+    source_adapter: trim(value.source_adapter),
+    source_protocol: 'onebot11',
     target_type: targetType,
     target_id: targetID,
     target_name: trim(value.target_name) || undefined,
@@ -316,13 +324,16 @@ export function normalizeSubscription(value: unknown): Subscription | null {
   const targetType = value.target_type === 'private' ? 'private' : value.target_type === 'group' ? 'group' : null
   const targetID = trim(value.target_id)
   if (!uid || !targetType || !numericPattern.test(targetID)) return null
+  requireRoute(value)
   return {
-    id: trim(value.id) || `${platform}-${uid}-${targetType}-${targetID}`,
+    id: trim(value.id) || `${platform}-${uid}-${trim(value.source_adapter)}-${targetType}-${targetID}`,
     platform,
     uid,
     unique_id: trim(value.unique_id) || undefined,
     name: trim(value.name) || uid,
     avatar_url: trim(value.avatar_url) || undefined,
+    source_adapter: trim(value.source_adapter),
+    source_protocol: 'onebot11',
     target_type: targetType,
     target_id: targetID,
     target_name: trim(value.target_name) || undefined,
@@ -390,8 +401,10 @@ export function buildRowsFromSettings(settings: SubscriptionSettings): Subscript
     row.enabled ||= subscription.enabled
     row.avatar_url ||= subscription.avatar_url || ''
     row.targets.push({
-      key: targetKey(subscription.target_type, subscription.target_id),
+      key: targetKey(subscription.source_adapter, subscription.target_type, subscription.target_id),
       subscription_id: subscription.id,
+      source_adapter: subscription.source_adapter,
+      source_protocol: subscription.source_protocol,
       target_type: subscription.target_type,
       target_id: subscription.target_id,
       target_name: subscription.target_name || '',
@@ -446,18 +459,20 @@ export function buildSettingsPayload(
     for (const target of row.targets) {
       const live = targetsByKey.get(target.key)
       subscriptions.push({
-        id: target.subscription_id || `${row.platform}-${row.uid}-${target.target_type}-${target.target_id}`,
+        id: target.subscription_id || `${row.platform}-${row.uid}-${target.source_adapter}-${target.target_type}-${target.target_id}`,
         platform: row.platform,
         uid: row.uid,
         unique_id: row.unique_id || undefined,
         name: row.name,
         avatar_url: row.avatar_url || undefined,
+        source_adapter: target.source_adapter,
+        source_protocol: target.source_protocol,
         target_type: target.target_type,
         target_id: target.target_id,
         target_name: live?.label || target.target_name || undefined,
         services: normalizeServices(row.service_mode === 'mixed' ? target.services : row.services, row.platform),
         subscribers: row.subscriber_ids.map((id) => {
-          const identity = subscriberIdentities.get(identityKey(target.target_type, target.target_id, id))
+          const identity = subscriberIdentities.get(identityKey(target.source_adapter, target.target_type, target.target_id, id))
           return identity ? { ...identity, id } : { id }
         }),
         enabled: row.enabled,
@@ -492,14 +507,18 @@ export function emptyTargets(): TargetsState {
 export function allTargets(state: TargetsState): LiveTarget[] {
   return [
     ...state.groups.map((target) => ({
-      key: targetKey('group', target.target_id),
+      key: targetKey(target.source_adapter, 'group', target.target_id),
+      source_adapter: target.source_adapter,
+      source_protocol: target.source_protocol,
       target_type: 'group' as const,
       target_id: trim(target.target_id),
       label: trim(target.target_name) || trim(target.target_id),
       avatar_url: trim(target.avatar_url) || deriveTargetAvatarURL('group', target.target_id),
     })),
     ...state.private_users.map((target) => ({
-      key: targetKey('private', target.target_id),
+      key: targetKey(target.source_adapter, 'private', target.target_id),
+      source_adapter: target.source_adapter,
+      source_protocol: target.source_protocol,
       target_type: 'private' as const,
       target_id: trim(target.target_id),
       label: trim(target.nickname) || trim(target.target_name) || trim(target.target_id),
@@ -529,9 +548,9 @@ export function knownTargetsState(state: TargetsState, rows: SubscriptionRow[]):
     for (const target of row.targets) {
       if (!target.target_id || seen.has(target.key) || !fallbackAllowed(target.target_type)) continue
       if (target.target_type === 'group') {
-        groups.push({ target_type: 'group', target_id: target.target_id, target_name: target.target_name || target.target_id })
+        groups.push({ source_adapter: target.source_adapter, source_protocol: target.source_protocol, target_type: 'group', target_id: target.target_id, target_name: target.target_name || target.target_id })
       } else {
-        privateUsers.push({ target_type: 'private', target_id: target.target_id, nickname: target.target_name || target.target_id })
+        privateUsers.push({ source_adapter: target.source_adapter, source_protocol: target.source_protocol, target_type: 'private', target_id: target.target_id, nickname: target.target_name || target.target_id })
       }
       seen.add(target.key)
       savedCount += 1
@@ -654,8 +673,8 @@ export function servicesText(services: string[], platform: Platform): string {
   return normalizeServices(services, platform).map((service) => serviceLabel(service, platform)).join('、')
 }
 
-export function targetKey(targetType: TargetType, targetID: string): string {
-  return `${targetType}:${trim(targetID)}`
+export function targetKey(sourceAdapter: string, targetType: TargetType, targetID: string): string {
+  return `${sourceAdapter}:${targetType}:${trim(targetID)}`
 }
 
 export function currentTargetsForMode(state: TargetsState, mode: TargetType): LiveTarget[] {
@@ -664,7 +683,7 @@ export function currentTargetsForMode(state: TargetsState, mode: TargetType): Li
 
 export function targetDisplay(target: RowTarget, map: Map<string, LiveTarget>): string {
   const live = map.get(target.key)
-  return `${target.target_type === 'group' ? '群聊' : '私聊'} ${live?.label || target.target_name || target.target_id}`
+  return `${target.target_type === 'group' ? '群聊' : '私聊'} ${live?.label || target.target_name || target.target_id} · ${target.source_adapter}`
 }
 
 export function targetAvatar(target: RowTarget, map: Map<string, LiveTarget>): string {
@@ -706,7 +725,7 @@ export function collectSubscriberIdentities(settings: SubscriptionSettings): Map
   for (const subscription of settings.subscriptions) {
     for (const subscriber of subscription.subscribers) {
       identities.set(
-        identityKey(subscription.target_type, subscription.target_id, subscriber.id),
+        identityKey(subscription.source_adapter, subscription.target_type, subscription.target_id, subscriber.id),
         { ...subscriber },
       )
     }
@@ -720,18 +739,18 @@ export function buildIdentityRequests(rows: SubscriptionRow[]): IdentityResolveI
   for (const row of rows) {
     for (const target of row.targets) {
       for (const userID of row.subscriber_ids) {
-        const key = identityKey(target.target_type, target.target_id, userID)
+        const key = identityKey(target.source_adapter, target.target_type, target.target_id, userID)
         if (seen.has(key)) continue
         seen.add(key)
-        items.push({ target_type: target.target_type, target_id: target.target_id, user_id: userID })
+        items.push({ source_adapter: target.source_adapter, source_protocol: target.source_protocol, target_type: target.target_type, target_id: target.target_id, user_id: userID })
       }
     }
   }
   return items
 }
 
-export function identityKey(targetType: TargetType, targetID: string, userID: string): string {
-  return `${targetType}:${targetID}:${userID}`
+export function identityKey(sourceAdapter: string, targetType: TargetType, targetID: string, userID: string): string {
+  return `${sourceAdapter}:${targetType}:${targetID}:${userID}`
 }
 
 export function isNumericID(value: string): boolean {
@@ -774,9 +793,15 @@ function normalizeSubscriber(value: unknown): Subscriber | null {
 }
 
 function isTargetRecord(value: unknown): value is ProtocolTargetRecord {
-  return isRecord(value) && typeof value.target_id === 'string' && value.target_id.trim().length > 0
+  return isRecord(value) && value.source_protocol === 'onebot11' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(trim(value.source_adapter)) && typeof value.target_id === 'string' && value.target_id.trim().length > 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function requireRoute(value: Record<string, unknown>): void {
+  if (value.source_protocol !== 'onebot11' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(trim(value.source_adapter))) {
+    throw new Error('订阅或解析目标缺少有效的 OneBot11 连接，请重新选择发送目标。')
+  }
 }

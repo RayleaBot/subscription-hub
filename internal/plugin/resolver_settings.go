@@ -42,7 +42,7 @@ func normalizeResolverTargets(items []ResolverTarget) []ResolverTarget {
 		if item.TargetID == "" {
 			continue
 		}
-		key := item.TargetType + ":" + item.TargetID
+		key := item.SourceProtocol + ":" + item.SourceAdapter + ":" + item.TargetType + ":" + item.TargetID
 		if seen[key] {
 			continue
 		}
@@ -52,15 +52,15 @@ func normalizeResolverTargets(items []ResolverTarget) []ResolverTarget {
 	return result
 }
 
-func (settings ResolverSettings) Target(targetType, targetID string) (ResolverTarget, bool) {
+func (settings ResolverSettings) Target(sourceProtocol, sourceAdapter, targetType, targetID string) (ResolverTarget, bool) {
 	targetType = NormalizedTargetType(targetType)
 	targetID = strings.TrimSpace(targetID)
 	for _, target := range settings.Targets {
-		if target.TargetType == targetType && target.TargetID == targetID {
+		if target.SourceProtocol == sourceProtocol && target.SourceAdapter == sourceAdapter && target.TargetType == targetType && target.TargetID == targetID {
 			return target, true
 		}
 	}
-	return ResolverTarget{TargetType: targetType, TargetID: targetID}, false
+	return ResolverTarget{SourceProtocol: sourceProtocol, SourceAdapter: sourceAdapter, TargetType: targetType, TargetID: targetID}, false
 }
 
 func (target ResolverTarget) PlatformEnabled(platform string) bool {

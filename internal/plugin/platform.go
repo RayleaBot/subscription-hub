@@ -116,13 +116,14 @@ func (result Resolution) ManagementResult(platform, query string) map[string]any
 }
 
 type PollResult struct {
-	PauseReasons []string
-	FailureKinds []string
-	Checked      int
-	Updates      []Update
-	Errors       []string
-	Summary      map[string]any
-	ReadyUIDs    map[string]bool
+	FailureDetails []map[string]any
+	PauseReasons   []string
+	FailureKinds   []string
+	Checked        int
+	Updates        []Update
+	Errors         []string
+	Summary        map[string]any
+	ReadyUIDs      map[string]bool
 }
 
 type CardRequest struct {

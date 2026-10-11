@@ -19,22 +19,24 @@ const douyinCooldownMax = time.Hour
 const douyinZeroPostsCache = 15 * time.Minute
 
 type douyinSourceResult struct {
-	Checked      int
-	Updates      []map[string]any
-	Errors       []string
-	AccountCount int
-	FeedOK       bool
-	Paused       bool
-	PauseReasons []string
-	FailureKinds []string
-	ReadyUIDs    map[string]bool
-	accounts     []douyinAccount
+	FailureDetails []map[string]any
+	Checked        int
+	Updates        []map[string]any
+	Errors         []string
+	AccountCount   int
+	FeedOK         bool
+	Paused         bool
+	PauseReasons   []string
+	FailureKinds   []string
+	ReadyUIDs      map[string]bool
+	accounts       []douyinAccount
 }
 
 type douyinSource struct {
-	client       *douyinClient
-	pauseReasons []string
-	failureKinds []string
+	failureDetails []map[string]any
+	client         *douyinClient
+	pauseReasons   []string
+	failureKinds   []string
 }
 
 func newDouyinSource(actions plugin.SourceActions) *douyinSource {
@@ -51,6 +53,7 @@ func (source *douyinSource) pollSince(ctx context.Context, subscriptions []plugi
 
 func (source *douyinSource) PollSinceWithStateContext(ctx, stateCtx context.Context, subscriptions []plugin.Subscription, notBefore time.Time) douyinSourceResult {
 	source.pauseReasons = nil
+	source.failureDetails = nil
 	source.failureKinds = nil
 	uids := watchedDouyinUIDs(subscriptions)
 	result := douyinSourceResult{
@@ -114,6 +117,7 @@ func (source *douyinSource) PollSinceWithStateContext(ctx, stateCtx context.Cont
 	}
 	result.Errors = plugin.DedupeStrings(result.Errors)
 	result.FailureKinds = plugin.DedupeStrings(source.failureKinds)
+	result.FailureDetails = source.failureDetails
 	result.PauseReasons = plugin.DedupeStrings(result.PauseReasons)
 	result.Paused = len(result.PauseReasons) > 0
 	return result
@@ -387,6 +391,10 @@ func (source *douyinSource) recordError(ctx context.Context, scope string, accou
 		payload[key] = value
 	}
 	source.failureKinds = append(source.failureKinds, scope+":"+plugin.FirstText(payload["error_code"], payload["kind"], "request"))
+	payload["platform"] = "douyin"
+	if len(source.failureDetails) < 16 {
+		source.failureDetails = append(source.failureDetails, payload)
+	}
 	message := fmt.Sprintf("抖音账号 %s 检查失败：%s", account.key(), strings.TrimSpace(source.friendlyError(err)))
 	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: message, Fields: payload})
 }

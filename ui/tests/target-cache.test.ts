@@ -20,8 +20,8 @@ describe('protocol target cache', () => {
     const storage = new MemoryStorage()
     mergeAndCacheProtocolTargets(normalizeTargets({
       available: true,
-      groups: [{ target_id: '200', target_name: '测试群聊' }],
-      private_users: [{ target_id: '300', nickname: '测试用户' }],
+      groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
+      private_users: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '测试用户' }],
     }), storage, 1_000)
 
     const cached = readCachedProtocolTargets(storage, 1_001)
@@ -35,13 +35,13 @@ describe('protocol target cache', () => {
     const storage = new MemoryStorage()
     mergeAndCacheProtocolTargets(normalizeTargets({
       available: true,
-      groups: [{ target_id: '200', target_name: '旧群聊' }],
-      private_users: [{ target_id: '300', nickname: '缓存用户' }],
+      groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '旧群聊' }],
+      private_users: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '缓存用户' }],
     }), storage, 1_000)
 
     const merged = mergeAndCacheProtocolTargets(normalizeTargets({
       available: false,
-      groups: [{ target_id: '201', target_name: '新群聊' }],
+      groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '201', target_name: '新群聊' }],
       private_users: [],
       issues: [{ scope: 'private_users', message: '私聊对象列表读取超时' }],
     }), storage, 2_000)
@@ -55,7 +55,7 @@ describe('protocol target cache', () => {
     const storage = new MemoryStorage()
     mergeAndCacheProtocolTargets(normalizeTargets({
       available: true,
-      groups: [{ target_id: '200', target_name: '测试群聊' }],
+      groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
       private_users: [],
     }), storage, 1_000)
 

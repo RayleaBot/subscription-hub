@@ -88,7 +88,7 @@ func TestDouyinFeedNormalizesVideoAndImageText(t *testing.T) {
 	)}
 
 	result := newDouyinSource(fake).poll(context.Background(), []plugin.Subscription{
-		{ID: "one", Platform: "douyin", UID: secUID, Services: []string{"all"}, Enabled: true},
+		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "one", Platform: "douyin", UID: secUID, Services: []string{"all"}, Enabled: true},
 	})
 	if !result.FeedOK || len(result.Updates) != 2 {
 		t.Fatalf("douyin feed result = %#v", result)
@@ -117,7 +117,7 @@ func TestDouyinSubscriptionCheckBaselinesThenRendersNewAweme(t *testing.T) {
 	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	secUID := "MS4wLjABAAAAfixture"
-	item := plugin.Subscription{
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "douyin-fixture-group-10000", Platform: "douyin", UID: secUID, Name: "测试用户",
 		TargetType: "group", TargetID: "10000", Services: []string{"video"}, Enabled: true,
 		Subscribers: []plugin.Subscriber{{ID: "nickname-only", Nickname: "订阅人"}},
@@ -170,7 +170,7 @@ func TestDouyinSubscriptionCheckPushesLiveStartOncePerSession(t *testing.T) {
 	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	secUID := "MS4wLjABAAAAfixture"
-	item := plugin.Subscription{
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "douyin-live-group-10000", Platform: "douyin", UID: secUID, Name: "测试用户",
 		TargetType: "group", TargetID: "10000", Services: []string{"all"}, Enabled: true,
 	}
@@ -311,7 +311,7 @@ func TestAddDouyinSubscriptionResolvesExactMatch(t *testing.T) {
 		map[string]any{"sec_uid": "MS4wLjABAAAAone", "nickname": "测试用户", "unique_id": "testuser"},
 	))}
 	current := plugin.Settings{}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": []string{"测试用户"}},
@@ -336,7 +336,7 @@ func TestAddDouyinSubscriptionOffersCandidates(t *testing.T) {
 		map[string]any{"sec_uid": "MS4wLjABAAAAother", "nickname": "别的用户"},
 	))}
 	current := plugin.Settings{}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": []string{"测试用户"}},
@@ -354,7 +354,7 @@ func TestAddDouyinSubscriptionUsesExplicitSecUIDWithoutLookup(t *testing.T) {
 	fake := newActions()
 	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
 	current := plugin.Settings{}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": []string{"MS4wLjABAAAAoffline"}},
@@ -374,11 +374,11 @@ func TestAddDouyinSubscriptionUsesExplicitSecUIDWithoutLookup(t *testing.T) {
 func TestAddDouyinSubscriptionReusesKnownSourceWithoutLookup(t *testing.T) {
 	fake := newActions()
 	fake.SeedAccounts("douyin", fixtureDouyinAccounts("primary"))
-	current := plugin.Settings{Subscriptions: []plugin.Subscription{{
+	current := plugin.Settings{Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "known", Platform: "douyin", UID: "MS4wLjABAAAAknown", Name: "已知用户", AvatarURL: "https://p3-pc.douyinpic.com/known.jpeg",
 		TargetType: "group", TargetID: "old", Services: []string{"all"}, Enabled: true,
 	}}}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
 		Target:  rayleabot.Target{Type: "group", ID: "new"},
 		Payload: map[string]any{"args": []string{"已知用户"}},

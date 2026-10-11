@@ -50,10 +50,10 @@ func TestResolverCommandsAreRouted(t *testing.T) {
 func TestResolverTargetForEventLetsSuperAdminsBypassTargetSwitches(t *testing.T) {
 	settings := NormalizeResolverSettings(ResolverSettings{
 		SuperAdminWhitelist: true,
-		Targets:             []ResolverTarget{{TargetType: "group", TargetID: "100", TargetName: "测试群", Bilibili: true}},
+		Targets:             []ResolverTarget{{SourceProtocol: "onebot11", SourceAdapter: "onebot11", TargetType: "group", TargetID: "100", TargetName: "测试群", Bilibili: true}},
 	})
 	event := func(actor, targetType, targetID string) *rayleabot.EventContext {
-		return &rayleabot.EventContext{SuperAdmins: []string{"7"}, Event: rayleabot.Event{
+		return &rayleabot.EventContext{SuperAdmins: []string{"7"}, Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 			Actor:  rayleabot.Actor{ID: actor},
 			Target: rayleabot.Target{Type: targetType, ID: targetID},
 		}}
@@ -91,19 +91,19 @@ func TestResolverTargetForEventLetsSuperAdminsBypassTargetSwitches(t *testing.T)
 func TestNormalizeResolverSettingsKeepsExplicitTargetSwitches(t *testing.T) {
 	settings := NormalizeResolverSettings(ResolverSettings{
 		Targets: []ResolverTarget{
-			{TargetType: "group", TargetID: " 100 ", TargetName: " 测试群 ", Bilibili: true},
-			{TargetType: "group", TargetID: "100", Weibo: true},
-			{TargetType: "private", TargetID: "200", Douyin: true},
+			{SourceProtocol: "onebot11", SourceAdapter: "onebot11", TargetType: "group", TargetID: " 100 ", TargetName: " 测试群 ", Bilibili: true},
+			{SourceProtocol: "onebot11", SourceAdapter: "onebot11", TargetType: "group", TargetID: "100", Weibo: true},
+			{SourceProtocol: "onebot11", SourceAdapter: "onebot11", TargetType: "private", TargetID: "200", Douyin: true},
 		},
 	})
 	if len(settings.Targets) != 2 {
 		t.Fatalf("target count = %d, want 2", len(settings.Targets))
 	}
-	group, ok := settings.Target("group", "100")
+	group, ok := settings.Target("onebot11", "onebot11", "group", "100")
 	if !ok || !group.Bilibili || group.Weibo || group.Douyin || group.TargetName != "测试群" {
 		t.Fatalf("normalized group target = %#v", group)
 	}
-	private, ok := settings.Target("private", "200")
+	private, ok := settings.Target("onebot11", "onebot11", "private", "200")
 	if !ok || !private.Douyin {
 		t.Fatalf("normalized private target = %#v", private)
 	}
@@ -132,7 +132,7 @@ func TestResolverCooldownSeparatesLinksPlatformsAndTargets(t *testing.T) {
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 	handler := &Handler{now: func() time.Time { return now }, resolverCooldowns: map[string]time.Time{}}
 	settings := ResolverCooldownSettings{SameLinkEnabled: true, SameLinkSeconds: 10}
-	group := ResolverTarget{TargetType: "group", TargetID: "100"}
+	group := ResolverTarget{SourceProtocol: "onebot11", SourceAdapter: "onebot11", TargetType: "group", TargetID: "100"}
 
 	if handler.resolverCooldownHit(group, "bilibili", "https://www.bilibili.com/video/BV1", settings) {
 		t.Fatal("first link unexpectedly hit cooldown")
@@ -143,7 +143,7 @@ func TestResolverCooldownSeparatesLinksPlatformsAndTargets(t *testing.T) {
 	if handler.resolverCooldownHit(group, "bilibili", "https://www.bilibili.com/video/BV2", settings) {
 		t.Fatal("different link unexpectedly hit link cooldown")
 	}
-	if handler.resolverCooldownHit(ResolverTarget{TargetType: "private", TargetID: "100"}, "bilibili", "https://www.bilibili.com/video/BV1", settings) {
+	if handler.resolverCooldownHit(ResolverTarget{SourceProtocol: "onebot11", SourceAdapter: "onebot11", TargetType: "private", TargetID: "100"}, "bilibili", "https://www.bilibili.com/video/BV1", settings) {
 		t.Fatal("different target unexpectedly shared cooldown")
 	}
 	now = now.Add(11 * time.Second)
@@ -155,7 +155,7 @@ func TestResolverCooldownSeparatesLinksPlatformsAndTargets(t *testing.T) {
 func TestResolverPlatformCooldownAppliesAcrossLinks(t *testing.T) {
 	handler := &Handler{now: func() time.Time { return time.Unix(100, 0) }, resolverCooldowns: map[string]time.Time{}}
 	settings := ResolverCooldownSettings{SamePlatformEnabled: true, SamePlatformSeconds: 10}
-	target := ResolverTarget{TargetType: "group", TargetID: "100"}
+	target := ResolverTarget{SourceProtocol: "onebot11", SourceAdapter: "onebot11", TargetType: "group", TargetID: "100"}
 	if handler.resolverCooldownHit(target, "weibo", "https://weibo.com/one", settings) {
 		t.Fatal("first platform event unexpectedly hit cooldown")
 	}

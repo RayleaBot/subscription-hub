@@ -75,8 +75,8 @@ func TestWeiboFeedPollsEachSubjectIndependently(t *testing.T) {
 		},
 	}
 	result := newWeiboSource(fake).poll(context.Background(), []plugin.Subscription{
-		{ID: "one", Platform: "weibo", UID: "6000000001", Services: []string{"post"}, Enabled: true},
-		{ID: "two", Platform: "weibo", UID: "6000000002", Services: []string{"post"}, Enabled: true},
+		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "one", Platform: "weibo", UID: "6000000001", Services: []string{"post"}, Enabled: true},
+		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "two", Platform: "weibo", UID: "6000000002", Services: []string{"post"}, Enabled: true},
 	})
 	if !result.FeedOK || len(result.Updates) != 2 {
 		t.Fatalf("multi-subject result = %#v", result)
@@ -95,7 +95,7 @@ func TestWeiboFeedFollowsCursorUntilDeliveryAgeBoundary(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{ID: "paged-weibo", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "paged-weibo", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(item)] = true
 	fake.HTTPResponses = []rayleabot.ActionResult{
 		weiboFeedPageResult("next-page", weiboTextMblog("new-1", item.UID, "第一页微博", now.Unix())),
@@ -116,7 +116,7 @@ func TestWeiboFeedDoesNotTreatSeenUpdateAsPagingBoundary(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	first := plugin.Subscription{ID: "paged-first", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
+	first := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "paged-first", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(first)] = true
 	boundary := normalizeWeiboMblog(time.UTC, weiboTextMblog("boundary", first.UID, "部分目标已推送", now.Add(-time.Minute).Unix()), 0)
 	fake.KV[plugin.SubscriptionUpdateKey(first, boundary)] = true
@@ -139,7 +139,7 @@ func TestWeiboSourceUsesPerUserFeedWithoutFollowMutation(t *testing.T) {
 		Path: "/api/container/getIndex", QueryContains: "containerid=1076036000000001", Result: weiboFeedResult(),
 	}}
 	result := newWeiboSource(fake).poll(context.Background(), []plugin.Subscription{
-		{ID: "one", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true},
+		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "one", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true},
 	})
 	if !result.FeedOK {
 		t.Fatalf("per-user poll failed: %#v", result)
@@ -160,7 +160,7 @@ func TestWeiboFeedPageLimitIsIncomplete(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{ID: "busy", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "busy", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(item)] = true
 	for page := 0; page < weiboFeedMaxPages; page++ {
 		fake.HTTPResponses = append(fake.HTTPResponses, weiboFeedPageResult(
@@ -202,7 +202,7 @@ func TestWeiboSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	}
 	source := newWeiboSource(fake)
 	source.client.now = func() time.Time { return now }
-	result := source.poll(context.Background(), []plugin.Subscription{{
+	result := source.poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "weibo-one", Platform: "weibo", UID: "6000000001", Services: []string{"post"}, Enabled: true,
 	}})
 	if !result.FeedOK || len(result.Errors) == 0 || !strings.Contains(result.Errors[0], "风控") {
@@ -229,7 +229,7 @@ func TestWeiboSourceClassifiesHTTP432AndEntersCooldown(t *testing.T) {
 	now := time.Unix(1787274976, 0)
 	source := newWeiboSource(fake)
 	source.client.now = func() time.Time { return now }
-	item := plugin.Subscription{ID: "weibo-432", Platform: "weibo", UID: "6000000001", Services: []string{"post"}, Enabled: true}
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "weibo-432", Platform: "weibo", UID: "6000000001", Services: []string{"post"}, Enabled: true}
 
 	result := source.poll(context.Background(), []plugin.Subscription{item})
 
@@ -293,7 +293,7 @@ func TestWeiboSubscriptionCheckBaselinesThenRendersNewMblog(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "weibo-6000000001-group-10000", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "group", TargetID: "10000", Services: []string{"post"}, Enabled: true,
 		Subscribers: []plugin.Subscriber{{ID: "nickname-only", Nickname: "订阅人"}},
@@ -334,7 +334,7 @@ func TestWeiboSubscriptionCheckBaselineBlocksLaterHistoricalPages(t *testing.T) 
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{ID: "new-busy", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "new-busy", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedPageResult(
 		"more-history", weiboTextMblog("latest", item.UID, "当前微博", now.Unix()),
 	)}
@@ -375,7 +375,7 @@ func TestSubscriptionCheckAppliesTotalDeadline(t *testing.T) {
 
 	result := newHandler(t).Check(context.Background(), actions, plugin.Settings{
 		Enabled: true,
-		Subscriptions: []plugin.Subscription{{
+		Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 			ID: "deadline", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true,
 		}},
 	})
@@ -405,7 +405,7 @@ func TestSubscriptionCheckReservesParentDeadlineForFinalization(t *testing.T) {
 
 	result := newHandler(t).Check(parentCtx, actions, plugin.Settings{
 		Enabled: true,
-		Subscriptions: []plugin.Subscription{{
+		Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 			ID: "parent-deadline", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true,
 		}},
 	})
@@ -428,7 +428,7 @@ func TestWeiboFeedSavesContinuationWhenCheckIsInterrupted(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{ID: "interrupted", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "interrupted", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true}
 	fake.KV[weiboFeedSourceKey(item)] = true
 	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedPageResult(
 		"next-page", weiboTextMblog("latest", item.UID, "最新微博", now.Unix()),
@@ -463,7 +463,7 @@ func checkExpiresStaleMblog(t *testing.T, plainTime bool) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "stale-weibo", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "private", TargetID: "20000", Services: []string{"post"}, Enabled: true,
 	}
@@ -496,7 +496,7 @@ func TestWeiboSubscriptionCheckFiltersByService(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "typed-weibo", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "group", TargetID: "10000", Services: []string{"image"}, Enabled: true,
 	}
@@ -527,7 +527,7 @@ func TestWeiboSubscriptionCheckPassesMediaResourcesToRenderer(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "retry-weibo-media", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "group", TargetID: "10000", Services: []string{"image"}, Enabled: true,
 	}
@@ -564,7 +564,7 @@ func TestWeiboSubscriptionCheckKeepsFallbackForEachMediaResource(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{
+	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "retry-partial-weibo-media", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "group", TargetID: "10000", Services: []string{"image"}, Enabled: true,
 	}
@@ -607,7 +607,7 @@ func TestWeiboCheckDoesNotSkipWhenOnlyWeiboSubscriptions(t *testing.T) {
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now()
 	fake.HTTPResponses = []rayleabot.ActionResult{weiboFeedResult()}
-	result := checkAt(t, context.Background(), fake, plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{
+	result := checkAt(t, context.Background(), fake, plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		ID: "weibo-only", Platform: "weibo", UID: "6000000001", Services: []string{"all"}, Enabled: true,
 	}}}, now)
 	if plugin.StringScalar(result["skipped"]) == "no_bilibili_subscriptions" || plugin.StringScalar(result["skipped"]) != "" {
@@ -707,7 +707,7 @@ func TestWeiboRenderDataKeepsAuthorSummaryImagesAndDropsUndeclaredHosts(t *testi
 		t.Fatalf("undeclared host should not be inlined: %#v", undeclared)
 	}
 
-	data := buildWeiboRenderData(plugin.Subscription{
+	data := buildWeiboRenderData(plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
 		Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		Subscribers: []plugin.Subscriber{{ID: "10001", Nickname: "柒柒"}},
 	}, update)

@@ -69,7 +69,7 @@ func newWorkflowHandler(t testing.TB, platforms ...Platform) *Handler {
 }
 
 func workflowSubscription(id, platform string) Subscription {
-	return Subscription{ID: id, Platform: platform, UID: "subject", TargetType: "private", TargetID: id, Services: []string{"all"}, Enabled: true}
+	return Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: id, Platform: platform, UID: "subject", TargetType: "private", TargetID: id, Services: []string{"all"}, Enabled: true}
 }
 
 func workflowUpdate(platform, id string) Update {
@@ -428,11 +428,15 @@ func TestSubscriptionCheckLogKeepsCompleteFailuresAndReadableSummary(t *testing.
 		"[bilibili/state] Bilibili 状态保存失败。",
 		"[subscription/timeout] 订阅检查未在本轮完成。",
 	}
-	logSubscriptionCheck(t.Context(), actions, map[string]any{"checked": 12, "sent": 2, "errors": failures})
+	details := []map[string]any{{"platform": "weibo", "http_status": 503, "duration_ms": 120}}
+	logSubscriptionCheck(t.Context(), actions, map[string]any{"checked": 12, "sent": 2, "errors": failures, "failure_details": details})
 	if len(actions.Logs) != 1 {
 		t.Fatalf("log count = %d, want 1", len(actions.Logs))
 	}
 	entry := actions.Logs[0]
+	if got, ok := entry.Fields["failure_details"].([]map[string]any); !ok || len(got) != 1 || got[0]["http_status"] != 503 {
+		t.Fatalf("diagnostic detail missing: %v", entry.Fields)
+	}
 	if entry.Level != "warn" || IntScalar(entry.Fields["checked"]) != 12 || IntScalar(entry.Fields["sent"]) != 2 {
 		t.Fatalf("wrong check result log: %#v", entry)
 	}

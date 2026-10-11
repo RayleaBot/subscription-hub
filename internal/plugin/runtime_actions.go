@@ -25,7 +25,7 @@ type HostActions interface {
 	SourceActions
 	RenderImage(context.Context, rayleabot.RenderImageRequest) (rayleabot.ActionResult, error)
 	MessageSend(context.Context, rayleabot.MessageSendRequest) (rayleabot.ActionResult, error)
-	GroupMemberGet(context.Context, string, string) (rayleabot.ActionResult, error)
+	GroupMemberGet(context.Context, string, string, string) (rayleabot.ActionResult, error)
 }
 
 type RuntimeActions interface {
@@ -71,6 +71,10 @@ type GenericLocalActionCaller interface {
 // hostRuntimeActions adds the plugin's own HTTP client to the SDK actions.
 type hostRuntimeActions struct {
 	*rayleabot.Actions
+}
+
+func (actions hostRuntimeActions) GroupMemberGet(ctx context.Context, adapterID, groupID, userID string) (rayleabot.ActionResult, error) {
+	return actions.ForOneBotAdapter(adapterID).GroupMemberGet(ctx, groupID, userID)
 }
 
 func (hostRuntimeActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {

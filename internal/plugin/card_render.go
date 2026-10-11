@@ -32,6 +32,7 @@ type RenderResource struct {
 }
 
 type PluginRenderImageRequest struct {
+	TimeoutMS    int              `json:"timeout_ms"`
 	Template     string           `json:"template"`
 	Data         map[string]any   `json:"data"`
 	Theme        string           `json:"theme,omitempty"`
@@ -43,17 +44,21 @@ type PluginRenderImageRequest struct {
 func RenderSubscriptionCardImageWithResources(ctx context.Context, actions HostActions, template string, data map[string]any, resources []RenderResource, fallback string, extra map[string]any) (string, error) {
 	fitPluginRenderData(data)
 	render := func() (rayleabot.ActionResult, error) {
-		if len(resources) == 0 {
-			return actions.RenderImage(ctx, rayleabot.RenderImageRequest{
-				Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallback,
-			})
+		budget := 30 * time.Second
+		if deadline, ok := ctx.Deadline(); ok {
+			budget = min(budget, time.Until(deadline)-2*time.Second)
 		}
+		if budget < time.Millisecond {
+			return nil, context.DeadlineExceeded
+		}
+		timeoutMS := int(budget.Milliseconds())
 		caller, ok := actions.(GenericLocalActionCaller)
 		if !ok {
 			return nil, errors.New("渲染资源调用不可用")
 		}
 		request := PluginRenderImageRequest{
-			Template: template, Data: data, Theme: "default", Output: "png", FallbackText: fallback, Resources: resources,
+			TimeoutMS: timeoutMS,
+			Template:  template, Data: data, Theme: "default", Output: "png", FallbackText: fallback, Resources: resources,
 		}
 		result := rayleabot.ActionResult{}
 		if err := caller.Call(ctx, "render.image", request, &result); err != nil {

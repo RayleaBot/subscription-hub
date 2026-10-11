@@ -19,17 +19,21 @@ const weiboCooldownMax = time.Hour
 const weiboFeedMaxPages = 5
 
 type weiboSourceResult struct {
-	Checked      int
-	Updates      []map[string]any
-	Errors       []string
-	AccountCount int
-	FeedOK       bool
-	ReadyUIDs    map[string]bool
-	Accounts     []weiboAccount
+	FailureKinds   []string
+	FailureDetails []map[string]any
+	Checked        int
+	Updates        []map[string]any
+	Errors         []string
+	AccountCount   int
+	FeedOK         bool
+	ReadyUIDs      map[string]bool
+	Accounts       []weiboAccount
 }
 
 type weiboSource struct {
-	client *weiboClient
+	client         *weiboClient
+	failureKinds   []string
+	failureDetails []map[string]any
 }
 
 func newWeiboSource(actions plugin.SourceActions) *weiboSource {
@@ -45,6 +49,7 @@ func (source *weiboSource) pollSince(ctx context.Context, subscriptions []plugin
 }
 
 func (source *weiboSource) PollSinceWithStateContext(ctx, stateCtx context.Context, subscriptions []plugin.Subscription, notBefore time.Time) weiboSourceResult {
+	source.failureKinds, source.failureDetails = nil, nil
 	uids := watchedWeiboUIDs(subscriptions)
 	result := weiboSourceResult{
 		Checked: len(uids), Updates: []map[string]any{}, Errors: []string{}, FeedOK: true,
@@ -89,6 +94,8 @@ func (source *weiboSource) PollSinceWithStateContext(ctx, stateCtx context.Conte
 		}
 	}
 	result.Errors = plugin.DedupeStrings(result.Errors)
+	result.FailureKinds = plugin.DedupeStrings(source.failureKinds)
+	result.FailureDetails = source.failureDetails
 	return result
 }
 
@@ -177,6 +184,7 @@ func (source *weiboSource) pollUserFeed(ctx, stateCtx context.Context, uid strin
 				failures = append(failures, plugin.SubscriptionCheckIncompleteMessage)
 				return updates, plugin.DedupeStrings(failures), ready, false
 			}
+			requestStarted := time.Now()
 			document, requestErr := source.client.requestJSON(ctx, weiboUserFeedURL(uid, cursor), account, weiboMobileReferer)
 			if requestErr != nil {
 				if ctx.Err() != nil {
@@ -188,7 +196,7 @@ func (source *weiboSource) pollUserFeed(ctx, stateCtx context.Context, uid strin
 					failures = append(failures, plugin.SubscriptionCheckIncompleteMessage)
 					return updates, plugin.DedupeStrings(failures), ready, false
 				}
-				source.recordError(ctx, "feed", account, requestErr, map[string]any{"uid": uid, "page": page + 1})
+				source.recordError(ctx, "feed", account, requestErr, map[string]any{"uid": uid, "page": page + 1, "duration_ms": time.Since(requestStarted).Milliseconds(), "host": "m.weibo.cn", "endpoint": "/api/container/getIndex"})
 				var typed *weiboSourceError
 				if errors.As(requestErr, &typed) && typed.cooldown() {
 					source.rememberCooldown(ctx, "feed", account, typed)
@@ -371,6 +379,11 @@ func (source *weiboSource) recordError(ctx context.Context, scope string, accoun
 	}
 	for key, value := range fields {
 		payload[key] = value
+	}
+	payload["platform"] = "weibo"
+	source.failureKinds = append(source.failureKinds, scope+":"+plugin.FirstText(payload["error_code"], payload["kind"], "request"))
+	if len(source.failureDetails) < 16 {
+		source.failureDetails = append(source.failureDetails, payload)
 	}
 	message := fmt.Sprintf("微博账号 %s 检查失败：%s", account.key(), strings.TrimSpace(source.friendlyError(err)))
 	_, _ = source.client.actions.LoggerWrite(ctx, rayleabot.LoggerWriteRequest{Level: "debug", Message: message, Fields: payload})

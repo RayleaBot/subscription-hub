@@ -38,12 +38,12 @@ func newSubscriberIdentityCache(parent context.Context) *subscriberIdentityCache
 	}
 }
 
-func GroupMemberKey(groupID, userID string) string {
-	return strings.TrimSpace(groupID) + "\x00" + strings.TrimSpace(userID)
+func GroupMemberKey(adapterID, groupID, userID string) string {
+	return strings.TrimSpace(adapterID) + "\x00" + strings.TrimSpace(groupID) + "\x00" + strings.TrimSpace(userID)
 }
 
-func (cache *subscriberIdentityCache) resolve(ctx context.Context, actions HostActions, groupID string, current Subscriber) (Subscriber, error) {
-	key := GroupMemberKey(groupID, current.ID)
+func (cache *subscriberIdentityCache) resolve(ctx context.Context, actions HostActions, adapterID, groupID string, current Subscriber) (Subscriber, error) {
+	key := GroupMemberKey(adapterID, groupID, current.ID)
 	cache.mu.Lock()
 	entry, exists := cache.entries[key]
 	if !exists {
@@ -69,7 +69,7 @@ func (cache *subscriberIdentityCache) resolve(ctx context.Context, actions HostA
 		return current, ctx.Err()
 	}
 
-	result, err := actions.GroupMemberGet(ctx, strings.TrimSpace(groupID), strings.TrimSpace(current.ID))
+	result, err := actions.GroupMemberGet(ctx, adapterID, strings.TrimSpace(groupID), strings.TrimSpace(current.ID))
 	if err == nil {
 		current, err = subscriberFromGroupMember(current, result)
 	}
@@ -134,7 +134,7 @@ func (cache *subscriberIdentityCache) refresh(actions HostActions, item Subscrip
 		group.Add(1)
 		go func(index int, current Subscriber) {
 			defer group.Done()
-			value, err := cache.resolve(refreshCtx, actions, item.TargetID, current)
+			value, err := cache.resolve(refreshCtx, actions, item.SourceAdapter, item.TargetID, current)
 			results <- subscriberIdentityResult{index: index, value: value, err: err}
 		}(index, current)
 	}

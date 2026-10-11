@@ -122,7 +122,7 @@ func TestResolverCacheFailureKeepsLocalPathInLogs(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), blocked) {
 		t.Fatalf("expected local cache failure, got %v", err)
 	}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{Target: rayleabot.Target{Type: target.TargetType, ID: target.TargetID}}}
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Target: rayleabot.Target{Type: target.TargetType, ID: target.TargetID}}}
 	handler.reportResolverMediaFailure(t.Context(), event, "bilibili", target, err)
 	assertMediaFailureIsPrivate(t, actions, blocked)
 	if len(handler.deferredMedia.jobs) != 0 {

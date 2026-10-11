@@ -38,11 +38,18 @@ func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.Event
 	}
 	if raw, ok := values["subscriptions"]; ok {
 		encoded, _ := json.Marshal(raw)
-		_ = json.Unmarshal(encoded, &current.Subscriptions)
+		if err := json.Unmarshal(encoded, &current.Subscriptions); err != nil {
+			return Settings{}, err
+		}
 	}
 	if raw, ok := values["resolver"]; ok {
 		encoded, _ := json.Marshal(raw)
-		_ = json.Unmarshal(encoded, &current.Resolver)
+		if err := json.Unmarshal(encoded, &current.Resolver); err != nil {
+			return Settings{}, err
+		}
+	}
+	if err := validateSettingsRoutes(current); err != nil {
+		return Settings{}, err
 	}
 	current.DeliveryMaxAgeMinutes = NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)
 	current.AccountCheckIntervalMinutes = NormalizeAccountCheckIntervalMinutes(current.AccountCheckIntervalMinutes)
@@ -54,6 +61,9 @@ func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.Event
 }
 
 func (handler *Handler) saveSettings(ctx context.Context, event *rayleabot.EventContext, current Settings) error {
+	if err := validateSettingsRoutes(current); err != nil {
+		return err
+	}
 	_, err := handler.hostActions(event).ConfigWrite(ctx, map[string]any{
 		"enabled":                              current.Enabled,
 		"delivery_max_age_minutes":             NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes),
@@ -110,12 +120,13 @@ func (handler *Handler) NormalizeSubscriptions(items []Subscription) []Subscript
 			continue
 		}
 		if item.ID == "" {
-			item.ID = SubscriptionID(item.Platform, item.UID, item.TargetType, item.TargetID)
+			item.ID = SubscriptionID(item.Platform, item.UID, item.SourceProtocol, item.SourceAdapter, item.TargetType, item.TargetID)
 		}
-		if seen[item.ID] {
+		key := subscriptionIdentity(item)
+		if seen[key] {
 			continue
 		}
-		seen[item.ID] = true
+		seen[key] = true
 		if item.Name == "" {
 			item.Name = item.UID
 		}
