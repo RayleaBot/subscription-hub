@@ -12,7 +12,6 @@ describe('account scoped subscription targets', () => {
     })
     const host = { client: { apiRequest } as unknown as PluginUIClient, refreshBot: vi.fn(async () => bot) }
     const targets = normalizeTargets(await loadProtocolTargets(host))
-    expect(targets.bots.map((account) => account.bot_id)).toEqual(['1001'])
     expect(allTargets(targets).map((target) => target.key)).toEqual(['onebot11:1001:group:10001'])
     expect(apiRequest).toHaveBeenCalledExactlyOnceWith('GET', '/api/adapters/old-a/onebot11/targets')
     expect(host.refreshBot).toHaveBeenCalledTimes(2)

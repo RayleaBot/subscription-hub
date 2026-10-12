@@ -5,7 +5,6 @@ import AvatarBadge from './AvatarBadge.vue'
 import PlatformLogo from './PlatformLogo.vue'
 import UiIcon from './UiIcon.vue'
 import {
-  botLabel,
   currentTargetsForMode,
   displayAvatarURL,
   identityValue,
@@ -207,7 +206,7 @@ function avatarURL(source: string): string {
             >
               <span class="target-option__mark" aria-hidden="true">{{ row.targets.some((item) => item.key === target.key) ? '✓' : '' }}</span>
               <span class="target-option__label">{{ target.label }}</span>
-              <span class="target-option__id">{{ target.target_id }} · {{ botLabel(target) }}</span>
+              <span class="target-option__id">{{ target.target_id }}</span>
             </button>
             <div v-if="availableTargets.length === 0" class="target-option-empty">没有可选对象</div>
           </div>

@@ -6,8 +6,6 @@ import UiIcon from './UiIcon.vue'
 
 import {
   allTargets,
-  botKey,
-  botLabel,
   deriveTargetAvatarURL,
   displayAvatarURL,
   normalizeResolverSettings,
@@ -81,7 +79,6 @@ const configuredTargets = computed<LiveTarget[]>(() => {
     return {
       key,
       bot_id: target.bot_id,
-      bot_name: props.targets.bots.find((bot) => botKey(bot) === botKey(target))?.bot_name,
       source_protocol: target.source_protocol,
       target_type: target.target_type,
       target_id: target.target_id,
@@ -171,7 +168,7 @@ function avatarFallback(target: LiveTarget): string {
 }
 
 function targetNumberLabel(target: LiveTarget): string {
-  return `${target.target_type === 'group' ? '群号' : 'QQ'} ${target.target_id} · ${botLabel(target)}`
+  return `${target.target_type === 'group' ? '群号' : 'QQ'} ${target.target_id}`
 }
 
 function resolverPlatformLabel(platform: ResolverPlatform): string {

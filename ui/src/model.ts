@@ -4,7 +4,6 @@ export type TargetType = 'group' | 'private'
 export interface BotRoute {
   bot_id: string
   source_protocol: string
-  bot_name?: string
 }
 export type ResolveState = 'idle' | 'checking' | 'resolved' | 'error'
 export type ResolverPlatform = 'bilibili' | 'weibo' | 'douyin'
@@ -192,7 +191,6 @@ export interface ProtocolIssue {
 export interface BotAccount extends BotRoute {}
 
 export interface TargetsState {
-  bots: BotAccount[]
   loaded: boolean
   available: boolean
   groups: ProtocolTargetRecord[]
@@ -510,7 +508,6 @@ export function buildSettingsPayload(
 export function normalizeTargets(payload: unknown): TargetsState {
   const source = isRecord(payload) ? payload : {}
   return {
-    bots: Array.isArray(source.bots) ? source.bots.filter(isRecord).filter((bot) => validRoute({ source_protocol: trim(bot.source_protocol), bot_id: trim(bot.bot_id) })).map((bot) => ({ source_protocol: trim(bot.source_protocol), bot_id: trim(bot.bot_id), bot_name: trim(bot.bot_name) })) : [],
     loaded: true,
     available: source.available === true,
     groups: Array.isArray(source.groups) ? source.groups.filter(isTargetRecord) : [],
@@ -522,7 +519,7 @@ export function normalizeTargets(payload: unknown): TargetsState {
 }
 
 export function emptyTargets(): TargetsState {
-  return { bots: [], loaded: false, available: false, groups: [], private_users: [], issues: [] }
+  return { loaded: false, available: false, groups: [], private_users: [], issues: [] }
 }
 
 export function allTargets(state: TargetsState): LiveTarget[] {
@@ -531,7 +528,6 @@ export function allTargets(state: TargetsState): LiveTarget[] {
       key: targetKey(target.source_protocol, target.bot_id, 'group', target.target_id),
       bot_id: target.bot_id,
       source_protocol: target.source_protocol,
-      bot_name: target.bot_name,
       target_type: 'group' as const,
       target_id: trim(target.target_id),
       label: trim(target.target_name) || trim(target.target_id),
@@ -541,7 +537,6 @@ export function allTargets(state: TargetsState): LiveTarget[] {
       key: targetKey(target.source_protocol, target.bot_id, 'private', target.target_id),
       bot_id: target.bot_id,
       source_protocol: target.source_protocol,
-      bot_name: target.bot_name,
       target_type: 'private' as const,
       target_id: trim(target.target_id),
       label: trim(target.nickname) || trim(target.target_name) || trim(target.target_id),
@@ -706,7 +701,7 @@ export function currentTargetsForMode(state: TargetsState, mode: TargetType): Li
 
 export function targetDisplay(target: RowTarget, map: Map<string, LiveTarget>): string {
   const live = map.get(target.key)
-  return `${target.target_type === 'group' ? '群聊' : '私聊'} ${live?.label || target.target_name || target.target_id} · ${botLabel(live || target)}`
+  return `${target.target_type === 'group' ? '群聊' : '私聊'} ${live?.label || target.target_name || target.target_id}`
 }
 
 export function targetAvatar(target: RowTarget, map: Map<string, LiveTarget>): string {
@@ -829,8 +824,4 @@ function validRoute(route: BotRoute): boolean {
 
 export function botKey(bot: BotRoute): string {
   return `${bot.source_protocol}:${bot.bot_id}`
-}
-
-export function botLabel(bot: BotRoute): string {
-  return bot.bot_name ? `${bot.bot_name}（${bot.bot_id}）` : bot.bot_id
 }

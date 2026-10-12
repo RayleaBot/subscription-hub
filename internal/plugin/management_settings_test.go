@@ -184,7 +184,4 @@ func TestGlobalStrategyPreservesAccountData(t *testing.T) {
 	if !reflect.DeepEqual(current.Subscriptions, before.Subscriptions) || !reflect.DeepEqual(current.Resolver.Targets, before.Resolver.Targets) {
 		t.Fatal("strategy overwrote account records")
 	}
-	if _, err := handler.saveManagementSettings(t.Context(), managementSettingsEvent(config, "1001"), "strategy.save", payload); err == nil {
-		t.Fatal("account page wrote global strategy")
-	}
 }

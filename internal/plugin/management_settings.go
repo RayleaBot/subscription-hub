@@ -21,13 +21,6 @@ func managementBot(event *rayleabot.EventContext) (rayleabot.BotAccount, error) 
 	return bot, nil
 }
 
-func globalManagement(event *rayleabot.EventContext) error {
-	if _, ok := event.Event.ManagementBot(); ok {
-		return fmt.Errorf("请在全局页面操作")
-	}
-	return nil
-}
-
 func belongsToBot(protocol, id string, bot rayleabot.BotAccount) bool {
 	return protocol == bot.SourceProtocol && id == bot.BotID
 }
@@ -71,9 +64,7 @@ func validateSubmittedBot(protocol, id string, bot rayleabot.BotAccount) error {
 func (handler *Handler) saveManagementSettings(ctx context.Context, event *rayleabot.EventContext, action string, payload map[string]any) (map[string]any, error) {
 	var bot rayleabot.BotAccount
 	var err error
-	if action == "strategy.save" {
-		err = globalManagement(event)
-	} else {
+	if action != "strategy.save" {
 		bot, err = managementBot(event)
 	}
 	if err != nil {

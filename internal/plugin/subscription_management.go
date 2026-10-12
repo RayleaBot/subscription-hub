@@ -152,10 +152,6 @@ func (handler *Handler) handleManagementAction(ctx context.Context, event *rayle
 		if action != "subscription.resolve_user" && len(payload) != 0 {
 			return event.Fail("platform.invalid_request", "此动作不接受业务参数")
 		}
-	case "strategy.settings":
-		if err := globalManagement(event); err != nil {
-			return event.Fail("platform.invalid_request", err.Error())
-		}
 	}
 	if action == "subscription.check_now" {
 		var cancel context.CancelFunc

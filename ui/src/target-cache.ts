@@ -60,7 +60,6 @@ function targetsFromSnapshot(snapshot: TargetCacheSnapshot): TargetsState {
   const privateUsers = snapshot.private_users?.items ?? []
   const loaded = Boolean(snapshot.groups || snapshot.private_users)
   return {
-    bots: [],
     loaded,
     available: Boolean(snapshot.groups && snapshot.private_users),
     groups: groups.map((item) => ({ ...item })),

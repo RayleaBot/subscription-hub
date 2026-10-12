@@ -35,10 +35,9 @@ export async function loadProtocolTargets(host: ProtocolHost) {
   const bot = await onlineBot(host)
   const response = await host.client.apiRequest<WireTargetsResponse>('GET', adapterPath(bot, 'targets'))
   await verifyConnection(host, bot)
-  const account = { source_protocol: bot.source_protocol, bot_id: bot.bot_id, bot_name: bot.nickname }
+  const account = { source_protocol: bot.source_protocol, bot_id: bot.bot_id }
   return {
     ...response,
-    bots: [account],
     groups: response.groups.map((group) => ({ ...group, ...account })),
     private_users: response.private_users.map((user) => ({ ...user, ...account })),
   }
