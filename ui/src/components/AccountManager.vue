@@ -483,7 +483,6 @@ function qrStateText(state: string): string {
     <div class="workspace-toolbar">
       <label class="search-control"><UiIcon name="search" /><input v-model="query" type="search" aria-label="搜索账号" placeholder="搜索昵称、备注或账号 ID" /></label>
       <div class="toolbar-actions">
-        <slot name="tools" />
         <button type="button" class="button icon-button" :disabled="loading" title="刷新账号" aria-label="刷新账号" @click="refresh"><UiIcon name="refresh" :class="{ 'is-spinning': loading }" /></button>
         <button type="button" class="button" @click="settingsOpen = true"><UiIcon name="settings" />账号设置</button>
         <button type="button" class="button button--primary" :disabled="!platforms.length" @click="openAdd"><UiIcon name="plus" />添加账号</button>

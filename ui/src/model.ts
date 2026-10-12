@@ -4,7 +4,6 @@ export type TargetType = 'group' | 'private'
 export interface BotRoute {
   bot_id: string
   source_protocol: string
-  needs_bot_selection?: boolean
   bot_name?: string
 }
 export type ResolveState = 'idle' | 'checking' | 'resolved' | 'error'
@@ -144,7 +143,6 @@ export interface RowTarget extends BotRoute {
   target_id: string
   target_name: string
   services: string[]
-  saved_subscription?: Subscription
 }
 
 export interface ResolveCandidate {
@@ -293,17 +291,15 @@ function mergeResolverTargets(targets: ResolverTargetSettings[]): ResolverTarget
   const known = new Map<string, ResolverTargetSettings>()
   const result: ResolverTargetSettings[] = []
   for (const target of targets) {
-    if (!needsBotSelection(target)) {
-      const key = targetKey(target.source_protocol, target.bot_id, target.target_type, target.target_id)
-      const previous = known.get(key)
-      if (previous) {
-        previous.bilibili ||= target.bilibili
-        previous.weibo ||= target.weibo
-        previous.douyin ||= target.douyin
-        continue
-      }
-      known.set(key, target)
+    const key = targetKey(target.source_protocol, target.bot_id, target.target_type, target.target_id)
+    const previous = known.get(key)
+    if (previous) {
+      previous.bilibili ||= target.bilibili
+      previous.weibo ||= target.weibo
+      previous.douyin ||= target.douyin
+      continue
     }
+    known.set(key, target)
     result.push(target)
   }
   return result
@@ -317,7 +313,6 @@ function normalizeResolverTarget(value: unknown): ResolverTargetSettings | null 
   return {
     bot_id: trim(value.bot_id),
     source_protocol: trim(value.source_protocol),
-    needs_bot_selection: needsBotSelection({ source_protocol: trim(value.source_protocol), bot_id: trim(value.bot_id) }) || undefined,
     target_type: targetType,
     target_id: targetID,
     target_name: trim(value.target_name) || undefined,
@@ -359,7 +354,6 @@ export function normalizeSubscription(value: unknown): Subscription | null {
     avatar_url: trim(value.avatar_url) || undefined,
     bot_id: trim(value.bot_id),
     source_protocol: trim(value.source_protocol),
-    needs_bot_selection: needsBotSelection({ source_protocol: trim(value.source_protocol), bot_id: trim(value.bot_id) }) || undefined,
     target_type: targetType,
     target_id: targetID,
     target_name: trim(value.target_name) || undefined,
@@ -427,12 +421,10 @@ export function buildRowsFromSettings(settings: SubscriptionSettings): Subscript
     row.enabled ||= subscription.enabled
     row.avatar_url ||= subscription.avatar_url || ''
     row.targets.push({
-      saved_subscription: subscription,
-      key: needsBotSelection(subscription) ? `pending:${subscription.id}` : targetKey(subscription.source_protocol, subscription.bot_id, subscription.target_type, subscription.target_id),
+      key: targetKey(subscription.source_protocol, subscription.bot_id, subscription.target_type, subscription.target_id),
       subscription_id: subscription.id,
       bot_id: subscription.bot_id,
       source_protocol: subscription.source_protocol,
-      needs_bot_selection: needsBotSelection(subscription) || undefined,
       target_type: subscription.target_type,
       target_id: subscription.target_id,
       target_name: subscription.target_name || '',
@@ -485,10 +477,6 @@ export function buildSettingsPayload(
   const subscriptions: Subscription[] = []
   for (const row of rows) {
     for (const target of row.targets) {
-      if (needsBotSelection(target) && target.saved_subscription) {
-        subscriptions.push(target.saved_subscription)
-        continue
-      }
       const live = targetsByKey.get(target.key)
       subscriptions.push({
         id: target.subscription_id || `${row.platform}-${row.uid}-${target.source_protocol}-${target.bot_id}-${target.target_type}-${target.target_id}`,
@@ -499,7 +487,6 @@ export function buildSettingsPayload(
         avatar_url: row.avatar_url || undefined,
         bot_id: target.bot_id,
         source_protocol: target.source_protocol,
-        needs_bot_selection: needsBotSelection(target) || undefined,
         target_type: target.target_type,
         target_id: target.target_id,
         target_name: live?.label || target.target_name || undefined,
@@ -523,7 +510,7 @@ export function buildSettingsPayload(
 export function normalizeTargets(payload: unknown): TargetsState {
   const source = isRecord(payload) ? payload : {}
   return {
-    bots: Array.isArray(source.bots) ? source.bots.filter(isRecord).filter((bot) => !needsBotSelection({ source_protocol: trim(bot.source_protocol), bot_id: trim(bot.bot_id) })).map((bot) => ({ source_protocol: trim(bot.source_protocol), bot_id: trim(bot.bot_id), bot_name: trim(bot.bot_name) })) : [],
+    bots: Array.isArray(source.bots) ? source.bots.filter(isRecord).filter((bot) => validRoute({ source_protocol: trim(bot.source_protocol), bot_id: trim(bot.bot_id) })).map((bot) => ({ source_protocol: trim(bot.source_protocol), bot_id: trim(bot.bot_id), bot_name: trim(bot.bot_name) })) : [],
     loaded: true,
     available: source.available === true,
     groups: Array.isArray(source.groups) ? source.groups.filter(isTargetRecord) : [],
@@ -582,7 +569,7 @@ export function knownTargetsState(state: TargetsState, rows: SubscriptionRow[]):
 
   for (const row of rows) {
     for (const target of row.targets) {
-      if (needsBotSelection(target) || !target.target_id || seen.has(target.key) || !fallbackAllowed(target.target_type)) continue
+      if (!target.target_id || seen.has(target.key) || !fallbackAllowed(target.target_type)) continue
       if (target.target_type === 'group') {
         groups.push({ bot_id: target.bot_id, source_protocol: target.source_protocol, target_type: 'group', target_id: target.target_id, target_name: target.target_name || target.target_id })
       } else {
@@ -613,8 +600,6 @@ export function validateRow(row: SubscriptionRow, context: RowContext): string[]
   if (!context.targetsLoaded && row.targets.some((target) => !target.subscription_id)) errors.push('推送对象未载入')
   if (!row.targets.length) errors.push('请选择推送对象')
   for (const target of row.targets) {
-    if (target.subscription_id && needsBotSelection(target)) continue
-    if (needsBotSelection(target)) errors.push('请选择机器人')
     if (!target.subscription_id && !context.targetMap.has(target.key)) errors.push(`${targetDisplay(target, context.targetMap)} 不在协议对象列表中`)
     if (row.service_mode === 'mixed' && !hasServiceSelection(target.services)) {
       errors.push(`${targetDisplay(target, context.targetMap)} 请选择推送类型`)
@@ -776,7 +761,6 @@ export function buildIdentityRequests(rows: SubscriptionRow[]): IdentityResolveI
   const seen = new Set<string>()
   for (const row of rows) {
     for (const target of row.targets) {
-      if (needsBotSelection(target)) continue
       for (const userID of row.subscriber_ids) {
         const key = identityKey(target.source_protocol, target.bot_id, target.target_type, target.target_id, userID)
         if (seen.has(key)) continue
@@ -832,15 +816,15 @@ function normalizeSubscriber(value: unknown): Subscriber | null {
 }
 
 function isTargetRecord(value: unknown): value is ProtocolTargetRecord {
-  return isRecord(value) && !needsBotSelection({ source_protocol: trim(value.source_protocol), bot_id: trim(value.bot_id) }) && typeof value.target_id === 'string' && value.target_id.trim().length > 0
+  return isRecord(value) && validRoute({ source_protocol: trim(value.source_protocol), bot_id: trim(value.bot_id) }) && typeof value.target_id === 'string' && value.target_id.trim().length > 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-export function needsBotSelection(route: BotRoute): boolean {
-  return route.source_protocol !== 'onebot11' || !trim(route.bot_id)
+function validRoute(route: BotRoute): boolean {
+  return route.source_protocol === 'onebot11' && Boolean(trim(route.bot_id))
 }
 
 export function botKey(bot: BotRoute): string {
@@ -848,14 +832,5 @@ export function botKey(bot: BotRoute): string {
 }
 
 export function botLabel(bot: BotRoute): string {
-  if (needsBotSelection(bot)) return '待选择机器人'
   return bot.bot_name ? `${bot.bot_name}（${bot.bot_id}）` : bot.bot_id
-}
-
-export function changeTargetBot(target: RowTarget, bot: BotAccount): void {
-  target.source_protocol = bot.source_protocol
-  target.bot_id = bot.bot_id
-  target.bot_name = bot.bot_name
-  target.needs_bot_selection = undefined
-  target.key = targetKey(bot.source_protocol, bot.bot_id, target.target_type, target.target_id)
 }

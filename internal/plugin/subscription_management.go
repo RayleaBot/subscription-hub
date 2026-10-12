@@ -140,12 +140,6 @@ func (handler *Handler) handleManagementAction(ctx context.Context, event *rayle
 			return event.Fail("platform.invalid_request", err.Error())
 		}
 		return event.Result(result)
-	case "history.list", "history.assign", "history.delete":
-		result, err := handler.manageHistory(ctx, event, action, payload)
-		if err != nil {
-			return event.Fail("platform.invalid_request", err.Error())
-		}
-		return event.Result(result)
 	}
 	var bot rayleabot.BotAccount
 	switch action {

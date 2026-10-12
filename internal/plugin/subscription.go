@@ -20,17 +20,14 @@ type ResolverSettings struct {
 }
 
 type ResolverTarget struct {
-	// SourceAdapter is the legacy route kept only until BotID is resolved.
-	SourceAdapter     string `json:"source_adapter,omitempty"`
-	SourceProtocol    string `json:"source_protocol"`
-	BotID             string `json:"bot_id"`
-	NeedsBotSelection bool   `json:"needs_bot_selection,omitempty"`
-	TargetType        string `json:"target_type"`
-	TargetID          string `json:"target_id"`
-	TargetName        string `json:"target_name,omitempty"`
-	Bilibili          bool   `json:"bilibili"`
-	Weibo             bool   `json:"weibo"`
-	Douyin            bool   `json:"douyin"`
+	SourceProtocol string `json:"source_protocol"`
+	BotID          string `json:"bot_id"`
+	TargetType     string `json:"target_type"`
+	TargetID       string `json:"target_id"`
+	TargetName     string `json:"target_name,omitempty"`
+	Bilibili       bool   `json:"bilibili"`
+	Weibo          bool   `json:"weibo"`
+	Douyin         bool   `json:"douyin"`
 }
 
 type ResolverCooldownSettings struct {
@@ -60,14 +57,11 @@ type ResolverMediaSettings struct {
 }
 
 type Subscription struct {
-	// SourceAdapter is the legacy route kept only until BotID is resolved.
-	SourceAdapter     string `json:"source_adapter,omitempty"`
-	SourceProtocol    string `json:"source_protocol"`
-	BotID             string `json:"bot_id"`
-	NeedsBotSelection bool   `json:"needs_bot_selection,omitempty"`
-	ID                string `json:"id"`
-	Platform          string `json:"platform"`
-	UID               string `json:"uid"`
+	SourceProtocol string `json:"source_protocol"`
+	BotID          string `json:"bot_id"`
+	ID             string `json:"id"`
+	Platform       string `json:"platform"`
+	UID            string `json:"uid"`
 	// UniqueID 是可修改的展示标识，UID 是稳定的订阅来源标识。
 	UniqueID    string       `json:"unique_id,omitempty"`
 	Name        string       `json:"name"`

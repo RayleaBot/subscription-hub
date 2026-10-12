@@ -5,7 +5,6 @@ import { usePluginHost } from '@rayleabot/plugin-ui'
 
 import { readCachedAvatarDataURLs, storeAvatarDataURLs } from './avatar-cache'
 import AccountManager from './components/AccountManager.vue'
-import HistoryManager from './components/HistoryManager.vue'
 import PlatformLogo from './components/PlatformLogo.vue'
 import UiIcon from './components/UiIcon.vue'
 import ResolverSettingsPanel from './components/ResolverSettingsPanel.vue'
@@ -163,10 +162,10 @@ function signature(currentSettings: SubscriptionSettings, currentRows: Subscript
 function settingsPayloadForCurrentPage(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): Record<string, unknown> {
   if (isSubscriptionsPage.value) {
     const payload = buildSettingsPayload(currentSettings, currentRows, context.value.targetMap, subscriberIdentities.value)
-    return { subscriptions: payload.subscriptions.map(({ source_protocol, bot_id, needs_bot_selection, ...item }) => item) }
+    return { subscriptions: payload.subscriptions.map(({ source_protocol, bot_id, ...item }) => item) }
   }
   if (activePage.value === 'resolver') {
-    return { targets: currentSettings.resolver.targets.map(({ source_protocol, bot_id, needs_bot_selection, ...target }) => target) }
+    return { targets: currentSettings.resolver.targets.map(({ source_protocol, bot_id, ...target }) => target) }
   }
   return {
     enabled: currentSettings.enabled,
@@ -730,7 +729,7 @@ function errorMessage(error: unknown, fallback: string): string {
     <h1 class="sr-only">{{ currentPageLabel }}</h1>
 
     <template v-if="activePage === 'accounts'">
-      <AccountManager :host="host"><template #tools><HistoryManager :host="host" /></template></AccountManager>
+      <AccountManager :host="host" />
     </template>
 
     <AAlert v-else-if="unsupportedBot" class="host-alert" type="info" message="当前功能仅支持 OneBot11，暂不支持 QQ 官方账号。" show-icon />

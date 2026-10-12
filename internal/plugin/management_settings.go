@@ -3,7 +3,6 @@ package plugin
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -36,13 +35,13 @@ func belongsToBot(protocol, id string, bot rayleabot.BotAccount) bool {
 func settingsForBot(current Settings, bot rayleabot.BotAccount) Settings {
 	subscriptions := make([]Subscription, 0)
 	for _, item := range current.Subscriptions {
-		if belongsToBot(item.SourceProtocol, item.BotID, bot) && !item.NeedsBotSelection {
+		if belongsToBot(item.SourceProtocol, item.BotID, bot) {
 			subscriptions = append(subscriptions, item)
 		}
 	}
 	targets := make([]ResolverTarget, 0)
 	for _, item := range current.Resolver.Targets {
-		if belongsToBot(item.SourceProtocol, item.BotID, bot) && !item.NeedsBotSelection {
+		if belongsToBot(item.SourceProtocol, item.BotID, bot) {
 			targets = append(targets, item)
 		}
 	}
@@ -60,15 +59,15 @@ func decodeManagementPayload(payload map[string]any, result any) error {
 	return decoder.Decode(result)
 }
 
-func validateSubmittedBot(protocol, id string, pending bool, bot rayleabot.BotAccount) error {
-	if (protocol != "" && protocol != bot.SourceProtocol) || (id != "" && id != bot.BotID) || pending {
+func validateSubmittedBot(protocol, id string, bot rayleabot.BotAccount) error {
+	if (protocol != "" && protocol != bot.SourceProtocol) || (id != "" && id != bot.BotID) {
 		return fmt.Errorf("记录不属于当前机器人账号")
 	}
 	return nil
 }
 
 // All account writes replace only this account's collection, inside the same
-// lock used by chat commands, global strategy saves and legacy migration.
+// lock used by chat commands and global strategy saves.
 func (handler *Handler) saveManagementSettings(ctx context.Context, event *rayleabot.EventContext, action string, payload map[string]any) (map[string]any, error) {
 	var bot rayleabot.BotAccount
 	var err error
@@ -108,10 +107,10 @@ func (handler *Handler) saveManagementSettings(ctx context.Context, event *rayle
 		}
 		seen := map[string]bool{}
 		for _, item := range *input.Subscriptions {
-			if err := validateSubmittedBot(item.SourceProtocol, item.BotID, item.NeedsBotSelection, bot); err != nil {
+			if err := validateSubmittedBot(item.SourceProtocol, item.BotID, bot); err != nil {
 				return nil, err
 			}
-			item.SourceProtocol, item.BotID, item.SourceAdapter = bot.SourceProtocol, bot.BotID, ""
+			item.SourceProtocol, item.BotID = bot.SourceProtocol, bot.BotID
 			if handler.normalizePlatform(item.Platform) == "" || strings.TrimSpace(item.UID) == "" || strings.TrimSpace(item.TargetID) == "" || (item.TargetType != "group" && item.TargetType != "private") {
 				return nil, fmt.Errorf("订阅对象或推送目标无效")
 			}
@@ -146,13 +145,13 @@ func (handler *Handler) saveManagementSettings(ctx context.Context, event *rayle
 			}
 		}
 		for _, target := range *input.Targets {
-			if err := validateSubmittedBot(target.SourceProtocol, target.BotID, target.NeedsBotSelection, bot); err != nil {
+			if err := validateSubmittedBot(target.SourceProtocol, target.BotID, bot); err != nil {
 				return nil, err
 			}
 			if strings.TrimSpace(target.TargetID) == "" || (target.TargetType != "group" && target.TargetType != "private") {
 				return nil, fmt.Errorf("解析目标无效")
 			}
-			target.SourceProtocol, target.BotID, target.SourceAdapter = bot.SourceProtocol, bot.BotID, ""
+			target.SourceProtocol, target.BotID = bot.SourceProtocol, bot.BotID
 			remaining = append(remaining, target)
 		}
 		current.Resolver.Targets = normalizeResolverTargets(remaining)
@@ -182,111 +181,4 @@ func (handler *Handler) saveManagementSettings(ctx context.Context, event *rayle
 		current.Subscriptions, current.Resolver.Targets = []Subscription{}, []ResolverTarget{}
 	}
 	return map[string]any{"settings": current}, nil
-}
-
-type historyRecord struct {
-	Kind           string `json:"kind"`
-	ID             string `json:"id"`
-	SourceProtocol string `json:"source_protocol"`
-	BotID          string `json:"bot_id"`
-	SourceAdapter  string `json:"source_adapter,omitempty"`
-	Label          string `json:"label"`
-	TargetType     string `json:"target_type"`
-	TargetID       string `json:"target_id"`
-	Record         any    `json:"record"`
-}
-
-func resolverHistoryID(target ResolverTarget) string {
-	encoded, _ := json.Marshal([]string{target.SourceProtocol, target.BotID, target.SourceAdapter, target.TargetType, target.TargetID})
-	return fmt.Sprintf("%x", sha256.Sum256(encoded))
-}
-
-func historyRecords(current Settings) map[string]any {
-	items := make([]historyRecord, 0, len(current.Subscriptions)+len(current.Resolver.Targets))
-	for _, item := range current.Subscriptions {
-		items = append(items, historyRecord{"subscription", item.ID, item.SourceProtocol, item.BotID, item.SourceAdapter, item.Name, item.TargetType, item.TargetID, item})
-	}
-	for _, item := range current.Resolver.Targets {
-		items = append(items, historyRecord{"resolver", resolverHistoryID(item), item.SourceProtocol, item.BotID, item.SourceAdapter, item.TargetName, item.TargetType, item.TargetID, item})
-	}
-	return map[string]any{"items": items, "total": len(items)}
-}
-
-func (handler *Handler) manageHistory(ctx context.Context, event *rayleabot.EventContext, action string, payload map[string]any) (map[string]any, error) {
-	if err := globalManagement(event); err != nil {
-		return nil, err
-	}
-	handler.settingsMu.Lock()
-	defer handler.settingsMu.Unlock()
-	current, err := handler.loadSettingsLocked(ctx, event)
-	if err != nil {
-		return nil, err
-	}
-	if action == "history.list" {
-		return historyRecords(current), nil
-	}
-	var input struct {
-		Kind string               `json:"kind"`
-		ID   string               `json:"id"`
-		Bot  rayleabot.BotAccount `json:"bot"`
-	}
-	if err := decodeManagementPayload(payload, &input); err != nil {
-		return nil, err
-	}
-	assign := action == "history.assign"
-	validateAssignment := func(protocol, botID string) error {
-		if !assign {
-			return nil
-		}
-		if protocol != "onebot11" || botID != "" || input.Bot.SourceProtocol != "onebot11" || input.Bot.BotID == "" {
-			return fmt.Errorf("仅缺少账号的 OneBot11 记录可归属；完整账号记录不可改挂")
-		}
-		return nil
-	}
-	values := map[string]any{}
-	found := false
-	switch input.Kind {
-	case "subscription":
-		for i, item := range current.Subscriptions {
-			if item.ID != input.ID {
-				continue
-			}
-			if err := validateAssignment(item.SourceProtocol, item.BotID); err != nil {
-				return nil, err
-			}
-			if assign {
-				item.BotID, item.SourceAdapter, item.NeedsBotSelection = input.Bot.BotID, "", false
-				current.Subscriptions[i] = item // Keep the ID and delivery history.
-			} else {
-				current.Subscriptions = append(current.Subscriptions[:i], current.Subscriptions[i+1:]...)
-			}
-			values["subscriptions"], found = current.Subscriptions, true
-			break
-		}
-	case "resolver":
-		for i, item := range current.Resolver.Targets {
-			if resolverHistoryID(item) != input.ID {
-				continue
-			}
-			if err := validateAssignment(item.SourceProtocol, item.BotID); err != nil {
-				return nil, err
-			}
-			if assign {
-				item.BotID, item.SourceAdapter, item.NeedsBotSelection = input.Bot.BotID, "", false
-				current.Resolver.Targets[i] = item
-				current.Resolver.Targets = normalizeResolverTargets(current.Resolver.Targets)
-			} else {
-				current.Resolver.Targets = append(current.Resolver.Targets[:i], current.Resolver.Targets[i+1:]...)
-			}
-			values["resolver"], found = current.Resolver, true
-			break
-		}
-	}
-	if !found {
-		return nil, fmt.Errorf("历史记录不存在，请刷新")
-	}
-	if err := handler.writeSettingsLocked(ctx, event, values); err != nil {
-		return nil, err
-	}
-	return historyRecords(current), nil
 }

@@ -19,7 +19,7 @@ func subscriptionTargetsEvent(item Subscription, event *rayleabot.EventContext) 
 func validateSettingsRoutes(current Settings) error {
 	ids := make(map[string]bool, len(current.Subscriptions))
 	for _, item := range current.Subscriptions {
-		if !item.NeedsBotSelection && !validSubscriptionRoute(item.SourceProtocol, item.BotID) {
+		if !validSubscriptionRoute(item.SourceProtocol, item.BotID) {
 			return fmt.Errorf("订阅 %s 请选择机器人", item.ID)
 		}
 		if item.ID != "" {
@@ -30,42 +30,11 @@ func validateSettingsRoutes(current Settings) error {
 		}
 	}
 	for _, target := range current.Resolver.Targets {
-		if !target.NeedsBotSelection && !validSubscriptionRoute(target.SourceProtocol, target.BotID) {
+		if !validSubscriptionRoute(target.SourceProtocol, target.BotID) {
 			return fmt.Errorf("解析目标 %s 请选择机器人", target.TargetID)
 		}
 	}
 	return nil
-}
-
-// Loading never rejects a whole configuration because one legacy route is
-// unresolved. Only the old adapter's confirmed identity can repair that route.
-func migrateSettingsRoutes(current *Settings, bots []rayleabot.Bot) bool {
-	changed := false
-	repair := func(protocol string, adapter, botID *string) bool {
-		if protocol == "onebot11" && *botID == "" && *adapter != "" {
-			for _, bot := range bots {
-				if bot.SourceProtocol == protocol && bot.SourceAdapter == *adapter && bot.ID != "" {
-					*botID = bot.ID
-					break
-				}
-			}
-		}
-		// The adapter hint stays on unresolved routes so a later identity snapshot can still repair them.
-		if *botID != "" && *adapter != "" {
-			*adapter = ""
-			changed = true
-		}
-		return !validSubscriptionRoute(protocol, *botID)
-	}
-	for i := range current.Subscriptions {
-		item := &current.Subscriptions[i]
-		item.NeedsBotSelection = repair(item.SourceProtocol, &item.SourceAdapter, &item.BotID)
-	}
-	for i := range current.Resolver.Targets {
-		target := &current.Resolver.Targets[i]
-		target.NeedsBotSelection = repair(target.SourceProtocol, &target.SourceAdapter, &target.BotID)
-	}
-	return changed
 }
 
 func subscriptionIdentity(item Subscription) string {

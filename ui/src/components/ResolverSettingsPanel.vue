@@ -8,7 +8,6 @@ import {
   allTargets,
   botKey,
   botLabel,
-  needsBotSelection,
   deriveTargetAvatarURL,
   displayAvatarURL,
   normalizeResolverSettings,
@@ -156,7 +155,7 @@ function typeLabel(type: TargetType): string {
 }
 
 function configuredKey(target: ResolverTargetSettings, index: number): string {
-  return needsBotSelection(target) ? `pending:${index}` : targetKey(target.source_protocol, target.bot_id, target.target_type, target.target_id)
+  return targetKey(target.source_protocol, target.bot_id, target.target_type, target.target_id)
 }
 
 function targetMatches(target: LiveTarget, query: string): boolean {

@@ -26,12 +26,12 @@ func settingsFixture(t *testing.T) (*Handler, *testkit.Actions, map[string]any) 
 	handler.actions = actions
 	a, b := workflowSubscription("a", "fixture"), workflowSubscription("b", "fixture")
 	a.BotID, b.BotID = "1001", "1002"
-	pending := workflowSubscription("legacy", "fixture")
-	pending.BotID, pending.SourceAdapter, pending.NeedsBotSelection = "", "old", true
-	settings := Settings{Enabled: true, DeliveryMaxAgeMinutes: 45, Subscriptions: []Subscription{a, b, pending}, Resolver: NormalizeResolverSettings(ResolverSettings{SuperAdminWhitelist: true, Targets: []ResolverTarget{
+	other := workflowSubscription("other", "fixture")
+	other.BotID = "1003"
+	settings := Settings{Enabled: true, DeliveryMaxAgeMinutes: 45, Subscriptions: []Subscription{a, b, other}, Resolver: NormalizeResolverSettings(ResolverSettings{SuperAdminWhitelist: true, Targets: []ResolverTarget{
 		{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "200", Bilibili: true},
 		{SourceProtocol: "onebot11", BotID: "1002", TargetType: "group", TargetID: "200", Weibo: true},
-		{SourceProtocol: "qqofficial", SourceAdapter: "old-qq", TargetType: "private", TargetID: "openid", NeedsBotSelection: true},
+		{SourceProtocol: "onebot11", BotID: "1003", TargetType: "private", TargetID: "300", Douyin: true},
 	}})}
 	encoded, _ := json.Marshal(settings)
 	config := map[string]any{}
@@ -69,9 +69,6 @@ func TestManagementAccountFilteringAndRequiredContext(t *testing.T) {
 	event.Event.Payload["bot"] = map[string]any{"source_protocol": "qqofficial", "bot_id": "opaque:id"}
 	if _, err := managementBot(event); err == nil {
 		t.Fatal("unsupported protocol accepted")
-	}
-	if _, err := handler.manageHistory(t.Context(), event, "history.list", nil); err == nil {
-		t.Fatal("account action accessed global history")
 	}
 }
 
@@ -161,7 +158,7 @@ func TestDelayedConfigEchoCannotUndoNewerSave(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, err := handler.loadSettings(t.Context(), event)
-	if err != nil || len(current.Subscriptions) != 1 || current.Subscriptions[0].ID != "legacy" {
+	if err != nil || len(current.Subscriptions) != 1 || current.Subscriptions[0].ID != "other" {
 		t.Fatalf("echo undid newer save: %+v, %v", current, err)
 	}
 	// A genuine external global change still takes effect.
@@ -175,7 +172,7 @@ func TestDelayedConfigEchoCannotUndoNewerSave(t *testing.T) {
 	}
 }
 
-func TestGlobalStrategyAndHistoryPreserveAccountData(t *testing.T) {
+func TestGlobalStrategyPreservesAccountData(t *testing.T) {
 	handler, _, config := settingsFixture(t)
 	global := managementSettingsEvent(config, "")
 	before, _ := handler.loadSettings(t.Context(), global)
@@ -189,35 +186,5 @@ func TestGlobalStrategyAndHistoryPreserveAccountData(t *testing.T) {
 	}
 	if _, err := handler.saveManagementSettings(t.Context(), managementSettingsEvent(config, "1001"), "strategy.save", payload); err == nil {
 		t.Fatal("account page wrote global strategy")
-	}
-	assign := map[string]any{"kind": "subscription", "id": "legacy", "bot": map[string]any{"source_protocol": "onebot11", "bot_id": "1002"}}
-	if _, err := handler.manageHistory(t.Context(), global, "history.assign", assign); err != nil {
-		t.Fatal(err)
-	}
-	current, _ = handler.loadSettings(t.Context(), global)
-	legacy := current.Subscriptions[2]
-	if legacy.ID != "legacy" || legacy.BotID != "1002" || legacy.SourceAdapter != "" || legacy.NeedsBotSelection {
-		t.Fatalf("assignment lost identity: %+v", legacy)
-	}
-	for _, id := range []string{"a", "b", "legacy"} {
-		assign["id"] = id
-		if _, err := handler.manageHistory(t.Context(), global, "history.assign", assign); err == nil {
-			t.Fatal("complete account record reassigned")
-		}
-	}
-	qq := current.Resolver.Targets[2]
-	assign["kind"], assign["id"] = "resolver", resolverHistoryID(qq)
-	if _, err := handler.manageHistory(t.Context(), global, "history.assign", assign); err == nil {
-		t.Fatal("QQ official openid reassigned")
-	}
-	if _, err := handler.manageHistory(t.Context(), global, "history.delete", map[string]any{"kind": "resolver", "id": resolverHistoryID(qq)}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := handler.manageHistory(t.Context(), global, "history.delete", map[string]any{"kind": "subscription", "id": "b"}); err != nil {
-		t.Fatal(err)
-	}
-	current, _ = handler.loadSettings(t.Context(), global)
-	if len(current.Subscriptions) != 2 || len(current.Resolver.Targets) != 2 {
-		t.Fatal("history delete failed")
 	}
 }

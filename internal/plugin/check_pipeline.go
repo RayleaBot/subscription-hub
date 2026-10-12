@@ -241,7 +241,7 @@ func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions Hos
 		return false
 	}
 	if !validSubscriptionRoute(item.SourceProtocol, item.BotID) {
-		failures.add(item.Platform, "config", "订阅待选择机器人，已暂停推送。", &rayleabot.ActionError{Code: "platform.invalid_request", Message: "subscription route is required"})
+		failures.add(item.Platform, "config", "订阅缺少机器人账号，未推送。", &rayleabot.ActionError{Code: "platform.invalid_request", Message: "subscription route is required"})
 		return false
 	}
 	fields := map[string]any{"platform": item.Platform, "stage": "render", "subscription_id": item.ID, "target_type": item.TargetType, "target_id": item.TargetID}

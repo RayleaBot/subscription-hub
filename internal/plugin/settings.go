@@ -58,13 +58,6 @@ func (handler *Handler) loadSettingsLocked(ctx context.Context, event *rayleabot
 			return Settings{}, err
 		}
 	}
-	if migrateSettingsRoutes(&current, event.Bots) {
-		if err := handler.writeSettingsLocked(ctx, event, map[string]any{"subscriptions": current.Subscriptions, "resolver": current.Resolver}); err != nil {
-			_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
-				Level: "warn", Message: "机器人账号迁移保存失败，旧配置已保留，下次加载重试：" + err.Error(),
-			})
-		}
-	}
 	current.DeliveryMaxAgeMinutes = NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)
 	current.AccountCheckIntervalMinutes = NormalizeAccountCheckIntervalMinutes(current.AccountCheckIntervalMinutes)
 	current.Subscriptions = handler.NormalizeSubscriptions(current.Subscriptions)
@@ -72,12 +65,6 @@ func (handler *Handler) loadSettingsLocked(ctx context.Context, event *rayleabot
 	NormalizeSubscriptionSubscribers(current.Subscriptions, event.SuperAdmins)
 	handler.ensureScheduler(ctx, event)
 	return current, nil
-}
-
-func (handler *Handler) saveSettings(ctx context.Context, event *rayleabot.EventContext, current Settings) error {
-	handler.settingsMu.Lock()
-	defer handler.settingsMu.Unlock()
-	return handler.saveSettingsLocked(ctx, event, current)
 }
 
 func (handler *Handler) saveSettingsLocked(ctx context.Context, event *rayleabot.EventContext, current Settings) error {
