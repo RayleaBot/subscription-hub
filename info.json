@@ -663,19 +663,23 @@
     "pages": [
       {
         "id": "accounts",
-        "label": "账号管理"
+        "label": "账号管理",
+        "scope": "global"
       },
       {
         "id": "subscriptions",
-        "label": "订阅设置"
+        "label": "订阅设置",
+        "scope": "bot_account"
       },
       {
         "id": "resolver",
-        "label": "链接解析"
+        "label": "链接解析",
+        "scope": "bot_account"
       },
       {
         "id": "resolver-strategy",
-        "label": "防抖与媒体策略"
+        "label": "防抖与媒体策略",
+        "scope": "global"
       }
     ]
   }

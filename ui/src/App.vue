@@ -5,12 +5,15 @@ import { usePluginHost } from '@rayleabot/plugin-ui'
 
 import { readCachedAvatarDataURLs, storeAvatarDataURLs } from './avatar-cache'
 import AccountManager from './components/AccountManager.vue'
+import HistoryManager from './components/HistoryManager.vue'
 import PlatformLogo from './components/PlatformLogo.vue'
 import UiIcon from './components/UiIcon.vue'
 import ResolverSettingsPanel from './components/ResolverSettingsPanel.vue'
 import SubscriptionCard from './components/SubscriptionCard.vue'
 import { mergeAndCacheProtocolTargets, readCachedProtocolTargets } from './target-cache'
 import {
+  botKey,
+  emptyTargets,
   buildIdentityRequests,
   buildRowsFromSettings,
   buildSettingsPayload,
@@ -64,7 +67,7 @@ const defaultSettings: SubscriptionSettings = {
 }
 const settings = ref<SubscriptionSettings>(structuredClone(defaultSettings))
 const rows = ref<SubscriptionRow[]>([])
-const targets = ref<TargetsState>(readCachedProtocolTargets())
+const targets = ref<TargetsState>(emptyTargets())
 const subscriberAvatars = ref(new Map<string, string>())
 const subscriberIdentities = ref(new Map<string, Subscriber>())
 const avatarDataURLs = ref(new Map<string, string>())
@@ -94,6 +97,10 @@ const activePage = computed<ManagementPage>(() => {
   return 'subscriptions'
 })
 const isSubscriptionsPage = computed(() => activePage.value === 'subscriptions')
+const accountPage = computed(() => activePage.value === 'subscriptions' || activePage.value === 'resolver')
+const unsupportedBot = computed(() => accountPage.value && host.bot.value?.source_protocol === 'qqofficial')
+const targetCacheScope = computed(() => `${activePage.value}:${host.bot.value ? botKey(host.bot.value) : ''}`)
+const settingsAction = computed(() => activePage.value === 'resolver-strategy' ? 'strategy.settings' : activePage.value === 'resolver' ? 'resolver.settings' : 'subscription.settings')
 const resolverView = computed<'targets' | 'strategy'>(() => activePage.value === 'resolver' ? 'targets' : 'strategy')
 const pageLabels: Record<ManagementPage, string> = {
   accounts: '账号管理',
@@ -104,7 +111,7 @@ const pageLabels: Record<ManagementPage, string> = {
 const currentPageLabel = computed(() => pageLabels[activePage.value])
 const hostErrorMessage = computed(() => host.error.value?.message ?? '')
 const context = computed(() => createRowContext(targets.value, rows.value, subscriberAvatars.value, avatarDataURLs.value))
-const errors = computed(() => isSubscriptionsPage.value ? [...validateSettings(settings.value), ...validateRows(rows.value, context.value)] : [])
+const errors = computed(() => isSubscriptionsPage.value ? validateRows(rows.value, context.value) : activePage.value === 'resolver-strategy' ? validateSettings(settings.value) : [])
 const contentSnapshot = computed(() => JSON.stringify(settingsPayloadForCurrentPage(settings.value, rows.value)))
 const isDirty = computed(() => loaded.value && contentSnapshot.value !== savedSnapshot.value)
 const visibleRows = computed(() => rows.value.filter((row) => rowVisible(row)))
@@ -125,11 +132,13 @@ const footerStatusText = computed(() => {
 })
 
 void host.ready
-  .then(async (init) => {
-    const response = await host.client.invokeAction('subscription.settings', {})
-    await applySettings({ ...init.config, ...response.settings as Record<string, unknown> }, true)
+  .then(async () => {
+    if (activePage.value === 'accounts' || unsupportedBot.value) return
+    if (accountPage.value) targets.value = readCachedProtocolTargets(targetCacheScope.value)
+    const response = await host.client.invokeAction(settingsAction.value, {})
+    await applySettings(response.settings as Record<string, unknown>, true)
     setStatus('设置已载入')
-    if (activePage.value !== 'resolver-strategy' && activePage.value !== 'accounts') void reloadTargets(false)
+    if (accountPage.value) void reloadTargets(false)
     if (isSubscriptionsPage.value) void refreshStaleDouyinAvatars()
   })
   .catch((error: unknown) => {
@@ -151,14 +160,21 @@ function signature(currentSettings: SubscriptionSettings, currentRows: Subscript
   return JSON.stringify(settingsPayloadForCurrentPage(currentSettings, currentRows))
 }
 
-function settingsPayloadForCurrentPage(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): SubscriptionSettings {
-  if (isSubscriptionsPage.value) return buildSettingsPayload(currentSettings, currentRows, new Map())
-  return normalizeSettings({
+function settingsPayloadForCurrentPage(currentSettings: SubscriptionSettings, currentRows: SubscriptionRow[]): Record<string, unknown> {
+  if (isSubscriptionsPage.value) {
+    const payload = buildSettingsPayload(currentSettings, currentRows, context.value.targetMap, subscriberIdentities.value)
+    return { subscriptions: payload.subscriptions.map(({ source_protocol, bot_id, needs_bot_selection, ...item }) => item) }
+  }
+  if (activePage.value === 'resolver') {
+    return { targets: currentSettings.resolver.targets.map(({ source_protocol, bot_id, needs_bot_selection, ...target }) => target) }
+  }
+  return {
     enabled: currentSettings.enabled,
     delivery_max_age_minutes: currentSettings.delivery_max_age_minutes,
-    subscriptions: currentSettings.subscriptions,
-    resolver: currentSettings.resolver,
-  })
+    super_admin_whitelist: currentSettings.resolver.super_admin_whitelist,
+    cooldowns: currentSettings.resolver.cooldowns,
+    media: currentSettings.resolver.media,
+  }
 }
 
 function setStatus(message: string, isError = false) {
@@ -198,8 +214,8 @@ async function reloadTargets(refreshAvatars = true) {
   targetsLoading.value = true
   setStatus('正在刷新可选推送范围…')
   try {
-    const payload = await loadProtocolTargets(host.client)
-    targets.value = mergeAndCacheProtocolTargets(normalizeTargets(payload))
+    const payload = await loadProtocolTargets(host)
+    targets.value = mergeAndCacheProtocolTargets(normalizeTargets(payload), targetCacheScope.value)
     const issue = targets.value.issues[0]?.message
     const liveCount = targets.value.groups.length + targets.value.private_users.length
     const knownCount = context.value.targets.groups.length + context.value.targets.private_users.length
@@ -213,7 +229,7 @@ async function reloadTargets(refreshAvatars = true) {
       groups: [],
       private_users: [],
       issues: [{ scope: 'protocol', message: errorMessage(error, '可选推送范围不可用') }],
-    }))
+    }), targetCacheScope.value)
     const knownCount = context.value.targets.groups.length + context.value.targets.private_users.length
     setStatus(knownCount > 0 ? `未拉到新的可选范围，已保留 ${knownCount} 个已保存目标` : errorMessage(error, '可选推送范围不可用'), knownCount === 0)
   } finally {
@@ -465,7 +481,7 @@ function hydrateAvatarURLs(force = false) {
 function hydrateResolverAvatarURLs(sources: string[]) {
   const remoteSources = unique(sources).filter((source) => /^https:\/\//i.test(source))
   if (remoteSources.length === 0) return
-  const cached = readCachedAvatarDataURLs(remoteSources)
+  const cached = readCachedAvatarDataURLs(remoteSources, targetCacheScope.value)
   if (cached.size > 0) {
     const next = new Map(avatarDataURLs.value)
     for (const [source, dataURL] of cached) next.set(source, dataURL)
@@ -480,7 +496,7 @@ function revalidateAvatarURLs(): Promise<void> {
     ? currentAvatarURLs()
     : [...avatarDataURLs.value.keys()]
   const activeSources = new Set(sources)
-  const next = readCachedAvatarDataURLs(sources)
+  const next = readCachedAvatarDataURLs(sources, targetCacheScope.value)
   for (const [source, dataURL] of avatarDataURLs.value) {
     if (activeSources.has(source)) next.set(source, dataURL)
   }
@@ -526,7 +542,7 @@ async function resolveAvatarURLs(sources: string[], force = false) {
       }
       avatarDataURLs.value = next
       if (refreshed.size > 0) {
-        storeAvatarDataURLs(refreshed)
+        storeAvatarDataURLs(refreshed, targetCacheScope.value)
       }
     }
   } finally {
@@ -575,7 +591,7 @@ async function refreshStaleDouyinAvatars() {
 async function reloadSettings() {
   setStatus('正在重新载入设置…')
   try {
-    const response = await host.client.invokeAction('subscription.settings', {})
+    const response = await host.client.invokeAction(settingsAction.value, {})
     await applySettings(response.settings as Record<string, unknown>, true)
     setStatus('设置已同步')
     if (isSubscriptionsPage.value) void refreshStaleDouyinAvatars()
@@ -585,7 +601,6 @@ async function reloadSettings() {
 }
 
 function resetSettings() {
-  settings.value = structuredClone(defaultSettings)
   rows.value = []
   subscriberAvatars.value = new Map()
   subscriberIdentities.value = new Map()
@@ -604,10 +619,12 @@ function resetCurrentPage() {
       target.weibo = false
       target.douyin = false
     }
-    settings.value.resolver.super_admin_whitelist = false
-    setStatus('已关闭超级管理员白名单和全部群聊、私聊解析，保存后生效')
+    setStatus('已关闭当前账号的全部解析，保存后生效')
     return
   }
+  settings.value.enabled = true
+  settings.value.delivery_max_age_minutes = DEFAULT_DELIVERY_MAX_AGE_MINUTES
+  settings.value.resolver.super_admin_whitelist = false
   settings.value.resolver.cooldowns = structuredClone(DEFAULT_RESOLVER_SETTINGS.cooldowns)
   settings.value.resolver.media = structuredClone(DEFAULT_RESOLVER_SETTINGS.media)
   setStatus('已恢复默认防抖与媒体策略，保存后生效')
@@ -621,9 +638,10 @@ async function saveSettings() {
   saving.value = true
   try {
     const identityRequests = isSubscriptionsPage.value ? buildIdentityRequests(rows.value) : []
-    if (identityRequests.length > 0) {
+    const currentBot = identityRequests.length > 0 ? await host.refreshBot() : null
+    if (identityRequests.length > 0 && currentBot?.state === 'online' && currentBot.adapter_id) {
       setStatus('正在刷新订阅人身份…')
-      const resolved = await resolveProtocolIdentities(host.client, identityRequests)
+      const resolved = await resolveProtocolIdentities(host, identityRequests)
       const received = new Set(resolved.items.map((item) => identityKey(item.source_protocol, item.bot_id, item.target_type, item.target_id, item.user_id)))
       const missing = identityRequests.filter((item) => !received.has(identityKey(item.source_protocol, item.bot_id, item.target_type, item.target_id, item.user_id)))
       if (resolved.issues.length > 0 || missing.length > 0) {
@@ -653,11 +671,10 @@ async function saveSettings() {
     }
 
     setStatus('正在保存设置…')
-    const payload = isSubscriptionsPage.value
-      ? buildSettingsPayload(settings.value, rows.value, context.value.targetMap, subscriberIdentities.value)
-      : settingsPayloadForCurrentPage(settings.value, rows.value)
-    const response = await host.client.saveSettings(payload as unknown as Record<string, unknown>)
-    applySettings(response.config, true)
+    const payload = settingsPayloadForCurrentPage(settings.value, rows.value)
+    const action = isSubscriptionsPage.value ? 'subscription.save' : activePage.value === 'resolver' ? 'resolver.save' : 'strategy.save'
+    const response = await host.client.invokeAction(action, payload)
+    await applySettings(response.settings as Record<string, unknown>, true)
     setStatus('设置已同步')
   } catch (error) {
     setStatus(errorMessage(error, '保存设置失败'), true)
@@ -712,22 +729,32 @@ function errorMessage(error: unknown, fallback: string): string {
   <main id="main-content" class="page-shell">
     <h1 class="sr-only">{{ currentPageLabel }}</h1>
 
-    <AccountManager v-if="activePage === 'accounts'" :host="host" />
+    <template v-if="activePage === 'accounts'">
+      <AccountManager :host="host"><template #tools><HistoryManager :host="host" /></template></AccountManager>
+    </template>
 
+    <AAlert v-else-if="unsupportedBot" class="host-alert" type="info" message="当前功能仅支持 OneBot11，暂不支持 QQ 官方账号。" show-icon />
     <template v-else>
+    <p v-if="accountPage && host.bot.value" class="panel-description">当前账号：{{ host.bot.value.nickname || host.bot.value.bot_id }} · {{ host.bot.value.bot_id }}</p>
+    <AAlert v-if="accountPage && host.bot.value && host.bot.value.state !== 'online'" class="host-alert" type="info" message="账号离线或无连接，暂不可查询；已保存数据可继续编辑。" show-icon />
 
     <AAlert v-if="hostErrorMessage" class="host-alert" type="error" :message="hostErrorMessage" show-icon />
 
     <AModal centered :footer="null" :open="settingsOpen" title="订阅设置" :width="440" class="hub-dialog" @cancel="settingsOpen = false">
       <div class="panel-form">
-        <label class="switch-row"><span>启用订阅推送</span><input id="enabled-input" v-model="settings.enabled" type="checkbox" /></label>
-        <label class="panel-field field" for="delivery-max-age-input"><span>投递时效（分钟）</span><input id="delivery-max-age-input" v-model.number="settings.delivery_max_age_minutes" type="number" :min="MIN_DELIVERY_MAX_AGE_MINUTES" :max="MAX_DELIVERY_MAX_AGE_MINUTES" step="1" /><small>非直播动态可补发的最长时间，默认 30 分钟。</small></label>
         <div class="panel-field"><span>可选推送范围</span><small>{{ targetMetric }}</small><button type="button" class="button" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button></div>
         <div class="panel-field"><span>推送卡片预览</span><div class="preview-options"><button v-for="platform in ['bilibili', 'weibo', 'douyin']" :key="platform" type="button" class="button" @click="openPreview(`${platform}-update`)"><PlatformLogo :platform="platform" />{{ platformLabel(platform as Platform) }}<UiIcon name="chevron" :size="14" /></button></div></div>
-        <button type="button" class="button" :disabled="saving" @click="resetCurrentPage">恢复默认</button>
+        <button type="button" class="button" :disabled="saving" @click="resetCurrentPage">清空当前账号订阅</button>
+        <p class="panel-description">全局推送开关与投递时效在“防抖与媒体策略”页设置。</p>
         <p class="panel-description">修改后，点击页面底部的“保存设置”生效。</p>
       </div>
     </AModal>
+
+    <section v-if="activePage === 'resolver-strategy'" class="strategy-globals panel-form">
+      <h2>全局订阅设置</h2>
+        <label class="switch-row"><span>启用订阅推送</span><input id="enabled-input" v-model="settings.enabled" type="checkbox" /></label>
+        <label class="panel-field field" for="delivery-max-age-input"><span>投递时效（分钟）</span><input id="delivery-max-age-input" v-model.number="settings.delivery_max_age_minutes" type="number" :min="MIN_DELIVERY_MAX_AGE_MINUTES" :max="MAX_DELIVERY_MAX_AGE_MINUTES" step="1" /><small>非直播动态可补发的最长时间，默认 30 分钟。</small></label>
+    </section>
 
     <ResolverSettingsPanel
       v-if="!isSubscriptionsPage"
@@ -749,7 +776,7 @@ function errorMessage(error: unknown, fallback: string): string {
         <div class="filter-chips" role="group" aria-label="订阅平台筛选"><button type="button" class="filter-chip" :aria-pressed="platformFilter === 'all'" @click="platformFilter = 'all'">全部平台<span class="filter-count">{{ rows.length }}</span></button><button v-for="platform in PLATFORM_OPTIONS" :key="platform.value" type="button" class="filter-chip" :aria-pressed="platformFilter === platform.value" @click="platformFilter = platform.value"><PlatformLogo :platform="platform.value" :size="20" />{{ platform.label }}</button></div>
         <div class="filter-chips filter-chips--secondary" role="group" aria-label="订阅状态筛选"><button v-for="item in (['all', 'enabled', 'disabled'] as const)" :key="item" type="button" class="filter-chip" :aria-pressed="statusFilter === item" @click="statusFilter = item">{{ item === 'all' ? '全部状态' : item === 'enabled' ? '已启用' : '已停用' }}</button><select id="service-filter-input" v-model="serviceFilter" class="filter-select" aria-label="订阅类型"><option value="all">全部类型</option><option value="live">直播</option><option value="video">视频</option><option value="image_text">图文</option><option value="article">专栏</option><option value="repost">转发</option><option value="post">微博</option><option value="image">图片</option><option value="song">歌曲</option><option value="album">专辑</option><option value="playlist">歌单</option><option value="artist">音乐人</option></select></div>
       </div>
-      <div class="collection-caption"><span>{{ visibleRows.length }} 个订阅对象</span><span :class="{ 'is-warning': !settings.enabled }">{{ settings.enabled ? '订阅推送已启用' : '订阅推送已停用' }}</span></div>
+      <div class="collection-caption"><span>{{ visibleRows.length }} 个订阅对象</span><span :class="{ 'is-warning': !settings.enabled }">{{ settings.enabled ? '全局订阅推送已启用' : '全局订阅推送已停用' }}</span></div>
       <AAlert v-if="statusIsError" class="host-alert" type="error" :message="status" show-icon />
       <div ref="listRef"><TransitionGroup name="cards" tag="div" class="subscription-list">
         <SubscriptionCard

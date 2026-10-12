@@ -12,7 +12,7 @@ const host = vi.hoisted(() => {
   }
   const init = {
     config: initialConfig,
-    page: { id: 'resolver', label: '链接解析' },
+    page: { id: 'resolver', scope: 'bot_account' },
     theme: { mode: 'light', tokens: {} },
   }
   const client = {
@@ -31,7 +31,7 @@ const host = vi.hoisted(() => {
       throw new Error(`unexpected request: ${method} ${path}`)
     }),
     invokeAction: vi.fn(async (action: string, payload: Record<string, unknown>) => {
-      if (action === 'subscription.settings') return { settings: initialConfig }
+      if (action === 'resolver.settings' || action === 'resolver.save') return { settings: initialConfig }
       if (action !== 'subscription.resolve_avatars') throw new Error(`unexpected action: ${action}`)
       const urls = Array.isArray(payload.urls) ? payload.urls.map(String) : []
       return { items: urls.map((source_url) => ({ source_url, data_url: avatarDataURL })) }
@@ -40,6 +40,8 @@ const host = vi.hoisted(() => {
   }
   return {
     avatarDataURL,
+    bot: { value: { source_protocol: 'onebot11', bot_id: '1001', state: 'online', adapter_id: 'onebot' } },
+    refreshBot: vi.fn(async () => ({ source_protocol: 'onebot11', bot_id: '1001', state: 'online', adapter_id: 'onebot' })),
     client,
     ready: Promise.resolve(init),
     init: { value: init },
@@ -78,7 +80,8 @@ describe('resolver avatar lifecycle', () => {
 
     const avatarAfterSave = root.querySelector<HTMLImageElement>('.target-choice-card img')
     expect(avatarAfterSave?.src).toBe(host.avatarDataURL)
-    expect(host.client.saveSettings).toHaveBeenCalledOnce()
+    expect(host.client.invokeAction).toHaveBeenCalledWith('resolver.save', { targets: [] })
+    expect(host.client.saveSettings).not.toHaveBeenCalled()
     app.unmount()
   })
 })

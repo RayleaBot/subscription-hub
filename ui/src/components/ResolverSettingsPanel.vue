@@ -159,15 +159,6 @@ function configuredKey(target: ResolverTargetSettings, index: number): string {
   return needsBotSelection(target) ? `pending:${index}` : targetKey(target.source_protocol, target.bot_id, target.target_type, target.target_id)
 }
 
-function replaceBot(target: LiveTarget, key: string) {
-  const bot = props.targets.bots.find((item) => botKey(item) === key)
-  const stored = configured.value.get(target.key)!
-  if (!bot) return
-  stored.source_protocol = bot.source_protocol
-  stored.bot_id = bot.bot_id
-  stored.needs_bot_selection = undefined
-}
-
 function targetMatches(target: LiveTarget, query: string): boolean {
   return `${target.label} ${target.target_id}`.toLowerCase().includes(query)
 }
@@ -238,20 +229,6 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
   <section class="resolver-panel" aria-labelledby="resolver-settings-title">
     <h2 id="resolver-settings-title" class="sr-only">{{ pageCopy.title }}</h2>
     <div v-if="page === 'targets'" class="target-page">
-      <section class="admin-rule" :class="{ 'is-on': draft.super_admin_whitelist }" aria-labelledby="admin-rule-title">
-        <span class="admin-rule__icon" aria-hidden="true"><UiIcon name="shield" :size="22" /></span>
-        <div class="admin-rule__copy">
-          <h3 id="admin-rule-title">超级管理员白名单</h3>
-          <p>开启后，超级管理员发送的 B站、微博、抖音链接不受下方群聊、私聊开关限制，全部解析；冷却与媒体策略仍然生效。聊天中可用 <code>开启超管解析</code> / <code>关闭超管解析</code> 切换。</p>
-        </div>
-        <label class="admin-rule__control">
-          <span class="admin-rule__state" aria-live="polite">{{ draft.super_admin_whitelist ? '已开启' : '已关闭' }}</span>
-          <span class="compact-switch compact-switch--large">
-            <input v-model="draft.super_admin_whitelist" type="checkbox" aria-label="超级管理员白名单" />
-            <span aria-hidden="true"></span>
-          </span>
-        </label>
-      </section>
 
       <div class="target-toolbar">
         <label class="target-search">
@@ -337,10 +314,6 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
               <strong :title="target.label">{{ target.label }}</strong>
               <span><em class="type-chip" :class="`type-chip--${target.target_type}`">{{ typeLabel(target.target_type) }}</em>{{ targetNumberLabel(target) }}</span>
             </div>
-            <select aria-label="更换机器人" :value="botKey(target)" @change="replaceBot(target, ($event.target as HTMLSelectElement).value)">
-              <option v-if="!targets.bots.some((bot) => botKey(bot) === botKey(target))" :value="botKey(target)">{{ botLabel(target) }}</option>
-              <option v-for="bot in targets.bots" :key="botKey(bot)" :value="botKey(bot)">{{ botLabel(bot) }}</option>
-            </select>
             <button type="button" class="target-remove" :aria-label="`移除${target.label}`" @click="removeTarget(target)">移除</button>
           </div>
           <div class="resolver-platforms">
@@ -368,6 +341,21 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
     </div>
 
     <div v-else class="strategy-page">
+      <section class="admin-rule" :class="{ 'is-on': draft.super_admin_whitelist }" aria-labelledby="admin-rule-title">
+        <span class="admin-rule__icon" aria-hidden="true"><UiIcon name="shield" :size="22" /></span>
+        <div class="admin-rule__copy">
+          <h3 id="admin-rule-title">超级管理员白名单（全局）</h3>
+          <p>开启后，超级管理员发送的 B站、微博、抖音链接不受各账号的群聊、私聊开关限制，全部解析；冷却与媒体策略仍然生效。聊天中可用 <code>开启超管解析</code> / <code>关闭超管解析</code> 切换。</p>
+        </div>
+        <label class="admin-rule__control">
+          <span class="admin-rule__state" aria-live="polite">{{ draft.super_admin_whitelist ? '已开启' : '已关闭' }}</span>
+          <span class="compact-switch compact-switch--large">
+            <input v-model="draft.super_admin_whitelist" type="checkbox" aria-label="超级管理员白名单" />
+            <span aria-hidden="true"></span>
+          </span>
+        </label>
+      </section>
+
       <section class="strategy-section">
         <div class="strategy-title"><h3>冷却防抖</h3><p>同链接冷却默认开启 10 秒；同平台冷却按需开启。</p></div>
         <div class="setting-grid setting-grid--two">

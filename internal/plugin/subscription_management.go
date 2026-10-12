@@ -133,6 +133,36 @@ func (handler *Handler) ResolveUser(ctx context.Context, actions SourceActions, 
 func (handler *Handler) handleManagementAction(ctx context.Context, event *rayleabot.EventContext) error {
 	action := strings.TrimSpace(StringScalar(event.Event.Payload["action"]))
 	payload := MapValue(event.Event.Payload["payload"])
+	switch action {
+	case "subscription.save", "resolver.save", "strategy.save":
+		result, err := handler.saveManagementSettings(ctx, event, action, payload)
+		if err != nil {
+			return event.Fail("platform.invalid_request", err.Error())
+		}
+		return event.Result(result)
+	case "history.list", "history.assign", "history.delete":
+		result, err := handler.manageHistory(ctx, event, action, payload)
+		if err != nil {
+			return event.Fail("platform.invalid_request", err.Error())
+		}
+		return event.Result(result)
+	}
+	var bot rayleabot.BotAccount
+	switch action {
+	case "subscription.settings", "resolver.settings", "subscription.check_now", "subscription.resolve_user":
+		var err error
+		bot, err = managementBot(event)
+		if err != nil {
+			return event.Fail("platform.invalid_request", err.Error())
+		}
+		if action != "subscription.resolve_user" && len(payload) != 0 {
+			return event.Fail("platform.invalid_request", "此动作不接受业务参数")
+		}
+	case "strategy.settings":
+		if err := globalManagement(event); err != nil {
+			return event.Fail("platform.invalid_request", err.Error())
+		}
+	}
 	if action == "subscription.check_now" {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, interactiveReplyTimeout)
@@ -142,17 +172,29 @@ func (handler *Handler) handleManagementAction(ctx context.Context, event *rayle
 	if err != nil {
 		return err
 	}
+	if bot.BotID != "" {
+		current = settingsForBot(current, bot)
+	}
 	actions := handler.hostActions(event)
 	switch action {
-	case "subscription.settings":
+	case "subscription.settings", "resolver.settings":
+		return event.Result(map[string]any{"settings": current})
+	case "strategy.settings":
+		current.Subscriptions, current.Resolver.Targets = []Subscription{}, []ResolverTarget{}
 		return event.Result(map[string]any{"settings": current})
 	case "subscription.check_now":
 		return event.Result(handler.Check(ctx, actions, current))
 	case "subscription.resolve_avatars":
 		return event.Result(handler.ResolveAvatarDataURLs(ctx, actions, payload))
 	case "subscription.resolve_user":
-		platform := stringValue(payload, "platform", handler.platforms[0].ID)
-		return event.Result(handler.ResolveUser(ctx, actions, platform, stringValue(payload, "query", ""), current))
+		var input struct {
+			Platform string `json:"platform"`
+			Query    string `json:"query"`
+		}
+		if err := decodeManagementPayload(payload, &input); err != nil {
+			return event.Fail("platform.invalid_request", err.Error())
+		}
+		return event.Result(handler.ResolveUser(ctx, actions, input.Platform, strings.TrimSpace(input.Query), current))
 	case "account.list":
 		result, err := handler.accountList(ctx, actions, payload)
 		return accountActionResult(event, result, err)

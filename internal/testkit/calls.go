@@ -26,10 +26,12 @@ type RenderRequest struct {
 func (fake *Actions) ConfigWrite(ctx context.Context, values map[string]any) (rayleabot.ActionResult, error) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
+	changed := make([]string, 0, len(values))
 	for key, value := range values {
 		fake.Config[key] = value
+		changed = append(changed, key)
 	}
-	return rayleabot.ActionResult{"ok": true}, nil
+	return rayleabot.ActionResult{"changed_keys": changed}, nil
 }
 
 func (fake *Actions) SchedulerCreate(ctx context.Context, request rayleabot.SchedulerCreateRequest) (rayleabot.ActionResult, error) {

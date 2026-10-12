@@ -3,6 +3,8 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 
 	rayleabot "github.com/RayleaBot/RayleaBot/sdk/go"
@@ -18,9 +20,17 @@ const minimumAccountCheckIntervalMinutes = 15
 const maximumAccountCheckIntervalMinutes = 10080
 
 func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.EventContext) (Settings, error) {
+	handler.settingsMu.Lock()
+	defer handler.settingsMu.Unlock()
+	return handler.loadSettingsLocked(ctx, event)
+}
+
+func (handler *Handler) loadSettingsLocked(ctx context.Context, event *rayleabot.EventContext) (Settings, error) {
 	current := Settings{Enabled: true, DeliveryMaxAgeMinutes: defaultDeliveryMaxAgeMinutes, AccountCheckIntervalMinutes: defaultAccountCheckIntervalMinutes, Subscriptions: []Subscription{}}
 	_ = json.Unmarshal(assets.DefaultConfigJSON, &current)
-	values := event.Config
+	values := map[string]any{}
+	maps.Copy(values, event.Config)
+	maps.Copy(values, handler.settingsOverrides)
 	if enabled, ok := values["enabled"].(bool); ok {
 		current.Enabled = enabled
 	}
@@ -49,7 +59,7 @@ func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.Event
 		}
 	}
 	if migrateSettingsRoutes(&current, event.Bots) {
-		if _, err := handler.hostActions(event).ConfigWrite(ctx, map[string]any{"subscriptions": current.Subscriptions, "resolver": current.Resolver}); err != nil {
+		if err := handler.writeSettingsLocked(ctx, event, map[string]any{"subscriptions": current.Subscriptions, "resolver": current.Resolver}); err != nil {
 			_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
 				Level: "warn", Message: "机器人账号迁移保存失败，旧配置已保留，下次加载重试：" + err.Error(),
 			})
@@ -65,18 +75,74 @@ func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.Event
 }
 
 func (handler *Handler) saveSettings(ctx context.Context, event *rayleabot.EventContext, current Settings) error {
+	handler.settingsMu.Lock()
+	defer handler.settingsMu.Unlock()
+	return handler.saveSettingsLocked(ctx, event, current)
+}
+
+func (handler *Handler) saveSettingsLocked(ctx context.Context, event *rayleabot.EventContext, current Settings) error {
 	if err := validateSettingsRoutes(current); err != nil {
 		return err
 	}
-	_, err := handler.hostActions(event).ConfigWrite(ctx, map[string]any{
-		"enabled":                              current.Enabled,
-		"delivery_max_age_minutes":             NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes),
-		"account_check_interval_minutes":       NormalizeAccountCheckIntervalMinutes(current.AccountCheckIntervalMinutes),
-		"account_browser_mode":                 NormalizeAccountBrowserMode(current.AccountBrowserMode),
-		"account_browser_remote_debugging_url": strings.TrimSpace(current.AccountBrowserRemoteURL),
-		"subscriptions":                        current.Subscriptions,
-		"resolver":                             NormalizeResolverSettings(current.Resolver),
+	return handler.writeSettingsLocked(ctx, event, map[string]any{
+		"subscriptions": current.Subscriptions,
+		"resolver":      NormalizeResolverSettings(current.Resolver),
 	})
+}
+
+// Event.Config is captured before a handler acquires our lock. Keep successful
+// writes here so queued account saves and chat commands merge into the latest
+// state. JSON decoding also separates mutable settings from this snapshot.
+func (handler *Handler) writeSettingsLocked(ctx context.Context, event *rayleabot.EventContext, values map[string]any) error {
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return err
+	}
+	var snapshot map[string]any
+	if err := json.Unmarshal(encoded, &snapshot); err != nil {
+		return err
+	}
+	result, err := handler.hostActions(event).ConfigWrite(ctx, values)
+	if err != nil {
+		return err
+	}
+	if handler.settingsOverrides == nil {
+		handler.settingsOverrides = map[string]any{}
+	}
+	if handler.settingsEchoes == nil {
+		handler.settingsEchoes = map[string][]string{}
+	}
+	maps.Copy(handler.settingsOverrides, snapshot)
+	encoded, _ = json.Marshal(result["changed_keys"])
+	var changed []string
+	_ = json.Unmarshal(encoded, &changed)
+	for _, key := range changed {
+		value, _ := json.Marshal(snapshot[key])
+		handler.settingsEchoes[key] = append(handler.settingsEchoes[key], string(value))
+	}
+	return nil
+}
+
+func (handler *Handler) settingsChanged(ctx context.Context, event *rayleabot.EventContext) error {
+	handler.settingsMu.Lock()
+	defer handler.settingsMu.Unlock()
+	config := MapValue(event.Event.Payload["config"])
+	encoded, _ := json.Marshal(event.Event.Payload["changed_keys"])
+	var changed []string
+	_ = json.Unmarshal(encoded, &changed)
+	for _, key := range changed {
+		value, _ := json.Marshal(config[key])
+		echoes := handler.settingsEchoes[key]
+		if index := slices.Index(echoes, string(value)); index >= 0 {
+			handler.settingsEchoes[key] = slices.Delete(echoes, index, index+1)
+			continue // An older notification of our own write cannot undo a newer save.
+		}
+		if handler.settingsOverrides == nil {
+			handler.settingsOverrides = map[string]any{}
+		}
+		handler.settingsOverrides[key] = config[key]
+	}
+	_, err := handler.loadSettingsLocked(ctx, event)
 	return err
 }
 

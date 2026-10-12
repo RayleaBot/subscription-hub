@@ -5,15 +5,12 @@ import AvatarBadge from './AvatarBadge.vue'
 import PlatformLogo from './PlatformLogo.vue'
 import UiIcon from './UiIcon.vue'
 import {
-  botKey,
   botLabel,
-  changeTargetBot,
   currentTargetsForMode,
   displayAvatarURL,
   identityValue,
   inputPlaceholder,
   isNumericID,
-  needsBotSelection,
   PLATFORM_OPTIONS,
   platformLabel,
   serviceCheckboxValues,
@@ -29,7 +26,6 @@ import {
   type Platform,
   type ResolveCandidate,
   type RowContext,
-  type RowTarget,
   type SubscriptionRow,
   type TargetType,
 } from '../model'
@@ -61,12 +57,6 @@ const emit = defineEmits<{
 }>()
 
 const subscriberInput = ref('')
-const pendingBot = computed(() => props.row.targets.some(needsBotSelection))
-
-function replaceBot(target: RowTarget, key: string) {
-  const bot = props.context.targets.bots.find((item) => botKey(item) === key)
-  if (bot) changeTargetBot(target, bot)
-}
 const title = computed(() => props.row.name || props.row.uid || `未设置${platformLabel(props.row.platform)}对象`)
 const subtitle = computed(() => props.row.uid
   ? `${platformLabel(props.row.platform)} · ${subjectLabel(props.row.platform)} ${identityValue(props.row)}`
@@ -110,7 +100,7 @@ function avatarURL(source: string): string {
 
 <template>
   <article class="sub-card" :data-row-id="row.row_id" :class="{ 'sub-card--editing': row.edit_mode, 'sub-card--disabled': !row.enabled }">
-    <div class="sub-card__platform"><span><PlatformLogo :platform="row.platform" :size="26" />{{ platformLabel(row.platform) }}</span><span class="badge" :class="errors.length || pendingBot ? 'badge--warning' : row.enabled ? 'badge--success' : ''">{{ pendingBot ? '待选择机器人' : errors.length ? '需完善' : row.enabled ? '已启用' : '已停用' }}</span></div>
+    <div class="sub-card__platform"><span><PlatformLogo :platform="row.platform" :size="26" />{{ platformLabel(row.platform) }}</span><span class="badge" :class="errors.length ? 'badge--warning' : row.enabled ? 'badge--success' : ''">{{ errors.length ? '需完善' : row.enabled ? '已启用' : '已停用' }}</span></div>
     <div class="sub-card__head">
       <AvatarBadge :url="avatarURL(row.avatar_url)" :label="title" size="up" />
       <div class="sub-card__meta">
@@ -226,16 +216,11 @@ function avatarURL(source: string): string {
           <span v-for="target in row.targets" :key="target.key" class="chip" :class="{ 'badge--warning': !context.targetMap.has(target.key) }">
             <AvatarBadge :url="avatarURL(targetAvatar(target, context.targetMap))" :label="targetDisplay(target, context.targetMap)" size="candidate" />
             <span>{{ targetDisplay(target, context.targetMap) }}</span>
-            <select aria-label="更换机器人" :value="botKey(target)" @change="replaceBot(target, ($event.target as HTMLSelectElement).value)">
-              <option v-if="!context.targets.bots.some((bot) => botKey(bot) === botKey(target))" :value="botKey(target)">{{ botLabel(target) }}</option>
-              <option v-for="bot in context.targets.bots" :key="botKey(bot)" :value="botKey(bot)">{{ botLabel(bot) }}</option>
-            </select>
             <button type="button" aria-label="移除推送对象" @click="emit('removeTarget', target.key)">×</button>
           </span>
           <span v-if="row.targets.length === 0" class="chip">未选择推送对象</span>
         </div>
         <div v-if="context.targets.issues.length" class="target-note">{{ context.targets.issues.map((issue) => issue.message).join('；') }}</div>
-        <div v-if="pendingBot" class="target-note">待选择机器人的目标已暂停推送。</div>
       </section>
 
       <section class="sub-card__section">

@@ -181,6 +181,9 @@ type Handler struct {
 	deferredMedia       *deferredMediaQueue
 	accountQR           *QRLoginManager
 	accountCheckMu      sync.Mutex
+	settingsMu          sync.Mutex
+	settingsOverrides   map[string]any
+	settingsEchoes      map[string][]string
 }
 
 var platformIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)

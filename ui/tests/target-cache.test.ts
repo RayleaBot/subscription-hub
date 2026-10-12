@@ -16,15 +16,24 @@ class MemoryStorage implements TargetCacheStorage {
 }
 
 describe('protocol target cache', () => {
+  it('keeps saved targets isolated by page and account', () => {
+    const storage = new MemoryStorage()
+    const live = normalizeTargets({ available: true, groups: [{ source_protocol: 'onebot11', bot_id: '1001', target_id: '200' }], private_users: [] })
+    mergeAndCacheProtocolTargets(live, 'subscriptions:onebot11:1001', storage, 1_000)
+    expect(readCachedProtocolTargets('subscriptions:onebot11:1002', storage, 1_001).groups).toEqual([])
+    expect(readCachedProtocolTargets('resolver:onebot11:1001', storage, 1_001).groups).toEqual([])
+    const offline = normalizeTargets({ available: false, groups: [], private_users: [], issues: [{ scope: 'protocol', message: 'offline' }] })
+    expect(mergeAndCacheProtocolTargets(offline, 'subscriptions:onebot11:1001', storage, 1_001).groups).toHaveLength(1)
+  })
   it('serves the last successful group and friend lists on the next page load', () => {
     const storage = new MemoryStorage()
     mergeAndCacheProtocolTargets(normalizeTargets({
       available: true,
       groups: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
       private_users: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '测试用户' }],
-    }), storage, 1_000)
+    }), 'subscriptions:onebot11:1001', storage, 1_000)
 
-    const cached = readCachedProtocolTargets(storage, 1_001)
+    const cached = readCachedProtocolTargets('subscriptions:onebot11:1001', storage, 1_001)
 
     expect(cached.available).toBe(true)
     expect(cached.groups[0]?.target_name).toBe('测试群聊')
@@ -37,14 +46,14 @@ describe('protocol target cache', () => {
       available: true,
       groups: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '旧群聊' }],
       private_users: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '缓存用户' }],
-    }), storage, 1_000)
+    }), 'subscriptions:onebot11:1001', storage, 1_000)
 
     const merged = mergeAndCacheProtocolTargets(normalizeTargets({
       available: false,
       groups: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '201', target_name: '新群聊' }],
       private_users: [],
       issues: [{ scope: 'private_users', message: '私聊对象列表读取超时' }],
-    }), storage, 2_000)
+    }), 'subscriptions:onebot11:1001', storage, 2_000)
 
     expect(merged.groups.map((item) => item.target_id)).toEqual(['201'])
     expect(merged.private_users.map((item) => item.target_id)).toEqual(['300'])
@@ -57,9 +66,9 @@ describe('protocol target cache', () => {
       available: true,
       groups: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
       private_users: [],
-    }), storage, 1_000)
+    }), 'subscriptions:onebot11:1001', storage, 1_000)
 
     const eightDaysLater = 1_000 + 8 * 24 * 60 * 60 * 1_000
-    expect(readCachedProtocolTargets(storage, eightDaysLater).loaded).toBe(false)
+    expect(readCachedProtocolTargets('subscriptions:onebot11:1001', storage, eightDaysLater).loaded).toBe(false)
   })
 })

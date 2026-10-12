@@ -38,13 +38,15 @@ const host = vi.hoisted(() => {
       throw new Error(`unexpected request: ${method} ${path}`)
     }),
     invokeAction: vi.fn(async (action: string, payload: Record<string, unknown>) => {
-      if (action === 'subscription.settings') return { settings: init.config }
+      if (action === 'subscription.settings' || action === 'subscription.save') return { settings: init.config }
       if (action !== 'subscription.resolve_avatars') throw new Error(`unexpected action: ${action}`)
       const urls = Array.isArray(payload.urls) ? payload.urls.map(String) : []
       return { items: urls.map((source_url) => ({ source_url, data_url: 'data:image/png;base64,dGVzdA==' })) }
     }),
   }
   return {
+    bot: { value: { source_protocol: 'onebot11', bot_id: '1001', state: 'online', adapter_id: 'onebot' } },
+    refreshBot: vi.fn(async () => ({ source_protocol: 'onebot11', bot_id: '1001', state: 'online', adapter_id: 'onebot' })),
     client,
     ready: Promise.resolve(init),
     init: { value: init },
@@ -64,6 +66,8 @@ describe('subscription card editing', () => {
     Element.prototype.scrollIntoView = vi.fn()
     host.client.apiRequest.mockClear()
     host.client.invokeAction.mockClear()
+    host.bot.value.state = 'online'
+    host.refreshBot.mockResolvedValue({ ...host.bot.value })
   })
 
   it('keeps the active card visible when its service stops matching the current filter', async () => {
@@ -90,6 +94,31 @@ describe('subscription card editing', () => {
 
     expect(root.querySelector('.sub-card--editing')).not.toBeNull()
     expect(root.textContent).toContain('完成')
+    app.unmount()
+  })
+
+  it('saves existing data offline through the account action without submitting account or global fields', async () => {
+    host.bot.value.state = 'offline'
+    host.refreshBot.mockResolvedValue({ ...host.bot.value })
+    const root = document.createElement('div')
+    const app = createApp(App)
+    app.mount(root)
+    await settle()
+    const enabled = root.querySelector<HTMLInputElement>('input[aria-label="启用订阅"]')!
+    enabled.checked = false
+    enabled.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+    findButton(root, '保存设置').click()
+    await settle()
+    const save = host.client.invokeAction.mock.calls.find(([action]) => action === 'subscription.save')
+    expect(save).toBeDefined()
+    expect(Object.keys(save![1])).toEqual(['subscriptions'])
+    const records = save![1].subscriptions as Record<string, unknown>[]
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ id: 'bilibili-100-group-200', enabled: false })
+    expect(records[0]).not.toHaveProperty('bot_id')
+    expect(records[0]).not.toHaveProperty('source_protocol')
+    expect(host.client.apiRequest).not.toHaveBeenCalled()
     app.unmount()
   })
 })

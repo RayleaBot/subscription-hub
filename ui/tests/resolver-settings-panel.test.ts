@@ -9,33 +9,6 @@ import { deriveTargetAvatarURL, emptyTargets, normalizeResolverSettings, normali
 const avatarDataURL = 'data:image/png;base64,dGVzdA=='
 
 describe('resolver settings panel', () => {
-  it('rebinds one pending target without losing another target or its platform switches', async () => {
-    const root = document.createElement('div')
-    let updated: ResolverSettings | undefined
-    const app = createApp(ResolverSettingsPanel, {
-      modelValue: normalizeResolverSettings({ targets: [
-        { source_protocol: 'onebot11', source_adapter: 'removed-a', target_type: 'group', target_id: '200', bilibili: true },
-        { source_protocol: 'onebot11', source_adapter: 'removed-b', target_type: 'group', target_id: '200', weibo: true },
-      ] }),
-      avatarDataUrls: new Map(),
-      targets: normalizeTargets({ bots: [{ source_protocol: 'onebot11', bot_id: '1001', bot_name: 'Bot' }] }),
-      view: 'targets',
-      'onUpdate:modelValue': (value: ResolverSettings) => { updated = value },
-    })
-    app.mount(root)
-    const selectors = root.querySelectorAll<HTMLSelectElement>('select[aria-label="更换机器人"]')
-    expect(selectors).toHaveLength(2)
-    selectors[1]!.value = 'onebot11:1001'
-    selectors[1]!.dispatchEvent(new Event('change', { bubbles: true }))
-    await settle()
-    expect(updated?.targets).toHaveLength(2)
-    expect(updated?.targets[0]).toMatchObject({ bot_id: '', needs_bot_selection: true, bilibili: true })
-    expect(updated?.targets[1]).toMatchObject({ bot_id: '1001', target_id: '200', weibo: true })
-    expect(updated?.targets[1]?.needs_bot_selection).toBeUndefined()
-    expect(JSON.stringify(updated)).not.toContain('source_adapter')
-    app.unmount()
-  })
-
   it('mounts each resolver page with reactive settings', () => {
     const settings = reactive(normalizeResolverSettings({}))
 
@@ -185,7 +158,7 @@ describe('resolver settings panel', () => {
       modelValue: reactive(normalizeResolverSettings({})),
       avatarDataUrls: new Map(),
       targets: emptyTargets(),
-      view: 'targets',
+      view: 'strategy',
       'onUpdate:modelValue': (value: ResolverSettings) => { updated = value },
     })
     app.mount(root)

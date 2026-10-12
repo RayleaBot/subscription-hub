@@ -21,20 +21,21 @@ describe('avatar cache', () => {
     const cached = 'data:image/jpeg;base64,AA=='
     const refreshed = 'data:image/jpeg;base64,BB=='
 
-    storeAvatarDataURLs([[source, cached]], storage, 1_000)
-    expect(readCachedAvatarDataURLs([source], storage, 1_001).get(source)).toBe(cached)
+    storeAvatarDataURLs([[source, cached]], 'subscriptions:onebot11:1001', storage, 1_000)
+    expect(readCachedAvatarDataURLs([source], 'subscriptions:onebot11:1001', storage, 1_001).get(source)).toBe(cached)
+    expect(readCachedAvatarDataURLs([source], 'subscriptions:onebot11:1002', storage, 1_001).size).toBe(0)
 
-    storeAvatarDataURLs([[source, refreshed]], storage, 2_000)
-    expect(readCachedAvatarDataURLs([source], storage, 2_001).get(source)).toBe(refreshed)
+    storeAvatarDataURLs([[source, refreshed]], 'subscriptions:onebot11:1001', storage, 2_000)
+    expect(readCachedAvatarDataURLs([source], 'subscriptions:onebot11:1001', storage, 2_001).get(source)).toBe(refreshed)
   })
 
   it('ignores expired and unrelated entries', () => {
     const storage = new MemoryStorage()
     const source = 'https://q1.qlogo.cn/g?b=qq&nk=10000&s=640'
-    storeAvatarDataURLs([[source, 'data:image/png;base64,AA==']], storage, 1_000)
+    storeAvatarDataURLs([[source, 'data:image/png;base64,AA==']], 'subscriptions:onebot11:1001', storage, 1_000)
 
     const eightDaysLater = 1_000 + 8 * 24 * 60 * 60 * 1_000
-    expect(readCachedAvatarDataURLs([source], storage, eightDaysLater)).toEqual(new Map())
-    expect(readCachedAvatarDataURLs(['https://example.com/other.png'], storage, 1_001)).toEqual(new Map())
+    expect(readCachedAvatarDataURLs([source], 'subscriptions:onebot11:1001', storage, eightDaysLater)).toEqual(new Map())
+    expect(readCachedAvatarDataURLs(['https://example.com/other.png'], 'subscriptions:onebot11:1001', storage, 1_001)).toEqual(new Map())
   })
 })

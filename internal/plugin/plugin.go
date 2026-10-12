@@ -38,7 +38,7 @@ func (handler *Handler) Handle(ctx context.Context, event *rayleabot.EventContex
 	case "plugin.started":
 		return event.Result(map[string]any{"handled": true, "scheduler_registered": handler.ensureScheduler(ctx, event)})
 	case "config.changed":
-		if _, err := handler.loadSettings(ctx, event); err != nil {
+		if err := handler.settingsChanged(ctx, event); err != nil {
 			return err
 		}
 		return event.Result(map[string]any{"handled": true, "reloaded": true})
@@ -110,7 +110,17 @@ func (handler *Handler) handleCommand(ctx context.Context, event *rayleabot.Even
 	if operation == "preview" {
 		return handler.previewSubscriptionCard(ctx, event, query)
 	}
-	current, err := handler.loadSettings(ctx, event)
+	// Chat mutations and management saves share the complete read/modify/write lock.
+	mutating := operation == "add" || operation == "remove" || strings.HasPrefix(operation, "resolver_enable_") || strings.HasPrefix(operation, "resolver_disable_")
+	var current Settings
+	var err error
+	if mutating {
+		handler.settingsMu.Lock()
+		defer handler.settingsMu.Unlock()
+		current, err = handler.loadSettingsLocked(ctx, event)
+	} else {
+		current, err = handler.loadSettings(ctx, event)
+	}
 	if err != nil {
 		return err
 	}
@@ -134,7 +144,7 @@ func (handler *Handler) handleCommand(ctx context.Context, event *rayleabot.Even
 			if operation == "remove" {
 				handler.cleanupRemovedSubscriptionKV(ctx, handler.hostActions(event), &current, outcome.Item, outcome.Services)
 			}
-			if err := handler.saveSettings(ctx, event, current); err != nil {
+			if err := handler.saveSettingsLocked(ctx, event, current); err != nil {
 				return err
 			}
 		}

@@ -45,7 +45,7 @@ func (handler *Handler) toggleResolverForCurrentTarget(ctx context.Context, even
 	}
 	target.SetPlatform(platform, enabled)
 	current.Resolver = NormalizeResolverSettings(current.Resolver)
-	if err := handler.saveSettings(ctx, event, *current); err != nil {
+	if err := handler.saveSettingsLocked(ctx, event, *current); err != nil {
 		return err
 	}
 	state := "关闭"
@@ -58,7 +58,7 @@ func (handler *Handler) toggleResolverForCurrentTarget(ctx context.Context, even
 func (handler *Handler) toggleResolverSuperAdminWhitelist(ctx context.Context, event *rayleabot.EventContext, current *Settings, enabled bool) error {
 	current.Resolver.SuperAdminWhitelist = enabled
 	current.Resolver = NormalizeResolverSettings(current.Resolver)
-	if err := handler.saveSettings(ctx, event, *current); err != nil {
+	if err := handler.saveSettingsLocked(ctx, event, *current); err != nil {
 		return err
 	}
 	if enabled {

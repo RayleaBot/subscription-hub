@@ -1,5 +1,5 @@
-github.com/RayleaBot/RayleaBot/sdk/go v0.5.1-0.20261012055149-783ded45ddf5 h1:lyTDgIr9ki93DbgNgBfN6spJjimEDOr8MlO52OvFhyU=
-github.com/RayleaBot/RayleaBot/sdk/go v0.5.1-0.20261012055149-783ded45ddf5/go.mod h1:EpBu4n+DWGZhgpcNQC43EeJrh6i6ohqzQnSKRU/wG4o=
+github.com/RayleaBot/RayleaBot/sdk/go v0.5.1-0.20261012094437-57bed817b5be h1:w2wi1+NE0z2GId/dXAW1locAO1mc13BanmZliujG5fY=
+github.com/RayleaBot/RayleaBot/sdk/go v0.5.1-0.20261012094437-57bed817b5be/go.mod h1:EpBu4n+DWGZhgpcNQC43EeJrh6i6ohqzQnSKRU/wG4o=
 github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32 h1:6JI+JS7Zef+bMzZQ+OgzTHf79v3GqdvP6rD0FaP9CMk=
 github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32/go.mod h1:RwFsSODCtFExll+GhHM6R92SARHR3Z3oipaxLHj46C0=
 github.com/chromedp/chromedp v0.16.0 h1:rOO4deOm4CbZgBCa8mD9g2rDyIoNs0BkgvNrlbp5ouk=

@@ -371,8 +371,14 @@ func testRuntimeRoutesManagementCommandsAndPreviews(t *testing.T, aliases bool) 
 		if payload == nil {
 			payload = map[string]any{}
 		}
+		protocol, adapter := "onebot11", "onebot11"
+		if kind == "management.action" {
+			protocol, adapter = "management", "management.ui"
+			payload["page_id"] = "subscriptions"
+			payload["bot"] = map[string]any{"source_protocol": "onebot11", "bot_id": "1001"}
+		}
 		return map[string]any{
-			"event_id": "event-fixture", "source_protocol": "onebot11", "source_adapter": "onebot11", "bot_id": "1001",
+			"event_id": "event-fixture", "source_protocol": protocol, "source_adapter": adapter, "bot_id": "1001",
 			"event_type": kind, "timestamp": time.Now().Unix(),
 			"actor":   map[string]any{"id": "7", "nickname": "fixture"},
 			"target":  map[string]any{"type": "group", "id": "100"},

@@ -21,28 +21,30 @@ export interface TargetCacheStorage {
 }
 
 export function readCachedProtocolTargets(
+  scope: string,
   storage: TargetCacheStorage | null = browserStorage(),
   now = Date.now(),
 ): TargetsState {
   if (!storage) return emptyTargets()
-  const snapshot = readSnapshot(storage, now)
+  const snapshot = readSnapshot(storage, scope, now)
   return targetsFromSnapshot(snapshot)
 }
 
 export function mergeAndCacheProtocolTargets(
   live: TargetsState,
+  scope: string,
   storage: TargetCacheStorage | null = browserStorage(),
   now = Date.now(),
 ): TargetsState {
   if (!storage) return live
-  const snapshot = readSnapshot(storage, now)
+  const snapshot = readSnapshot(storage, scope, now)
   const protocolFailed = live.issues.some((issue) => issue.scope === 'protocol')
   const groupsFailed = protocolFailed || live.issues.some((issue) => issue.scope === 'groups')
   const privateUsersFailed = protocolFailed || live.issues.some((issue) => issue.scope === 'private_users')
 
   if (!groupsFailed) snapshot.groups = { cached_at: now, items: live.groups.map((item) => ({ ...item })) }
   if (!privateUsersFailed) snapshot.private_users = { cached_at: now, items: live.private_users.map((item) => ({ ...item })) }
-  writeSnapshot(storage, snapshot)
+  writeSnapshot(storage, scope, snapshot)
 
   const cached = targetsFromSnapshot(snapshot)
   return {
@@ -67,9 +69,9 @@ function targetsFromSnapshot(snapshot: TargetCacheSnapshot): TargetsState {
   }
 }
 
-function readSnapshot(storage: TargetCacheStorage, now: number): TargetCacheSnapshot {
+function readSnapshot(storage: TargetCacheStorage, scope: string, now: number): TargetCacheSnapshot {
   try {
-    const parsed = JSON.parse(storage.getItem(TARGET_CACHE_KEY) || '{}') as Partial<TargetCacheSnapshot>
+    const parsed = JSON.parse(storage.getItem(`${TARGET_CACHE_KEY}:${scope}`) || '{}') as Partial<TargetCacheSnapshot>
     if (parsed.version !== TARGET_CACHE_VERSION) return { version: TARGET_CACHE_VERSION }
     return {
       version: TARGET_CACHE_VERSION,
@@ -92,9 +94,9 @@ function normalizeScope(value: unknown, targetType: 'group' | 'private', now: nu
   return { cached_at: cachedAt, items: normalized }
 }
 
-function writeSnapshot(storage: TargetCacheStorage, snapshot: TargetCacheSnapshot): void {
+function writeSnapshot(storage: TargetCacheStorage, scope: string, snapshot: TargetCacheSnapshot): void {
   try {
-    storage.setItem(TARGET_CACHE_KEY, JSON.stringify(snapshot))
+    storage.setItem(`${TARGET_CACHE_KEY}:${scope}`, JSON.stringify(snapshot))
   } catch {
     // Live protocol data remains available when browser storage is unavailable.
   }

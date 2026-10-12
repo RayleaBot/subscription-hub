@@ -42,7 +42,7 @@ func validateSettingsRoutes(current Settings) error {
 func migrateSettingsRoutes(current *Settings, bots []rayleabot.Bot) bool {
 	changed := false
 	repair := func(protocol string, adapter, botID *string) bool {
-		if *botID == "" && *adapter != "" {
+		if protocol == "onebot11" && *botID == "" && *adapter != "" {
 			for _, bot := range bots {
 				if bot.SourceProtocol == protocol && bot.SourceAdapter == *adapter && bot.ID != "" {
 					*botID = bot.ID

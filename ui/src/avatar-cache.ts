@@ -21,6 +21,7 @@ export interface AvatarCacheStorage {
 
 export function readCachedAvatarDataURLs(
   sources: Iterable<string>,
+  scope: string,
   storage: AvatarCacheStorage | null = browserStorage(),
   now = Date.now(),
 ): Map<string, string> {
@@ -28,7 +29,7 @@ export function readCachedAvatarDataURLs(
   const requested = new Set([...sources].filter(isRemoteAvatarSource))
   if (requested.size === 0) return new Map()
 
-  const entries = readValidEntries(storage, now)
+  const entries = readValidEntries(storage, scope, now)
   const result = new Map<string, string>()
   for (const source of requested) {
     const entry = entries[source]
@@ -39,11 +40,12 @@ export function readCachedAvatarDataURLs(
 
 export function storeAvatarDataURLs(
   values: Iterable<readonly [string, string]>,
+  scope: string,
   storage: AvatarCacheStorage | null = browserStorage(),
   now = Date.now(),
 ): void {
   if (!storage) return
-  const entries = readValidEntries(storage, now)
+  const entries = readValidEntries(storage, scope, now)
   for (const [source, dataURL] of values) {
     if (isRemoteAvatarSource(source) && isAvatarDataURL(dataURL)) {
       entries[source] = { data_url: dataURL, cached_at: now }
@@ -61,15 +63,15 @@ export function storeAvatarDataURLs(
   }
 
   try {
-    storage.setItem(AVATAR_CACHE_KEY, serialized)
+    storage.setItem(`${AVATAR_CACHE_KEY}:${scope}`, serialized)
   } catch {
     // Avatar rendering remains functional when browser storage is unavailable or full.
   }
 }
 
-function readValidEntries(storage: AvatarCacheStorage, now: number): Record<string, AvatarCacheEntry> {
+function readValidEntries(storage: AvatarCacheStorage, scope: string, now: number): Record<string, AvatarCacheEntry> {
   try {
-    const parsed = JSON.parse(storage.getItem(AVATAR_CACHE_KEY) || '{}') as Partial<AvatarCacheSnapshot>
+    const parsed = JSON.parse(storage.getItem(`${AVATAR_CACHE_KEY}:${scope}`) || '{}') as Partial<AvatarCacheSnapshot>
     if (parsed.version !== AVATAR_CACHE_VERSION || !parsed.entries || typeof parsed.entries !== 'object') return {}
     const result: Record<string, AvatarCacheEntry> = {}
     for (const [source, value] of Object.entries(parsed.entries)) {
