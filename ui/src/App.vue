@@ -126,7 +126,8 @@ const footerStatusText = computed(() => {
 
 void host.ready
   .then(async (init) => {
-    await applySettings(init.config, true)
+    const response = await host.client.invokeAction('subscription.settings', {})
+    await applySettings({ ...init.config, ...response.settings as Record<string, unknown> }, true)
     setStatus('设置已载入')
     if (activePage.value !== 'resolver-strategy' && activePage.value !== 'accounts') void reloadTargets(false)
     if (isSubscriptionsPage.value) void refreshStaleDouyinAvatars()
@@ -385,7 +386,7 @@ function toggleTarget(row: SubscriptionRow, liveTarget: LiveTarget) {
   row.targets.push({
     key: liveTarget.key,
     subscription_id: '',
-    source_adapter: liveTarget.source_adapter,
+    bot_id: liveTarget.bot_id,
     source_protocol: liveTarget.source_protocol,
     target_type: liveTarget.target_type,
     target_id: liveTarget.target_id,
@@ -574,8 +575,8 @@ async function refreshStaleDouyinAvatars() {
 async function reloadSettings() {
   setStatus('正在重新载入设置…')
   try {
-    const response = await host.client.reloadSettings()
-    await applySettings(response.config, true)
+    const response = await host.client.invokeAction('subscription.settings', {})
+    await applySettings(response.settings as Record<string, unknown>, true)
     setStatus('设置已同步')
     if (isSubscriptionsPage.value) void refreshStaleDouyinAvatars()
   } catch (error) {
@@ -623,15 +624,15 @@ async function saveSettings() {
     if (identityRequests.length > 0) {
       setStatus('正在刷新订阅人身份…')
       const resolved = await resolveProtocolIdentities(host.client, identityRequests)
-      const received = new Set(resolved.items.map((item) => identityKey(item.source_adapter, item.target_type, item.target_id, item.user_id)))
-      const missing = identityRequests.filter((item) => !received.has(identityKey(item.source_adapter, item.target_type, item.target_id, item.user_id)))
+      const received = new Set(resolved.items.map((item) => identityKey(item.source_protocol, item.bot_id, item.target_type, item.target_id, item.user_id)))
+      const missing = identityRequests.filter((item) => !received.has(identityKey(item.source_protocol, item.bot_id, item.target_type, item.target_id, item.user_id)))
       if (resolved.issues.length > 0 || missing.length > 0) {
         throw new Error(resolved.issues[0]?.message || '订阅人身份刷新失败')
       }
       const avatars = new Map(subscriberAvatars.value)
       const identities = new Map(subscriberIdentities.value)
       resolved.items.forEach((item) => {
-        const key = identityKey(item.source_adapter, item.target_type, item.target_id, item.user_id)
+        const key = identityKey(item.source_protocol, item.bot_id, item.target_type, item.target_id, item.user_id)
         const previous = identities.get(key)
         const subscriber: Subscriber = {
           id: item.user_id,

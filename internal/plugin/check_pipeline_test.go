@@ -69,7 +69,7 @@ func newWorkflowHandler(t testing.TB, platforms ...Platform) *Handler {
 }
 
 func workflowSubscription(id, platform string) Subscription {
-	return Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: id, Platform: platform, UID: "subject", TargetType: "private", TargetID: id, Services: []string{"all"}, Enabled: true}
+	return Subscription{SourceProtocol: "onebot11", BotID: "1001", ID: id, Platform: platform, UID: "subject", TargetType: "private", TargetID: id, Services: []string{"all"}, Enabled: true}
 }
 
 func workflowUpdate(platform, id string) Update {
@@ -273,8 +273,8 @@ type cancelDeliveryActions struct {
 	cancel context.CancelFunc
 }
 
-func (actions *cancelDeliveryActions) MessageSend(ctx context.Context, request rayleabot.MessageSendRequest) (rayleabot.ActionResult, error) {
-	result, err := actions.Actions.MessageSend(ctx, request)
+func (actions *cancelDeliveryActions) SendTo(ctx context.Context, address rayleabot.Address, segments ...rayleabot.Segment) (rayleabot.ActionResult, error) {
+	result, err := actions.Actions.SendTo(ctx, address, segments...)
 	actions.cancel()
 	return result, err
 }

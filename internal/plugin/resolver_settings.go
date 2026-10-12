@@ -33,7 +33,7 @@ func NormalizeResolverSettings(settings ResolverSettings) ResolverSettings {
 }
 
 func normalizeResolverTargets(items []ResolverTarget) []ResolverTarget {
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	result := make([]ResolverTarget, 0, len(items))
 	for _, item := range items {
 		item.TargetType = NormalizedTargetType(item.TargetType)
@@ -42,25 +42,31 @@ func normalizeResolverTargets(items []ResolverTarget) []ResolverTarget {
 		if item.TargetID == "" {
 			continue
 		}
-		key := item.SourceProtocol + ":" + item.SourceAdapter + ":" + item.TargetType + ":" + item.TargetID
-		if seen[key] {
-			continue
+		key := item.SourceProtocol + ":" + item.BotID + ":" + item.TargetType + ":" + item.TargetID
+		if validSubscriptionRoute(item.SourceProtocol, item.BotID) {
+			if index, exists := seen[key]; exists {
+				previous := &result[index]
+				previous.Bilibili = previous.Bilibili || item.Bilibili
+				previous.Weibo = previous.Weibo || item.Weibo
+				previous.Douyin = previous.Douyin || item.Douyin
+				continue
+			}
+			seen[key] = len(result)
 		}
-		seen[key] = true
 		result = append(result, item)
 	}
 	return result
 }
 
-func (settings ResolverSettings) Target(sourceProtocol, sourceAdapter, targetType, targetID string) (ResolverTarget, bool) {
+func (settings ResolverSettings) Target(sourceProtocol, botID, targetType, targetID string) (ResolverTarget, bool) {
 	targetType = NormalizedTargetType(targetType)
 	targetID = strings.TrimSpace(targetID)
 	for _, target := range settings.Targets {
-		if target.SourceProtocol == sourceProtocol && target.SourceAdapter == sourceAdapter && target.TargetType == targetType && target.TargetID == targetID {
+		if target.SourceProtocol == sourceProtocol && target.BotID == botID && target.TargetType == targetType && target.TargetID == targetID {
 			return target, true
 		}
 	}
-	return ResolverTarget{SourceProtocol: sourceProtocol, SourceAdapter: sourceAdapter, TargetType: targetType, TargetID: targetID}, false
+	return ResolverTarget{SourceProtocol: sourceProtocol, BotID: botID, TargetType: targetType, TargetID: targetID}, false
 }
 
 func (target ResolverTarget) PlatformEnabled(platform string) bool {

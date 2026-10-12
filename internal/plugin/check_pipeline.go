@@ -36,7 +36,7 @@ func (handler *Handler) check(ctx, stateCtx context.Context, actions HostActions
 	}
 	groups := map[string][]Subscription{}
 	for _, item := range current.Subscriptions {
-		if item.Enabled && handler.byID[item.Platform].Baseline != nil {
+		if item.Enabled && validSubscriptionRoute(item.SourceProtocol, item.BotID) && handler.byID[item.Platform].Baseline != nil {
 			groups[item.Platform] = append(groups[item.Platform], item)
 		}
 	}
@@ -240,8 +240,8 @@ func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions Hos
 	if ctx.Err() != nil {
 		return false
 	}
-	if !validSubscriptionRoute(item.SourceProtocol, item.SourceAdapter) {
-		failures.add(item.Platform, "config", "订阅缺少有效的发送连接。", &rayleabot.ActionError{Code: "platform.invalid_request", Message: "subscription route is required"})
+	if !validSubscriptionRoute(item.SourceProtocol, item.BotID) {
+		failures.add(item.Platform, "config", "订阅待选择机器人，已暂停推送。", &rayleabot.ActionError{Code: "platform.invalid_request", Message: "subscription route is required"})
 		return false
 	}
 	fields := map[string]any{"platform": item.Platform, "stage": "render", "subscription_id": item.ID, "target_type": item.TargetType, "target_id": item.TargetID}
@@ -266,11 +266,7 @@ func (handler *Handler) deliverUpdate(ctx, stateCtx context.Context, actions Hos
 		}
 		return false
 	}
-	_, err = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
-		SourceAdapter: item.SourceAdapter, SourceProtocol: item.SourceProtocol,
-		TargetType: item.TargetType, TargetID: item.TargetID,
-		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Image(imagePath)}},
-	})
+	_, err = actions.SendTo(ctx, item.Address(), rayleabot.Image(imagePath))
 	if err != nil {
 		label := "订阅推送失败"
 		if mediaOutcomeUncertain(err) {

@@ -16,7 +16,7 @@ func (handler *Handler) toggleResolverForCurrentTarget(ctx context.Context, even
 			break
 		}
 	}
-	if platform == "" || event.Event.Target.ID == "" || !validSubscriptionRoute(event.Event.SourceProtocol, event.Event.SourceAdapter) {
+	if platform == "" || event.Event.Target.ID == "" || !validSubscriptionRoute(event.Event.SourceProtocol, event.Event.BotID) {
 		return event.SendText("当前会话无法修改解析设置。")
 	}
 	enabled := strings.Contains(operation, "_enable_")
@@ -25,14 +25,14 @@ func (handler *Handler) toggleResolverForCurrentTarget(ctx context.Context, even
 	index := -1
 	for currentIndex := range current.Resolver.Targets {
 		target := &current.Resolver.Targets[currentIndex]
-		if target.SourceProtocol == event.Event.SourceProtocol && target.SourceAdapter == event.Event.SourceAdapter && target.TargetType == targetType && target.TargetID == targetID {
+		if target.SourceProtocol == event.Event.SourceProtocol && target.BotID == event.Event.BotID && target.TargetType == targetType && target.TargetID == targetID {
 			index = currentIndex
 			break
 		}
 	}
 	if index < 0 {
 		current.Resolver.Targets = append(current.Resolver.Targets, ResolverTarget{
-			SourceProtocol: event.Event.SourceProtocol, SourceAdapter: event.Event.SourceAdapter,
+			SourceProtocol: event.Event.SourceProtocol, BotID: event.Event.BotID,
 			TargetType: targetType,
 			TargetID:   targetID,
 			TargetName: CurrentTargetName(event),
@@ -68,7 +68,7 @@ func (handler *Handler) toggleResolverSuperAdminWhitelist(ctx context.Context, e
 }
 
 func (handler *Handler) replyResolverHelp(ctx context.Context, event *rayleabot.EventContext, current Settings) error {
-	target, _ := current.Resolver.Target(event.Event.SourceProtocol, event.Event.SourceAdapter, event.Event.Target.Type, event.Event.Target.ID)
+	target, _ := current.Resolver.Target(event.Event.SourceProtocol, event.Event.BotID, event.Event.Target.Type, event.Event.Target.ID)
 	prefix := "/"
 	if len(event.CommandPrefixes) > 0 && strings.TrimSpace(event.CommandPrefixes[0]) != "" {
 		prefix = event.CommandPrefixes[0]

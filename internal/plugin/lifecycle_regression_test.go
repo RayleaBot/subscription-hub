@@ -56,7 +56,7 @@ func TestMediaIsReleasedOnlyAfterDelayedAdapterConfirmation(t *testing.T) {
 	if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	job := &deferredMediaJob{TargetType: "group", TargetID: "fixture-target", Platform: "douyin", tempRoot: root, prepared: []preparedResolverMedia{{Kind: "video", Path: file}}}
+	job := &deferredMediaJob{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "fixture-target"}, Platform: "douyin", tempRoot: root, prepared: []preparedResolverMedia{{Kind: "video", Path: file}}}
 	if !handler.deferredMedia.push(job) {
 		t.Fatal("queue full")
 	}
@@ -101,7 +101,7 @@ func TestExplicitRateLimitRetainsMediaForOnlyTheNextAttempt(t *testing.T) {
 	if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if !handler.deferredMedia.push(&deferredMediaJob{TargetType: "group", TargetID: "fixture-target", Platform: "douyin", tempRoot: root, prepared: []preparedResolverMedia{{Kind: "video", Path: file}}}) {
+	if !handler.deferredMedia.push(&deferredMediaJob{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "fixture-target"}, Platform: "douyin", tempRoot: root, prepared: []preparedResolverMedia{{Kind: "video", Path: file}}}) {
 		t.Fatal("queue full")
 	}
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
@@ -217,7 +217,7 @@ func TestUnconfirmedMediaKeepsFileAndDoesNotResend(t *testing.T) {
 	if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	job := &deferredMediaJob{TargetType: "group", TargetID: "fixture-target", Platform: "douyin", tempRoot: root, prepared: []preparedResolverMedia{{Kind: "video", Path: file}}}
+	job := &deferredMediaJob{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "fixture-target"}, Platform: "douyin", tempRoot: root, prepared: []preparedResolverMedia{{Kind: "video", Path: file}}}
 	if !handler.deferredMedia.push(job) {
 		t.Fatal("queue full")
 	}
@@ -280,7 +280,7 @@ func TestCloseStopsBackgroundMediaBeforeReturning(t *testing.T) {
 	defer server.Close()
 	defer close(release)
 	handler := newWorkflowHandler(t)
-	target := resolverSendTarget{TargetType: "group", TargetID: "fixture-target"}
+	target := resolverSendTarget{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "fixture-target"}}
 	plan := ResolverMediaPlan{Sources: []ResolverMediaSource{{Kind: "video", URLs: []string{server.URL}, FileName: "fixture.mp4"}}}
 	if !handler.enqueueDeferredMedia(target, "douyin", plan, ResolverMediaSettings{}) {
 		t.Fatal("queue full")

@@ -91,7 +91,7 @@ func TestEmptyRetainedLeasesAllowBackgroundDownloadAndFlush(t *testing.T) {
 	handler.deferredMedia = newDeferredMediaQueue(root)
 	actions := testkit.NewActions()
 	handler.actions = actions
-	target := resolverSendTarget{TargetType: "group", TargetID: "12345", SubjectName: "视频作者", SenderID: "20002", SenderName: "链接发送人"}
+	target := resolverSendTarget{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "12345"}, SubjectName: "视频作者", SenderID: "20002", SenderName: "链接发送人"}
 	plan := ResolverMediaPlan{Sources: []ResolverMediaSource{{Kind: "video", URLs: []string{server.URL}, FileName: "fixture.mp4"}}}
 	if !handler.enqueueDeferredMedia(target, "douyin", plan, ResolverMediaSettings{}) {
 		t.Fatal("empty retained records blocked the background download")

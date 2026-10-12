@@ -151,8 +151,8 @@ func strongestSubscriberBaseRole(values ...string) string {
 	return strongest
 }
 
-func SubscriptionID(platform, uid, sourceProtocol, sourceAdapter, targetType, targetID string) string {
-	value := strings.Join([]string{platform, uid, sourceProtocol, sourceAdapter, targetType, targetID}, "|")
+func SubscriptionID(platform, uid, sourceProtocol, botID, targetType, targetID string) string {
+	value := strings.Join([]string{platform, uid, sourceProtocol, botID, targetType, targetID}, "|")
 	digest := sha256.Sum256([]byte(value))
 	return platform + "-" + hex.EncodeToString(digest[:8])
 }

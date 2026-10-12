@@ -42,10 +42,10 @@ func (fake *Actions) MessageSend(_ context.Context, request rayleabot.MessageSen
 	return rayleabot.ActionResult{"message_id": "fixture-message"}, nil
 }
 
-func (fake *Actions) GroupMemberGet(_ context.Context, adapterID, groupID, userID string) (rayleabot.ActionResult, error) {
+func (fake *Actions) GroupMemberGet(_ context.Context, botID, groupID, userID string) (rayleabot.ActionResult, error) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
-	key := strings.TrimSpace(adapterID) + "\x00" + strings.TrimSpace(groupID) + "\x00" + strings.TrimSpace(userID)
+	key := "onebot11\x00" + strings.TrimSpace(botID) + "\x00" + strings.TrimSpace(groupID) + "\x00" + strings.TrimSpace(userID)
 	fake.GroupRequests = append(fake.GroupRequests, key)
 	if err := fake.GroupErrors[key]; err != nil {
 		return nil, err
@@ -54,4 +54,8 @@ func (fake *Actions) GroupMemberGet(_ context.Context, adapterID, groupID, userI
 		return result, nil
 	}
 	return rayleabot.ActionResult{"user_id": userID, "role": "member"}, nil
+}
+
+func (fake *Actions) SendTo(ctx context.Context, address rayleabot.Address, segments ...rayleabot.Segment) (rayleabot.ActionResult, error) {
+	return fake.MessageSend(ctx, rayleabot.MessageSendRequest{SourceProtocol: address.SourceProtocol, BotID: address.BotID, TargetType: address.TargetType, TargetID: address.TargetID, Message: rayleabot.MessageOut{Segments: segments}})
 }

@@ -20,15 +20,13 @@ const (
 )
 
 type deferredMediaJob struct {
-	TargetType    string
-	TargetID      string
-	Platform      string
-	SubjectName   string
-	SenderID      string
-	SenderName    string
-	SourceAdapter string
-	Sources       []ResolverMediaSource
-	Settings      ResolverMediaSettings
+	rayleabot.Address
+	Platform    string
+	SubjectName string
+	SenderID    string
+	SenderName  string
+	Sources     []ResolverMediaSource
+	Settings    ResolverMediaSettings
 
 	mu          sync.Mutex
 	prepared    []preparedResolverMedia
@@ -185,13 +183,11 @@ func (handler *Handler) deferMediaForBackground(platform string, plan ResolverMe
 // 定时任务发送。队列已满或已关闭时返回 false，由调用方报告未入队原因。
 func (handler *Handler) enqueueDeferredMedia(target resolverSendTarget, platform string, plan ResolverMediaPlan, settings ResolverMediaSettings) bool {
 	job := &deferredMediaJob{
-		TargetType:  target.TargetType,
-		TargetID:    target.TargetID,
+		Address:     target.Address,
 		Platform:    platform,
 		SubjectName: target.SubjectName, SenderID: target.SenderID, SenderName: target.SenderName,
-		SourceAdapter: target.SourceAdapter,
-		Sources:       plan.Sources,
-		Settings:      settings,
+		Sources:  plan.Sources,
+		Settings: settings,
 	}
 	return handler.deferredMedia.pushDownload(job, handler.downloadDeferredMedia)
 }
@@ -251,8 +247,8 @@ func (handler *Handler) flushDeferredMedia(ctx context.Context, event *rayleabot
 			continue
 		}
 		err := sendPreparedResolverMedia(flushCtx, actions, job.Platform, prepared, job.Settings, resolverSendTarget{
-			TargetType: job.TargetType, TargetID: job.TargetID,
-			SubjectName: job.SubjectName, SenderID: job.SenderID, SenderName: job.SenderName, SourceAdapter: job.SourceAdapter,
+			Address:     job.Address,
+			SubjectName: job.SubjectName, SenderID: job.SenderID, SenderName: job.SenderName,
 		})
 		if err != nil {
 			// 仅限流可安全重试（动作已被宿主明确拒绝）。超时不重试：
@@ -284,10 +280,6 @@ func (handler *Handler) sendDeferredFailure(ctx context.Context, actions HostAct
 	if ctx.Err() != nil {
 		return
 	}
-	logResolverMediaFailure(ctx, actions, job.Platform, resolverSendTarget{TargetType: job.TargetType, TargetID: job.TargetID}, errors.New(reason))
-	_, _ = actions.MessageSend(ctx, rayleabot.MessageSendRequest{
-		SourceAdapter: job.SourceAdapter,
-		TargetType:    job.TargetType, TargetID: job.TargetID,
-		Message: rayleabot.MessageOut{Segments: []rayleabot.Segment{rayleabot.Text(resolverMediaFailureMessage)}},
-	})
+	logResolverMediaFailure(ctx, actions, job.Platform, resolverSendTarget{Address: job.Address}, errors.New(reason))
+	_, _ = actions.SendTo(ctx, job.Address, rayleabot.Text(resolverMediaFailureMessage))
 }

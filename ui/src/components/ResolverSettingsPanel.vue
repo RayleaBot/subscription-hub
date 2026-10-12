@@ -6,6 +6,9 @@ import UiIcon from './UiIcon.vue'
 
 import {
   allTargets,
+  botKey,
+  botLabel,
+  needsBotSelection,
   deriveTargetAvatarURL,
   displayAvatarURL,
   normalizeResolverSettings,
@@ -13,6 +16,7 @@ import {
   type LiveTarget,
   type ResolverPlatform,
   type ResolverSettings,
+  type ResolverTargetSettings,
   type TargetType,
   type TargetsState,
 } from '../model'
@@ -68,16 +72,17 @@ watch(page, () => {
   scopeFilter.value = 'all'
 })
 
-const configured = computed(() => new Map(draft.value.targets.map((target) => [targetKey(target.source_adapter, target.target_type, target.target_id), target])))
+const configured = computed(() => new Map(draft.value.targets.map((target, index) => [configuredKey(target, index), target])))
 const liveTargets = computed(() => new Map(allTargets(props.targets).map((target) => [target.key, target])))
 const configuredTargets = computed<LiveTarget[]>(() => {
   if (page.value !== 'targets') return []
-  return draft.value.targets.map((target) => {
-    const key = targetKey(target.source_adapter, target.target_type, target.target_id)
+  return draft.value.targets.map((target, index) => {
+    const key = configuredKey(target, index)
     const live = liveTargets.value.get(key)
     return {
       key,
-      source_adapter: target.source_adapter,
+      bot_id: target.bot_id,
+      bot_name: props.targets.bots.find((bot) => botKey(bot) === botKey(target))?.bot_name,
       source_protocol: target.source_protocol,
       target_type: target.target_type,
       target_id: target.target_id,
@@ -125,8 +130,8 @@ const pickerTypeLabel = computed(() => typeLabel(pickerType.value))
 const pickerPlaceholder = computed(() => `输入${pickerType.value === 'group' ? '群名或群号' : '昵称或 QQ 号'}…`)
 const emptyCopy = computed(() => {
   if (manageSearch.value) return { title: '没有匹配项', hint: '请调整搜索条件或切换会话类型。' }
-  if (scopeFilter.value !== 'all' && scopeCounts.value.all > 0) return { title: `尚未添加${scopeLabel(scopeFilter.value)}`, hint: `点击“添加对象”从连接协议选择${scopeLabel(scopeFilter.value)}。` }
-  return { title: '尚未添加解析对象', hint: '点击“添加对象”从连接协议选择群聊或私聊；在聊天中开启解析后也会自动加入。' }
+  if (scopeFilter.value !== 'all' && scopeCounts.value.all > 0) return { title: `尚未添加${scopeLabel(scopeFilter.value)}`, hint: `点击“添加对象”从机器人选择${scopeLabel(scopeFilter.value)}。` }
+  return { title: '尚未添加解析对象', hint: '点击“添加对象”从机器人选择群聊或私聊；在聊天中开启解析后也会自动加入。' }
 })
 const pageCopy = computed(() => {
   if (page.value === 'targets') return { title: '链接解析', description: '在一个列表里管理群聊与私聊的 B站、微博、抖音解析开关。' }
@@ -150,6 +155,19 @@ function typeLabel(type: TargetType): string {
   return type === 'group' ? '群聊' : '私聊'
 }
 
+function configuredKey(target: ResolverTargetSettings, index: number): string {
+  return needsBotSelection(target) ? `pending:${index}` : targetKey(target.source_protocol, target.bot_id, target.target_type, target.target_id)
+}
+
+function replaceBot(target: LiveTarget, key: string) {
+  const bot = props.targets.bots.find((item) => botKey(item) === key)
+  const stored = configured.value.get(target.key)!
+  if (!bot) return
+  stored.source_protocol = bot.source_protocol
+  stored.bot_id = bot.bot_id
+  stored.needs_bot_selection = undefined
+}
+
 function targetMatches(target: LiveTarget, query: string): boolean {
   return `${target.label} ${target.target_id}`.toLowerCase().includes(query)
 }
@@ -163,7 +181,7 @@ function avatarFallback(target: LiveTarget): string {
 }
 
 function targetNumberLabel(target: LiveTarget): string {
-  return `${target.target_type === 'group' ? '群号' : 'QQ'} ${target.target_id} · ${target.source_adapter}`
+  return `${target.target_type === 'group' ? '群号' : 'QQ'} ${target.target_id} · ${botLabel(target)}`
 }
 
 function resolverPlatformLabel(platform: ResolverPlatform): string {
@@ -188,7 +206,7 @@ function openPicker() {
 function addTarget(target: LiveTarget) {
   if (configured.value.has(target.key)) return
   draft.value.targets.push({
-    source_adapter: target.source_adapter,
+    bot_id: target.bot_id,
     source_protocol: target.source_protocol,
     target_type: target.target_type,
     target_id: target.target_id,
@@ -200,12 +218,12 @@ function addTarget(target: LiveTarget) {
 }
 
 function removeTarget(target: LiveTarget) {
-  const index = draft.value.targets.findIndex((item) => targetKey(item.source_adapter, item.target_type, item.target_id) === target.key)
+  const index = draft.value.targets.findIndex((item, index) => configuredKey(item, index) === target.key)
   if (index >= 0) draft.value.targets.splice(index, 1)
 }
 
 function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: boolean) {
-  let index = draft.value.targets.findIndex((item) => targetKey(item.source_adapter, item.target_type, item.target_id) === target.key)
+  let index = draft.value.targets.findIndex((item, index) => configuredKey(item, index) === target.key)
   if (index < 0) {
     addTarget(target)
     index = draft.value.targets.length - 1
@@ -262,7 +280,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
 
       <AModal centered :footer="null" :open="pickerOpen" title="添加对象" :width="480" class="hub-dialog" @cancel="pickerOpen = false"><section class="target-picker" aria-labelledby="target-picker-title">
         <div class="target-picker-heading">
-          <h3 id="target-picker-title">从连接协议添加{{ pickerTypeLabel }}</h3>
+          <h3 id="target-picker-title">从机器人添加{{ pickerTypeLabel }}</h3>
           <p>这里只列出尚未添加的对象；添加后才会出现在解析开关列表中。</p>
         </div>
         <div class="scope-tabs scope-tabs--picker" role="group" aria-label="添加对象类型" :style="{ '--tab-count': pickerTypes.length, '--tab-index': pickerIndex }">
@@ -296,8 +314,8 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
           </button>
           </TransitionGroup>
           <div v-if="visibleCandidateTargets.length === 0" class="picker-empty">
-            <strong>{{ !targets.loaded ? `正在读取连接协议中的${pickerTypeLabel}…` : pickerSearch ? '没有匹配项' : `暂无可添加${pickerTypeLabel}` }}</strong>
-            <span v-if="targets.loaded && !pickerSearch">{{ targets.available ? `连接协议中的${pickerTypeLabel}已全部添加。` : '请确认连接协议在线，并刷新可选范围。' }}</span>
+            <strong>{{ !targets.loaded ? `正在读取机器人中的${pickerTypeLabel}…` : pickerSearch ? '没有匹配项' : `暂无可添加${pickerTypeLabel}` }}</strong>
+            <span v-if="targets.loaded && !pickerSearch">{{ targets.available ? `机器人中的${pickerTypeLabel}已全部添加。` : '请确认机器人在线，并刷新可选范围。' }}</span>
           </div>
         </div>
         <p v-if="targets.issues.length" class="picker-issue">{{ targets.issues.map((issue) => issue.message).join('；') }}</p>
@@ -319,6 +337,10 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
               <strong :title="target.label">{{ target.label }}</strong>
               <span><em class="type-chip" :class="`type-chip--${target.target_type}`">{{ typeLabel(target.target_type) }}</em>{{ targetNumberLabel(target) }}</span>
             </div>
+            <select aria-label="更换机器人" :value="botKey(target)" @change="replaceBot(target, ($event.target as HTMLSelectElement).value)">
+              <option v-if="!targets.bots.some((bot) => botKey(bot) === botKey(target))" :value="botKey(target)">{{ botLabel(target) }}</option>
+              <option v-for="bot in targets.bots" :key="botKey(bot)" :value="botKey(bot)">{{ botLabel(bot) }}</option>
+            </select>
             <button type="button" class="target-remove" :aria-label="`移除${target.label}`" @click="removeTarget(target)">移除</button>
           </div>
           <div class="resolver-platforms">

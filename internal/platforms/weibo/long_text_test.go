@@ -53,7 +53,7 @@ func TestWeiboSubscriptionCheckExpandsAndCachesLongText(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	first := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	first := plugin.Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "long-one", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "private", TargetID: "10001", Services: []string{"post"}, Enabled: true,
 	}
@@ -95,7 +95,7 @@ func TestWeiboSubscriptionCheckExpandsRepostedLongText(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	item := plugin.Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "long-repost", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "private", TargetID: "10001", Services: []string{"repost"}, Enabled: true,
 	}
@@ -164,7 +164,7 @@ func TestWeiboSubscriptionCheckFallsBackToSummaryAndLink(t *testing.T) {
 	fake := testkit.NewActions()
 	fake.SeedAccounts("weibo", fixtureWeiboAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
-	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	item := plugin.Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "long-fallback", Platform: "weibo", UID: "6000000001", Name: "测试博主",
 		TargetType: "private", TargetID: "10001", Services: []string{"post"}, Enabled: true,
 	}
@@ -210,7 +210,7 @@ func TestWeiboSubscriptionCheckFallsBackToSummaryAndLink(t *testing.T) {
 func TestWeiboRenderDataKeepsCompleteSummaries(t *testing.T) {
 	mainText := strings.Repeat("主微博正文", 100)
 	originalText := strings.Repeat("原微博正文", 70)
-	data := buildWeiboRenderData(plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Platform: "weibo", UID: "6000000001"}, map[string]any{
+	data := buildWeiboRenderData(plugin.Subscription{SourceProtocol: "onebot11", BotID: "1001", Platform: "weibo", UID: "6000000001"}, map[string]any{
 		"id": "complete", "service": "repost", "summary": mainText,
 		"author": map[string]any{"uid": "6000000001"},
 		"original": map[string]any{

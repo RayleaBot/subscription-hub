@@ -25,6 +25,7 @@ type HostActions interface {
 	SourceActions
 	RenderImage(context.Context, rayleabot.RenderImageRequest) (rayleabot.ActionResult, error)
 	MessageSend(context.Context, rayleabot.MessageSendRequest) (rayleabot.ActionResult, error)
+	SendTo(context.Context, rayleabot.Address, ...rayleabot.Segment) (rayleabot.ActionResult, error)
 	GroupMemberGet(context.Context, string, string, string) (rayleabot.ActionResult, error)
 }
 
@@ -73,8 +74,8 @@ type hostRuntimeActions struct {
 	*rayleabot.Actions
 }
 
-func (actions hostRuntimeActions) GroupMemberGet(ctx context.Context, adapterID, groupID, userID string) (rayleabot.ActionResult, error) {
-	return actions.ForOneBotAdapter(adapterID).GroupMemberGet(ctx, groupID, userID)
+func (actions hostRuntimeActions) GroupMemberGet(ctx context.Context, botID, groupID, userID string) (rayleabot.ActionResult, error) {
+	return actions.ForOneBotAccount(botID).GroupMemberGet(ctx, groupID, userID)
 }
 
 func (hostRuntimeActions) HTTPRequest(ctx context.Context, request httpaction.Request) (rayleabot.ActionResult, error) {

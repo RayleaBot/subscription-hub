@@ -76,7 +76,7 @@ func TestHTTPOriginalImagesAreDownloadedAndForwarded(t *testing.T) {
 	actions := &downloadedImageActions{Actions: testkit.NewActions()}
 	handler := newWorkflowHandler(t)
 	err := handler.deliverResolverMedia(t.Context(), actions, "bilibili", plan, ResolverMediaSettings{}, resolverSendTarget{
-		TargetType: "group", TargetID: "10001", SubjectName: "图文作者", SenderID: "20002", SenderName: "分享者",
+		Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "10001"}, SubjectName: "图文作者", SenderID: "20002", SenderName: "分享者",
 	})
 	if err != nil || len(actions.paths) != 8 || len(actions.ForwardRequests) != 1 || len(actions.Messages) != 0 {
 		t.Fatalf("original media delivery: images=%d forwards=%d direct=%d error=%v", len(actions.paths), len(actions.ForwardRequests), len(actions.Messages), err)
@@ -117,12 +117,12 @@ func TestResolverCacheFailureKeepsLocalPathInLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler.deferredMedia = newDeferredMediaQueue(blocked)
-	target := resolverSendTarget{TargetType: "group", TargetID: "fixture-group"}
+	target := resolverSendTarget{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "fixture-group"}}
 	err := handler.deliverResolverMedia(t.Context(), actions, "bilibili", ResolverMediaPlan{}, ResolverMediaSettings{}, target)
 	if err == nil || !strings.Contains(err.Error(), blocked) {
 		t.Fatalf("expected local cache failure, got %v", err)
 	}
-	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Target: rayleabot.Target{Type: target.TargetType, ID: target.TargetID}}}
+	event := &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", BotID: "1001", Target: rayleabot.Target{Type: target.TargetType, ID: target.TargetID}}}
 	handler.reportResolverMediaFailure(t.Context(), event, "bilibili", target, err)
 	assertMediaFailureIsPrivate(t, actions, blocked)
 	if len(handler.deferredMedia.jobs) != 0 {

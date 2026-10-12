@@ -5,7 +5,7 @@ const host = vi.hoisted(() => {
   const init = {
     config: {
       enabled: true,
-      subscriptions: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,
+      subscriptions: [{ bot_id: '1001', source_protocol: 'onebot11' as const,
         id: 'bilibili-100-group-200',
         platform: 'bilibili',
         uid: '100',
@@ -25,12 +25,12 @@ const host = vi.hoisted(() => {
   const client = {
     apiRequest: vi.fn(async (method: string, path: string) => {
       if (method === 'GET' && path === '/api/adapters') {
-        return { adapters: [{ id: 'onebot', protocol: 'onebot11', enabled: true }] }
+        return { adapters: [{ id: 'onebot', protocol: 'onebot11', enabled: true, state: 'connected', identity: { id: '1001', name: '机器人' } }] }
       }
       if (method === 'GET' && path === '/api/adapters/onebot/onebot11/targets') {
         return {
           available: true,
-          groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
+          groups: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
           private_users: [],
           issues: [],
         }
@@ -38,6 +38,7 @@ const host = vi.hoisted(() => {
       throw new Error(`unexpected request: ${method} ${path}`)
     }),
     invokeAction: vi.fn(async (action: string, payload: Record<string, unknown>) => {
+      if (action === 'subscription.settings') return { settings: init.config }
       if (action !== 'subscription.resolve_avatars') throw new Error(`unexpected action: ${action}`)
       const urls = Array.isArray(payload.urls) ? payload.urls.map(String) : []
       return { items: urls.map((source_url) => ({ source_url, data_url: 'data:image/png;base64,dGVzdA==' })) }

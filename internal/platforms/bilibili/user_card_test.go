@@ -72,10 +72,12 @@ func TestFansTextFormatting(t *testing.T) {
 
 func TestRemoveSubscriptionOutcomeCarriesCardData(t *testing.T) {
 	current := plugin.Settings{Subscriptions: []plugin.Subscription{{
+		SourceProtocol: "onebot11", BotID: "1001",
 		ID: "one", Platform: "bilibili", UID: "42", Name: "测试 UP", AvatarURL: "https://i0.hdslb.com/face.jpg",
 		TargetType: "group", TargetID: "100", TargetName: "测试群", Services: []string{"all"}, Enabled: true,
 	}}}
 	event := &rayleabot.EventContext{Event: rayleabot.Event{
+		SourceProtocol: "onebot11", BotID: "1001",
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": []string{"直播", "42"}},
 	}}

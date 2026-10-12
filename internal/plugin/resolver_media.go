@@ -66,21 +66,18 @@ func (handler *Handler) deliverResolverMedia(ctx context.Context, actions HostAc
 }
 
 type resolverSendTarget struct {
-	TargetType    string
-	TargetID      string
-	SubjectName   string
-	SenderID      string
-	SenderName    string
-	SourceAdapter string
+	rayleabot.Address
+	SubjectName string
+	SenderID    string
+	SenderName  string
 }
 
 func resolverMediaTarget(event *rayleabot.EventContext, platform string, update Update) resolverSendTarget {
 	target := subscriptionMediaTarget(Subscription{
-		SourceAdapter: event.Event.SourceAdapter, SourceProtocol: event.Event.SourceProtocol,
+		BotID: event.Event.BotID, SourceProtocol: event.Event.SourceProtocol,
 		Platform: platform, TargetType: event.Event.Target.Type, TargetID: event.Event.Target.ID,
 		Subscribers: MergeSubscriber(nil, event),
 	}, update)
-	target.SourceAdapter = event.Event.SourceAdapter
 	if target.SenderID == "" {
 		target.SenderID = event.Bot.ID
 		target.SenderName = FirstText(event.Bot.Nickname, "订阅与解析")
@@ -90,8 +87,7 @@ func resolverMediaTarget(event *rayleabot.EventContext, platform string, update 
 
 func subscriptionMediaTarget(item Subscription, update Update) resolverSendTarget {
 	target := resolverSendTarget{
-		SourceAdapter: item.SourceAdapter,
-		TargetType:    NormalizedTargetType(item.TargetType), TargetID: item.TargetID,
+		Address:     item.Address(),
 		SubjectName: FirstText(NestedValue(update, "author", "name"), item.Name, item.UID, resolverPlatformLabel(item.Platform)),
 		SenderName:  "订阅与解析",
 	}
@@ -414,9 +410,8 @@ func sendResolverForward(ctx context.Context, actions HostActions, platform stri
 			"messages": nodes,
 			"source":   FirstText(target.SubjectName, resolverPlatformLabel(platform), "订阅与解析"),
 		}
-		if target.SourceAdapter != "" {
-			request["source_adapter"] = target.SourceAdapter
-		}
+		request["source_protocol"] = target.SourceProtocol
+		request["bot_id"] = target.BotID
 		var result map[string]any
 		if err := caller.Call(ctx, "message.forward.send", request, &result); err != nil {
 			if offset > 0 {

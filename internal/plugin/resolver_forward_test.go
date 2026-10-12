@@ -25,12 +25,12 @@ func TestMediaAlwaysUsesForwardWithSubjectAndSender(t *testing.T) {
 					actions := testkit.NewActions()
 					err := sendPreparedResolverMedia(t.Context(), actions, platform,
 						[]preparedResolverMedia{{Kind: kind, Path: "original-media"}}, ResolverMediaSettings{},
-						resolverSendTarget{TargetType: targetType, TargetID: "10001", SubjectName: "内容作者", SenderID: "20002", SenderName: "链接发送人", SourceAdapter: "qq-main"})
+						resolverSendTarget{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: targetType, TargetID: "10001"}, SubjectName: "内容作者", SenderID: "20002", SenderName: "链接发送人"})
 					if err != nil || len(actions.Messages) != 0 || len(actions.ForwardRequests) != 1 {
 						t.Fatalf("delivery = %#v, %#v, %v", actions.Messages, actions.ForwardRequests, err)
 					}
 					request := actions.ForwardRequests[0]
-					if request["source"] != "内容作者" || request["target_type"] != targetType || request["target_id"] != "10001" || request["source_adapter"] != "qq-main" {
+					if request["source"] != "内容作者" || request["target_type"] != targetType || request["target_id"] != "10001" || request["bot_id"] != "1001" || request["source_protocol"] != "onebot11" || request["source_adapter"] != nil {
 						t.Fatalf("forward metadata = %#v", request)
 					}
 					node := forwardNode(request, 0)
@@ -47,7 +47,7 @@ func TestMediaAlwaysUsesForwardWithSubjectAndSender(t *testing.T) {
 func TestForwardBatchesMixedMediaAndStopsAfterPartialFailure(t *testing.T) {
 	media := []preparedResolverMedia{{Kind: "image", Path: "one"}, {Kind: "video", Path: "two"}, {Kind: "image", Path: "three"}}
 	actions := testkit.NewActions()
-	target := resolverSendTarget{TargetType: "group", TargetID: "10001", SubjectName: "作者", SenderID: "20002", SenderName: "订阅人"}
+	target := resolverSendTarget{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "10001"}, SubjectName: "作者", SenderID: "20002", SenderName: "订阅人"}
 	if err := sendResolverForward(t.Context(), actions, "douyin", media, 2, target); err != nil {
 		t.Fatal(err)
 	}
@@ -70,15 +70,15 @@ func TestForwardBatchesMixedMediaAndStopsAfterPartialFailure(t *testing.T) {
 func TestMediaIdentityUsesActorAndFirstRecordedSubscriber(t *testing.T) {
 	update := Update{"author": map[string]any{"name": "最新作者昵称"}}
 	event := &rayleabot.EventContext{Bot: rayleabot.Bot{ID: "99999", Nickname: "机器人"}, Event: rayleabot.Event{SourceProtocol: "onebot11",
-		SourceAdapter: "qq-main", Target: rayleabot.Target{Type: "group", ID: "10001"},
+		BotID: "1001", Target: rayleabot.Target{Type: "group", ID: "10001"},
 		Actor:   rayleabot.Actor{ID: "20002", Nickname: "发送人"},
 		Payload: map[string]any{"onebot": map[string]any{"sender": map[string]any{"card": "群名片"}}},
 	}}
 	target := resolverMediaTarget(event, "weibo", update)
-	if target.SubjectName != "最新作者昵称" || target.SenderID != "20002" || target.SenderName != "群名片" || target.SourceAdapter != "qq-main" {
+	if target.SubjectName != "最新作者昵称" || target.SenderID != "20002" || target.SenderName != "群名片" || target.BotID != "1001" || target.SourceProtocol != "onebot11" {
 		t.Fatalf("resolver identity = %#v", target)
 	}
-	item := Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Name: "保存作者昵称", TargetType: "group", TargetID: "10001", Subscribers: []Subscriber{
+	item := Subscription{SourceProtocol: "onebot11", BotID: "1001", Name: "保存作者昵称", TargetType: "group", TargetID: "10001", Subscribers: []Subscriber{
 		{}, {ID: "30003", Nickname: "订阅人", GroupNickname: "订阅人名片"}, {ID: "40004", Nickname: "第二人"},
 	}}
 	target = subscriptionMediaTarget(item, update)

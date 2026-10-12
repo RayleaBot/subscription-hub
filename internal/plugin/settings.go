@@ -48,8 +48,12 @@ func (handler *Handler) loadSettings(ctx context.Context, event *rayleabot.Event
 			return Settings{}, err
 		}
 	}
-	if err := validateSettingsRoutes(current); err != nil {
-		return Settings{}, err
+	if migrateSettingsRoutes(&current, event.Bots) {
+		if _, err := handler.hostActions(event).ConfigWrite(ctx, map[string]any{"subscriptions": current.Subscriptions, "resolver": current.Resolver}); err != nil {
+			_, _ = handler.hostActions(event).LoggerWrite(ctx, rayleabot.LoggerWriteRequest{
+				Level: "warn", Message: "机器人账号迁移保存失败，旧配置已保留，下次加载重试：" + err.Error(),
+			})
+		}
 	}
 	current.DeliveryMaxAgeMinutes = NormalizeDeliveryMaxAgeMinutes(current.DeliveryMaxAgeMinutes)
 	current.AccountCheckIntervalMinutes = NormalizeAccountCheckIntervalMinutes(current.AccountCheckIntervalMinutes)
@@ -120,9 +124,9 @@ func (handler *Handler) NormalizeSubscriptions(items []Subscription) []Subscript
 			continue
 		}
 		if item.ID == "" {
-			item.ID = SubscriptionID(item.Platform, item.UID, item.SourceProtocol, item.SourceAdapter, item.TargetType, item.TargetID)
+			item.ID = SubscriptionID(item.Platform, item.UID, item.SourceProtocol, item.BotID, item.TargetType, item.TargetID)
 		}
-		key := subscriptionIdentity(item)
+		key := item.ID
 		if seen[key] {
 			continue
 		}

@@ -70,8 +70,8 @@ func TestDeferredMediaDownloadAndFlush(t *testing.T) {
 	actions := testkit.NewActions()
 	handler.actions = actions
 	job := &deferredMediaJob{
-		TargetType: "group", TargetID: "12345", Platform: "douyin",
-		SubjectName: "抖音作者", SenderID: "20002", SenderName: "链接发送人", SourceAdapter: "qq-main",
+		Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "12345"}, Platform: "douyin",
+		SubjectName: "抖音作者", SenderID: "20002", SenderName: "链接发送人",
 		Sources:  []ResolverMediaSource{{Kind: "video", URLs: []string{videoServer.URL}, FileName: "douyin-test.mp4"}},
 		Settings: ResolverMediaSettings{},
 	}
@@ -99,7 +99,7 @@ func TestDeferredMediaDownloadAndFlush(t *testing.T) {
 	if media["type"] != "video" || !strings.Contains(path, "douyin-test.mp4") {
 		t.Fatalf("flush message = %#v", media)
 	}
-	if request["target_id"] != "12345" || request["source"] != "抖音作者" || request["source_adapter"] != "qq-main" || forwardNode(request, 0)["uin"] != "20002" || forwardNode(request, 0)["name"] != "链接发送人" {
+	if request["target_id"] != "12345" || request["source"] != "抖音作者" || request["bot_id"] != "1001" || request["source_protocol"] != "onebot11" || request["source_adapter"] != nil || forwardNode(request, 0)["uin"] != "20002" || forwardNode(request, 0)["name"] != "链接发送人" {
 		t.Fatalf("flush identity = %#v", request)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -141,7 +141,7 @@ func TestDeferredMediaSendFailureCleansTempFiles(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 	job := &deferredMediaJob{
-		TargetType: "group", TargetID: "12345", Platform: "douyin", tempRoot: tempRoot,
+		Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "12345"}, Platform: "douyin", tempRoot: tempRoot,
 		prepared: []preparedResolverMedia{{Kind: "video", Path: videoPath, Name: "fixture.mp4"}},
 	}
 	handler.deferredMedia.push(job)
@@ -164,7 +164,7 @@ func TestDeferredMediaDownloadFailureNotifies(t *testing.T) {
 	actions := testkit.NewActions()
 	handler.actions = actions
 	job := &deferredMediaJob{
-		TargetType: "group", TargetID: "12345", Platform: "douyin",
+		Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "12345"}, Platform: "douyin",
 		Sources:  []ResolverMediaSource{{Kind: "video", URLs: []string{"http://127.0.0.1:1/unreachable.mp4"}, FileName: "douyin-test.mp4"}},
 		Settings: ResolverMediaSettings{},
 	}
@@ -196,14 +196,14 @@ func TestDeferredMediaCacheFailureKeepsLocalPathInLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler.deferredMedia = newDeferredMediaQueue(blocked)
-	job := &deferredMediaJob{TargetType: "group", TargetID: "fixture-group", Platform: "douyin", SourceAdapter: "fixture-adapter"}
+	job := &deferredMediaJob{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "fixture-group"}, Platform: "douyin"}
 	if !handler.deferredMedia.push(job) {
 		t.Fatal("queue push failed")
 	}
 	handler.downloadDeferredMedia(t.Context(), job)
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
 	assertMediaFailureIsPrivate(t, actions, blocked)
-	if len(handler.deferredMedia.jobs) != 0 || actions.Messages[0].SourceAdapter != job.SourceAdapter {
+	if len(handler.deferredMedia.jobs) != 0 || actions.Messages[0].BotID != job.BotID || actions.Messages[0].SourceProtocol != job.SourceProtocol || actions.Messages[0].SourceAdapter != "" {
 		t.Fatal("failed job was not removed or notice lost its source adapter")
 	}
 }
@@ -211,7 +211,7 @@ func TestDeferredMediaCacheFailureKeepsLocalPathInLogs(t *testing.T) {
 func TestDeferredMediaFailureRedactsCredentialsInLogs(t *testing.T) {
 	handler := newWorkflowHandler(t)
 	actions := testkit.NewActions()
-	handler.sendDeferredFailure(t.Context(), actions, &deferredMediaJob{TargetType: "group", TargetID: "fixture-group"}, "open /private/media.mp4: Access is denied; access_token=fixture-sensitive-token")
+	handler.sendDeferredFailure(t.Context(), actions, &deferredMediaJob{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "group", TargetID: "fixture-group"}}, "open /private/media.mp4: Access is denied; access_token=fixture-sensitive-token")
 	assertMediaFailureIsPrivate(t, actions, "/private/media.mp4")
 	if strings.Contains(StringScalar(actions.Logs[0].Fields["error"]), "fixture-sensitive-token") {
 		t.Fatal("media diagnostics leaked a credential")

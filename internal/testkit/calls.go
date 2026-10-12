@@ -41,7 +41,7 @@ func (fake *Actions) SchedulerCreate(ctx context.Context, request rayleabot.Sche
 
 func SubscriptionEvent(args ...string) *rayleabot.EventContext {
 	return &rayleabot.EventContext{Config: map[string]any{}, Event: rayleabot.Event{
-		SourceAdapter: "onebot11", SourceProtocol: "onebot11",
+		BotID: "1001", SourceProtocol: "onebot11",
 		Actor:   rayleabot.Actor{ID: "7", Nickname: "柒柒"},
 		Target:  rayleabot.Target{Type: "group", ID: "100"},
 		Payload: map[string]any{"args": args},

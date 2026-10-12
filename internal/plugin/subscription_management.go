@@ -42,10 +42,10 @@ func (handler *Handler) AddSubscription(ctx context.Context, actions SourceActio
 		return SubscriptionOutcome{Message: "当前会话无法绑定订阅目标。"}
 	}
 	targetType := NormalizedTargetType(event.Event.Target.Type)
-	if !validSubscriptionRoute(event.Event.SourceProtocol, event.Event.SourceAdapter) {
-		return SubscriptionOutcome{Message: "请通过已配置的 OneBot11 连接添加订阅。"}
+	if !validSubscriptionRoute(event.Event.SourceProtocol, event.Event.BotID) {
+		return SubscriptionOutcome{Message: "请通过 OneBot11 机器人添加订阅。"}
 	}
-	id := SubscriptionID(platform, user.UID, event.Event.SourceProtocol, event.Event.SourceAdapter, targetType, event.Event.Target.ID)
+	id := SubscriptionID(platform, user.UID, event.Event.SourceProtocol, event.Event.BotID, targetType, event.Event.Target.ID)
 	for index := range current.Subscriptions {
 		item := &current.Subscriptions[index]
 		if item.Platform != platform || item.UID != user.UID || !subscriptionTargetsEvent(*item, event) {
@@ -69,7 +69,7 @@ func (handler *Handler) AddSubscription(ctx context.Context, actions SourceActio
 		}
 	}
 	current.Subscriptions = append(current.Subscriptions, Subscription{
-		SourceProtocol: event.Event.SourceProtocol, SourceAdapter: event.Event.SourceAdapter,
+		SourceProtocol: event.Event.SourceProtocol, BotID: event.Event.BotID,
 		ID: id, Platform: platform, UID: user.UID, UniqueID: user.UniqueID, Name: user.Name, AvatarURL: user.AvatarURL,
 		TargetType: targetType, TargetID: event.Event.Target.ID, TargetName: CurrentTargetName(event),
 		Services: services, Subscribers: MergeSubscriber(nil, event), Enabled: true,
@@ -144,6 +144,8 @@ func (handler *Handler) handleManagementAction(ctx context.Context, event *rayle
 	}
 	actions := handler.hostActions(event)
 	switch action {
+	case "subscription.settings":
+		return event.Result(map[string]any{"settings": current})
 	case "subscription.check_now":
 		return event.Result(handler.Check(ctx, actions, current))
 	case "subscription.resolve_avatars":

@@ -58,8 +58,8 @@ func TestSubscriptionForwardsMediaWithEachTargetsSubscriberAndDeduplicates(t *te
 	first.TargetType, second.TargetType = "group", "group"
 	first.Subscribers = []Subscriber{{ID: "20001", Nickname: "旧昵称"}}
 	second.Subscribers = []Subscriber{{ID: "20002", Nickname: "另一群订阅人"}}
-	actions.GroupMembers[GroupMemberKey("onebot11", first.TargetID, "20001")] = rayleabot.ActionResult{"user_id": "20001", "nickname": "新昵称", "card": "实时群名片", "role": "member"}
-	actions.GroupMembers[GroupMemberKey("onebot11", second.TargetID, "20002")] = rayleabot.ActionResult{"user_id": "20002", "nickname": "另一群订阅人", "role": "member"}
+	actions.GroupMembers[GroupMemberKey("1001", first.TargetID, "20001")] = rayleabot.ActionResult{"user_id": "20001", "nickname": "新昵称", "card": "实时群名片", "role": "member"}
+	actions.GroupMembers[GroupMemberKey("1001", second.TargetID, "20002")] = rayleabot.ActionResult{"user_id": "20002", "nickname": "另一群订阅人", "role": "member"}
 	settings := Settings{Enabled: true, Subscriptions: []Subscription{first, second}}
 	initializeWorkflow(actions, settings.Subscriptions)
 	result := handler.Check(t.Context(), actions, settings)
@@ -69,7 +69,7 @@ func TestSubscriptionForwardsMediaWithEachTargetsSubscriberAndDeduplicates(t *te
 	waitMediaJobs(t, handler, 2)
 	// 配置和当前调度事件的操作者都不能替换已排队任务的发送人。
 	settings.Subscriptions[0].Subscribers[0].Nickname = "后续修改"
-	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", SourceAdapter: "onebot11", Actor: rayleabot.Actor{ID: "99999", Nickname: "检查管理员"}}})
+	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{Event: rayleabot.Event{SourceProtocol: "onebot11", BotID: "1001", Actor: rayleabot.Actor{ID: "99999", Nickname: "检查管理员"}}})
 	if len(actions.ForwardRequests) != 2 {
 		t.Fatalf("forwards = %#v", actions.ForwardRequests)
 	}
@@ -134,7 +134,7 @@ func TestPartialDeferredForwardIsNotRetried(t *testing.T) {
 	actions := testkit.NewActions()
 	actions.ForwardErrors = []error{nil, &rayleabot.ActionError{Code: "platform.rate_limited"}}
 	handler.actions = actions
-	handler.deferredMedia.push(&deferredMediaJob{TargetType: "private", TargetID: "10001", Platform: "douyin", Settings: ResolverMediaSettings{ImageBatchSize: 1}, prepared: []preparedResolverMedia{{Kind: "image", Path: "one"}, {Kind: "video", Path: "two"}}})
+	handler.deferredMedia.push(&deferredMediaJob{Address: rayleabot.Address{SourceProtocol: "onebot11", BotID: "1001", TargetType: "private", TargetID: "10001"}, Platform: "douyin", Settings: ResolverMediaSettings{ImageBatchSize: 1}, prepared: []preparedResolverMedia{{Kind: "image", Path: "one"}, {Kind: "video", Path: "two"}}})
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
 	handler.flushDeferredMedia(t.Context(), &rayleabot.EventContext{})
 	if len(actions.ForwardRequests) != 2 || len(handler.deferredMedia.jobs) != 0 {

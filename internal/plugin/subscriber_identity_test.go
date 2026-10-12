@@ -17,7 +17,7 @@ func TestSubscriberIdentityCacheKeepsBotScopesSeparate(t *testing.T) {
 			"user_id": "20002", "nickname": adapter, "role": "member",
 		}
 		item, failed := cache.refresh(actions, Subscription{
-			SourceProtocol: "onebot11", SourceAdapter: adapter, TargetType: "group", TargetID: "10001",
+			SourceProtocol: "onebot11", BotID: adapter, TargetType: "group", TargetID: "10001",
 			Subscribers: []Subscriber{{ID: "20002"}},
 		})
 		if failed != 0 || item.Subscribers[0].Nickname != adapter {
@@ -31,7 +31,7 @@ func TestSubscriberIdentityCacheKeepsBotScopesSeparate(t *testing.T) {
 
 func TestSubscriberIdentityRefreshUsesLiveGroupMemberInfoAndCaches(t *testing.T) {
 	fake := testkit.NewActions()
-	key := GroupMemberKey("onebot11", "10001", "20002")
+	key := GroupMemberKey("1001", "10001", "20002")
 	fake.GroupMembers[key] = rayleabot.ActionResult{
 		"user_id":  "20002",
 		"nickname": "实时昵称",
@@ -39,7 +39,7 @@ func TestSubscriberIdentityRefreshUsesLiveGroupMemberInfoAndCaches(t *testing.T)
 		"title":    "实时头衔",
 		"role":     "admin",
 	}
-	item := Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	item := Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		TargetType: "group",
 		TargetID:   "10001",
 		Subscribers: []Subscriber{{
@@ -74,9 +74,9 @@ func TestSubscriberIdentityRefreshPreservesSuperAdminAndFallsBackOnFailure(t *te
 	fake := testkit.NewActions()
 	cache := newSubscriberIdentityCache(context.Background())
 
-	superKey := GroupMemberKey("onebot11", "10001", "20002")
+	superKey := GroupMemberKey("1001", "10001", "20002")
 	fake.GroupMembers[superKey] = rayleabot.ActionResult{"user_id": "20002", "role": "owner"}
-	superItem, failed := cache.refresh(fake, Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	superItem, failed := cache.refresh(fake, Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		TargetType: "group",
 		TargetID:   "10001",
 		Subscribers: []Subscriber{{
@@ -90,11 +90,11 @@ func TestSubscriberIdentityRefreshPreservesSuperAdminAndFallsBackOnFailure(t *te
 		t.Fatalf("super administrator identity = %#v", got)
 	}
 
-	failureKey := GroupMemberKey("onebot11", "10001", "30003")
+	failureKey := GroupMemberKey("1001", "10001", "30003")
 	fake.GroupErrors[failureKey] = errors.New("adapter unavailable")
 	stored := Subscriber{ID: "30003", Nickname: "保存昵称", BaseRole: "admin", Role: "admin", RoleLabel: "管理员"}
 	failures := []string{}
-	refreshed := refreshSubscribersForDelivery(context.Background(), fake, Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	refreshed := refreshSubscribersForDelivery(context.Background(), fake, Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "fixture", TargetType: "group", TargetID: "10001", Subscribers: []Subscriber{stored},
 	}, cache, &failures)
 	if len(failures) != 1 {
@@ -109,7 +109,7 @@ func TestSubscriberIdentityRefreshPreservesSuperAdminAndFallsBackOnFailure(t *te
 
 	delete(fake.GroupErrors, failureKey)
 	fake.GroupMembers[failureKey] = rayleabot.ActionResult{"user_id": "30003", "nickname": "恢复昵称", "role": "owner"}
-	retried, failed := cache.refresh(fake, Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	retried, failed := cache.refresh(fake, Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		TargetType: "group", TargetID: "10001", Subscribers: []Subscriber{stored},
 	})
 	if failed != 0 || retried.Subscribers[0].Nickname != "恢复昵称" || retried.Subscribers[0].Role != "owner" {

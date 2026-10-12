@@ -155,7 +155,7 @@ func TestBilibiliSourceRotatesAccountsAfterRiskControl(t *testing.T) {
 	}
 	source := newBilibiliSource(fake)
 	source.client.now = func() time.Time { return now }
-	result := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	result := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "bilibili-one", Platform: "bilibili", UID: "123456", Services: []string{"video"}, Enabled: true,
 	}})
 	if !result.DynamicOK || len(result.Errors) == 0 || !strings.Contains(result.Errors[0], "风控") {
@@ -184,7 +184,7 @@ func TestBilibiliSourceRefreshesWBIKeysAfterSignatureRejection(t *testing.T) {
 		dynamicFeedResult(),
 	}
 	source := newBilibiliSource(fake)
-	result := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	result := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "bilibili-one", Platform: "bilibili", UID: "123456", Services: []string{"video"}, Enabled: true,
 	}})
 	if !result.DynamicOK || len(result.Errors) != 0 {
@@ -207,8 +207,8 @@ func TestAccountFeedCollectsMultipleSubjectsInOneRequest(t *testing.T) {
 		videoDynamic("first", "第一位 UP 的视频", 1700000000), second,
 	)}
 	result := newBilibiliSource(fake).Poll(context.Background(), []plugin.Subscription{
-		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "one", Platform: "bilibili", UID: "123456", Services: []string{"video"}, Enabled: true},
-		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "two", Platform: "bilibili", UID: "654321", Services: []string{"video"}, Enabled: true},
+		{SourceProtocol: "onebot11", BotID: "1001", ID: "one", Platform: "bilibili", UID: "123456", Services: []string{"video"}, Enabled: true},
+		{SourceProtocol: "onebot11", BotID: "1001", ID: "two", Platform: "bilibili", UID: "654321", Services: []string{"video"}, Enabled: true},
 	})
 	if !result.DynamicOK || len(result.Updates) != 2 {
 		t.Fatalf("multi-subject result = %#v", result)
@@ -223,7 +223,7 @@ func TestSubscriptionCheckBaselinesThenRendersNewDynamic(t *testing.T) {
 	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
-	current := plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	current := plugin.Settings{Enabled: true, Subscriptions: []plugin.Subscription{{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "bilibili-123456-group-10000", Platform: "bilibili", UID: "123456", Name: "测试 UP",
 		TargetType: "group", TargetID: "10000", Services: []string{"video"}, Enabled: true,
 		Subscribers: []plugin.Subscriber{{ID: "42", Nickname: "订阅人"}},
@@ -262,8 +262,8 @@ func TestSubscriptionCheckContinuesFanoutAfterTargetFailure(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
 	subscriptions := []plugin.Subscription{
-		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "target-one", Platform: "bilibili", UID: "123456", Name: "测试 UP", TargetType: "group", TargetID: "10000", Services: []string{"video"}, Enabled: true},
-		{SourceProtocol: "onebot11", SourceAdapter: "onebot11", ID: "target-two", Platform: "bilibili", UID: "123456", Name: "测试 UP", TargetType: "group", TargetID: "20000", Services: []string{"video"}, Enabled: true},
+		{SourceProtocol: "onebot11", BotID: "1001", ID: "target-one", Platform: "bilibili", UID: "123456", Name: "测试 UP", TargetType: "group", TargetID: "10000", Services: []string{"video"}, Enabled: true},
+		{SourceProtocol: "onebot11", BotID: "1001", ID: "target-two", Platform: "bilibili", UID: "123456", Name: "测试 UP", TargetType: "group", TargetID: "20000", Services: []string{"video"}, Enabled: true},
 	}
 	for _, item := range subscriptions {
 		fake.KV[dynamicSourceKey(item)] = true
@@ -287,7 +287,7 @@ func TestSubscriptionCheckExpiresFailedDynamicDelivery(t *testing.T) {
 	fake.SeedAccounts("bilibili", fixtureAccounts("primary"))
 	now := time.Now().Truncate(time.Second)
 	seedSourceState(fake, now, "123456", "primary")
-	item := plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	item := plugin.Subscription{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "stale-target", Platform: "bilibili", UID: "123456", Name: "测试 UP",
 		TargetType: "private", TargetID: "20000", Services: []string{"video"}, Enabled: true,
 	}
@@ -335,14 +335,14 @@ func TestLiveSourceBaselinesThenEmitsTransition(t *testing.T) {
 	}
 	source := newBilibiliSource(fake)
 	fake.HTTPResponses = []rayleabot.ActionResult{liveDocument(1)}
-	first := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	first := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "live-one", Platform: "bilibili", UID: "123456", Services: []string{"live"}, Enabled: true,
 	}})
 	if !first.LiveOK || len(first.Updates) != 0 {
 		t.Fatalf("live baseline result = %#v", first)
 	}
 	fake.HTTPResponses = []rayleabot.ActionResult{liveDocument(0)}
-	second := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", SourceAdapter: "onebot11",
+	second := source.Poll(context.Background(), []plugin.Subscription{{SourceProtocol: "onebot11", BotID: "1001",
 		ID: "live-one", Platform: "bilibili", UID: "123456", Services: []string{"live"}, Enabled: true,
 	}})
 	if len(second.Updates) != 1 || plugin.StringScalar(second.Updates[0]["live_event"]) != "ended" {
@@ -406,7 +406,7 @@ func TestBilibiliDiagnosticsRedactCredentials(t *testing.T) {
 
 func TestRenderDataTruncatesRichHTMLWithoutBreakingMarkup(t *testing.T) {
 	body := strings.Repeat("长正文", 150)
-	data := buildBilibiliRenderData(plugin.Subscription{SourceProtocol: "onebot11", SourceAdapter: "onebot11", UID: "123456", Name: "测试 UP"}, map[string]any{
+	data := buildBilibiliRenderData(plugin.Subscription{SourceProtocol: "onebot11", BotID: "1001", UID: "123456", Name: "测试 UP"}, map[string]any{
 		"title": "测试动态", "service": "image_text", "summary": body,
 		"summary_html": `<span class="rich-text-topic">#话题#</span><span>` + body + `</span>`,
 	})

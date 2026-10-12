@@ -9,6 +9,33 @@ import { deriveTargetAvatarURL, emptyTargets, normalizeResolverSettings, normali
 const avatarDataURL = 'data:image/png;base64,dGVzdA=='
 
 describe('resolver settings panel', () => {
+  it('rebinds one pending target without losing another target or its platform switches', async () => {
+    const root = document.createElement('div')
+    let updated: ResolverSettings | undefined
+    const app = createApp(ResolverSettingsPanel, {
+      modelValue: normalizeResolverSettings({ targets: [
+        { source_protocol: 'onebot11', source_adapter: 'removed-a', target_type: 'group', target_id: '200', bilibili: true },
+        { source_protocol: 'onebot11', source_adapter: 'removed-b', target_type: 'group', target_id: '200', weibo: true },
+      ] }),
+      avatarDataUrls: new Map(),
+      targets: normalizeTargets({ bots: [{ source_protocol: 'onebot11', bot_id: '1001', bot_name: 'Bot' }] }),
+      view: 'targets',
+      'onUpdate:modelValue': (value: ResolverSettings) => { updated = value },
+    })
+    app.mount(root)
+    const selectors = root.querySelectorAll<HTMLSelectElement>('select[aria-label="更换机器人"]')
+    expect(selectors).toHaveLength(2)
+    selectors[1]!.value = 'onebot11:1001'
+    selectors[1]!.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle()
+    expect(updated?.targets).toHaveLength(2)
+    expect(updated?.targets[0]).toMatchObject({ bot_id: '', needs_bot_selection: true, bilibili: true })
+    expect(updated?.targets[1]).toMatchObject({ bot_id: '1001', target_id: '200', weibo: true })
+    expect(updated?.targets[1]?.needs_bot_selection).toBeUndefined()
+    expect(JSON.stringify(updated)).not.toContain('source_adapter')
+    app.unmount()
+  })
+
   it('mounts each resolver page with reactive settings', () => {
     const settings = reactive(normalizeResolverSettings({}))
 
@@ -44,7 +71,7 @@ describe('resolver settings panel', () => {
 
     expect(root.querySelector('.resolver-empty')).toBeNull()
 
-    props.modelValue = normalizeResolverSettings({ targets: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true }] })
+    props.modelValue = normalizeResolverSettings({ targets: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true }] })
     props.loaded = true
     await settle()
     expect(root.querySelectorAll('.resolver-target-card')).toHaveLength(1)
@@ -66,7 +93,7 @@ describe('resolver settings panel', () => {
       avatarDataUrls: new Map([[avatarSource, avatarDataURL]]),
       targets: normalizeTargets({
         available: true,
-        groups: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
+        groups: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '200', target_name: '测试群聊' }],
       }),
       view: 'targets',
       'onUpdate:modelValue': (value: ResolverSettings) => { updated = value },
@@ -91,7 +118,7 @@ describe('resolver settings panel', () => {
     expect(root.querySelectorAll('.resolver-target-card')).toHaveLength(1)
     expect(root.querySelector('.resolver-target-card img')?.getAttribute('src')).toBe(avatarDataURL)
     expect(root.querySelectorAll('.resolver-target-card input[type="checkbox"]')).toHaveLength(3)
-    expect(updated?.targets).toEqual([expect.objectContaining({ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', bilibili: false })])
+    expect(updated?.targets).toEqual([expect.objectContaining({ bot_id: '1001', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', bilibili: false })])
     app.unmount()
   })
 
@@ -99,14 +126,14 @@ describe('resolver settings panel', () => {
     const root = document.createElement('div')
     const app = createApp(ResolverSettingsPanel, {
       modelValue: reactive(normalizeResolverSettings({
-        targets: [{ source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'private', target_id: '300', target_name: '已开启用户', weibo: true }],
+        targets: [{ bot_id: '1001', source_protocol: 'onebot11' as const,  target_type: 'private', target_id: '300', target_name: '已开启用户', weibo: true }],
       })),
       avatarDataUrls: new Map(),
       targets: normalizeTargets({
         available: true,
         private_users: [
-          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '已开启用户' },
-          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_id: '301', nickname: '未添加用户' },
+          { bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '300', nickname: '已开启用户' },
+          { bot_id: '1001', source_protocol: 'onebot11' as const,  target_id: '301', nickname: '未添加用户' },
         ],
       }),
       view: 'targets',
@@ -125,8 +152,8 @@ describe('resolver settings panel', () => {
     const app = createApp(ResolverSettingsPanel, {
       modelValue: reactive(normalizeResolverSettings({
         targets: [
-          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true },
-          { source_adapter: 'onebot11', source_protocol: 'onebot11' as const,  target_type: 'private', target_id: '300', target_name: '测试用户', weibo: true },
+          { bot_id: '1001', source_protocol: 'onebot11' as const,  target_type: 'group', target_id: '200', target_name: '测试群聊', bilibili: true },
+          { bot_id: '1001', source_protocol: 'onebot11' as const,  target_type: 'private', target_id: '300', target_name: '测试用户', weibo: true },
         ],
       })),
       avatarDataUrls: new Map(),
