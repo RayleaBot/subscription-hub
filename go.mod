@@ -3,7 +3,7 @@ module github.com/RayleaBot/subscription-hub
 go 1.27.2
 
 require (
-	github.com/RayleaBot/RayleaBot/sdk/go v0.5.1-0.20261007100951-d48e538afc14
+	github.com/RayleaBot/RayleaBot/sdk/go v0.5.1-0.20261012055149-783ded45ddf5
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
 	github.com/chromedp/chromedp v0.16.0
 )
