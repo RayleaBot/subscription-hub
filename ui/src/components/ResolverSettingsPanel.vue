@@ -344,7 +344,7 @@ function setPlatform(target: LiveTarget, platform: ResolverPlatform, enabled: bo
       <section class="admin-rule" :class="{ 'is-on': draft.super_admin_whitelist }" aria-labelledby="admin-rule-title">
         <span class="admin-rule__icon" aria-hidden="true"><UiIcon name="shield" :size="22" /></span>
         <div class="admin-rule__copy">
-          <h3 id="admin-rule-title">超级管理员白名单（全局）</h3>
+          <h3 id="admin-rule-title">超级管理员白名单</h3>
           <p>开启后，超级管理员发送的 B站、微博、抖音链接不受各账号的群聊、私聊开关限制，全部解析；冷却与媒体策略仍然生效。聊天中可用 <code>开启超管解析</code> / <code>关闭超管解析</code> 切换。</p>
         </div>
         <label class="admin-rule__control">

@@ -735,7 +735,6 @@ function errorMessage(error: unknown, fallback: string): string {
 
     <AAlert v-else-if="unsupportedBot" class="host-alert" type="info" message="当前功能仅支持 OneBot11，暂不支持 QQ 官方账号。" show-icon />
     <template v-else>
-    <p v-if="accountPage && host.bot.value" class="panel-description">当前账号：{{ host.bot.value.nickname || host.bot.value.bot_id }} · {{ host.bot.value.bot_id }}</p>
     <AAlert v-if="accountPage && host.bot.value && host.bot.value.state !== 'online'" class="host-alert" type="info" message="账号离线或无连接，暂不可查询；已保存数据可继续编辑。" show-icon />
 
     <AAlert v-if="hostErrorMessage" class="host-alert" type="error" :message="hostErrorMessage" show-icon />
@@ -745,13 +744,12 @@ function errorMessage(error: unknown, fallback: string): string {
         <div class="panel-field"><span>可选推送范围</span><small>{{ targetMetric }}</small><button type="button" class="button" :disabled="targetsLoading" @click="reloadTargets()">{{ targetsLoading ? '刷新中…' : '刷新可选范围' }}</button></div>
         <div class="panel-field"><span>推送卡片预览</span><div class="preview-options"><button v-for="platform in ['bilibili', 'weibo', 'douyin']" :key="platform" type="button" class="button" @click="openPreview(`${platform}-update`)"><PlatformLogo :platform="platform" />{{ platformLabel(platform as Platform) }}<UiIcon name="chevron" :size="14" /></button></div></div>
         <button type="button" class="button" :disabled="saving" @click="resetCurrentPage">清空当前账号订阅</button>
-        <p class="panel-description">全局推送开关与投递时效在“防抖与媒体策略”页设置。</p>
         <p class="panel-description">修改后，点击页面底部的“保存设置”生效。</p>
       </div>
     </AModal>
 
     <section v-if="activePage === 'resolver-strategy'" class="strategy-globals panel-form">
-      <h2>全局订阅设置</h2>
+      <h2>订阅推送</h2>
         <label class="switch-row"><span>启用订阅推送</span><input id="enabled-input" v-model="settings.enabled" type="checkbox" /></label>
         <label class="panel-field field" for="delivery-max-age-input"><span>投递时效（分钟）</span><input id="delivery-max-age-input" v-model.number="settings.delivery_max_age_minutes" type="number" :min="MIN_DELIVERY_MAX_AGE_MINUTES" :max="MAX_DELIVERY_MAX_AGE_MINUTES" step="1" /><small>非直播动态可补发的最长时间，默认 30 分钟。</small></label>
     </section>
@@ -776,7 +774,7 @@ function errorMessage(error: unknown, fallback: string): string {
         <div class="filter-chips" role="group" aria-label="订阅平台筛选"><button type="button" class="filter-chip" :aria-pressed="platformFilter === 'all'" @click="platformFilter = 'all'">全部平台<span class="filter-count">{{ rows.length }}</span></button><button v-for="platform in PLATFORM_OPTIONS" :key="platform.value" type="button" class="filter-chip" :aria-pressed="platformFilter === platform.value" @click="platformFilter = platform.value"><PlatformLogo :platform="platform.value" :size="20" />{{ platform.label }}</button></div>
         <div class="filter-chips filter-chips--secondary" role="group" aria-label="订阅状态筛选"><button v-for="item in (['all', 'enabled', 'disabled'] as const)" :key="item" type="button" class="filter-chip" :aria-pressed="statusFilter === item" @click="statusFilter = item">{{ item === 'all' ? '全部状态' : item === 'enabled' ? '已启用' : '已停用' }}</button><select id="service-filter-input" v-model="serviceFilter" class="filter-select" aria-label="订阅类型"><option value="all">全部类型</option><option value="live">直播</option><option value="video">视频</option><option value="image_text">图文</option><option value="article">专栏</option><option value="repost">转发</option><option value="post">微博</option><option value="image">图片</option><option value="song">歌曲</option><option value="album">专辑</option><option value="playlist">歌单</option><option value="artist">音乐人</option></select></div>
       </div>
-      <div class="collection-caption"><span>{{ visibleRows.length }} 个订阅对象</span><span :class="{ 'is-warning': !settings.enabled }">{{ settings.enabled ? '全局订阅推送已启用' : '全局订阅推送已停用' }}</span></div>
+      <div class="collection-caption"><span>{{ visibleRows.length }} 个订阅对象</span><span :class="{ 'is-warning': !settings.enabled }">{{ settings.enabled ? '订阅推送已启用' : '订阅推送已停用' }}</span></div>
       <AAlert v-if="statusIsError" class="host-alert" type="error" :message="status" show-icon />
       <div ref="listRef"><TransitionGroup name="cards" tag="div" class="subscription-list">
         <SubscriptionCard
